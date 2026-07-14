@@ -1,0 +1,760 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Bible Reading Tracker</title>
+
+<!-- PWA: installable app metadata -->
+<link rel="manifest" href="./manifest.json">
+<meta name="theme-color" content="#7a4b2e">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Bible Tracker">
+<link rel="apple-touch-icon" href="./icon-192.png">
+<link rel="icon" href="./icon-192.png">
+
+<!-- Firebase (only needed for cross-device sync; app works fully offline without it) -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<style>
+  :root{
+    --bg:#faf7f2;
+    --card:#ffffff;
+    --ink:#2b2620;
+    --ink-soft:#6b6255;
+    --line:#e7ded0;
+    --accent:#7a4b2e;
+    --accent-soft:#f0e4d4;
+    --good:#3f7a4f;
+    --good-soft:#e5f2e7;
+    --skip:#b8860b;
+    --skip-soft:#faf0d8;
+    --bad:#a83e3e;
+    --bad-soft:#f7e3e3;
+    --shadow: 0 1px 3px rgba(40,30,10,0.08), 0 1px 2px rgba(40,30,10,0.06);
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    background:var(--bg); color:var(--ink); line-height:1.4;
+    padding-top:env(safe-area-inset-top); padding-bottom:env(safe-area-inset-bottom);
+  }
+  #app{max-width:1180px; margin:0 auto; padding:24px 20px 80px;}
+  header.top{display:flex; align-items:flex-start; justify-content:space-between; flex-wrap:wrap; gap:10px; margin-bottom:18px;}
+  header.top h1{font-size:1.5rem; margin:0; font-weight:700;}
+  header.top .sub{color:var(--ink-soft); font-size:0.9rem;}
+  .sync-pill{
+    display:inline-flex; align-items:center; gap:6px; padding:5px 12px; border-radius:999px; font-size:0.78rem; font-weight:700; margin-top:6px;
+  }
+  .sync-pill.synced{background:var(--good-soft); color:var(--good);}
+  .sync-pill.offline{background:var(--skip-soft); color:var(--skip);}
+  .sync-pill.unconfigured{background:var(--accent-soft); color:var(--accent);}
+  .sync-pill.error{background:var(--bad-soft); color:var(--bad);}
+  nav.tabs{display:flex; gap:6px; margin-bottom:22px; border-bottom:1px solid var(--line); flex-wrap:wrap;}
+  nav.tabs button{
+    background:none; border:none; padding:10px 16px; font-size:0.95rem; cursor:pointer;
+    color:var(--ink-soft); border-bottom:2px solid transparent; font-weight:600;
+  }
+  nav.tabs button.active{color:var(--accent); border-bottom-color:var(--accent);}
+  .toolbar{display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:18px;}
+  .toolbar input[type=date]{
+    padding:7px 10px; border:1px solid var(--line); border-radius:8px; font-size:0.9rem; background:var(--card);
+  }
+  .btn{
+    padding:7px 14px; border-radius:8px; border:1px solid var(--line); background:var(--card);
+    cursor:pointer; font-size:0.85rem; font-weight:600; color:var(--ink);
+  }
+  .btn:hover{background:var(--accent-soft);}
+  .btn.primary{background:var(--accent); color:#fff; border-color:var(--accent);}
+  .btn.primary:hover{opacity:0.9;}
+  .btn.danger{color:var(--bad); border-color:var(--bad-soft);}
+  .btn.small{padding:4px 10px; font-size:0.78rem;}
+  .grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(300px,1fr)); gap:14px;}
+  .card{
+    background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px;
+    box-shadow:var(--shadow); border-left:5px solid var(--cat-color, var(--accent));
+  }
+  .card .cat-name{font-weight:700; font-size:0.95rem; margin-bottom:4px;}
+  .card .due{font-size:1.15rem; font-weight:700; margin:6px 0 2px;}
+  .card .meta{color:var(--ink-soft); font-size:0.8rem; margin-bottom:12px;}
+  .card .actions{display:flex; gap:8px; flex-wrap:wrap;}
+  .status-pill{
+    display:inline-flex; align-items:center; gap:5px; padding:4px 10px; border-radius:999px;
+    font-size:0.78rem; font-weight:700; margin-bottom:10px;
+  }
+  .status-pill.complete{background:var(--good-soft); color:var(--good);}
+  .status-pill.skipped{background:var(--skip-soft); color:var(--skip);}
+  .today-log-list{font-size:0.78rem; color:var(--ink-soft); margin-top:8px;}
+  .today-log-list div{margin-bottom:2px;}
+  table.logtable{width:100%; border-collapse:collapse; font-size:0.82rem;}
+  table.logtable th, table.logtable td{
+    border:1px solid var(--line); padding:6px 8px; text-align:left; white-space:nowrap;
+  }
+  table.logtable th{background:var(--accent-soft); position:sticky; top:0;}
+  table.logtable td.cell-complete{color:var(--good); font-weight:600;}
+  table.logtable td.cell-skipped{color:var(--skip); font-weight:600;}
+  .log-scroll{overflow-x:auto; border:1px solid var(--line); border-radius:10px;}
+  details.month-group{margin-bottom:12px; background:var(--card); border:1px solid var(--line); border-radius:10px; padding:0 0 4px;}
+  details.month-group summary{
+    cursor:pointer; font-weight:700; padding:12px 16px; list-style:none; display:flex; justify-content:space-between;
+  }
+  details.month-group summary::-webkit-details-marker{display:none;}
+  .dash-summary{display:grid; grid-template-columns:repeat(auto-fill, minmax(220px,1fr)); gap:12px; margin-bottom:26px;}
+  .dash-summary .stat{background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px; box-shadow:var(--shadow);}
+  .dash-summary .stat .num{font-size:1.6rem; font-weight:800; color:var(--accent);}
+  .dash-summary .stat .label{font-size:0.78rem; color:var(--ink-soft); font-weight:600;}
+  .cat-block{margin-bottom:26px;}
+  .cat-block h3{
+    display:flex; align-items:center; gap:8px; font-size:1.05rem; margin-bottom:2px;
+  }
+  .cat-block h3 .swatch{width:12px; height:12px; border-radius:3px; display:inline-block;}
+  .cat-block .cat-sub{color:var(--ink-soft); font-size:0.8rem; margin-bottom:10px;}
+  .book-row{display:grid; grid-template-columns:170px 1fr 90px 70px; align-items:center; gap:10px; padding:6px 0; border-bottom:1px solid var(--line); font-size:0.85rem;}
+  .book-row:last-child{border-bottom:none;}
+  .bar-track{background:#efe8db; border-radius:6px; height:10px; overflow:hidden;}
+  .bar-fill{height:100%; border-radius:6px;}
+  .passes-badge{
+    background:var(--accent-soft); color:var(--accent); font-weight:700; font-size:0.72rem;
+    padding:2px 8px; border-radius:999px; text-align:center;
+  }
+  footer.app-footer{margin-top:40px; padding-top:16px; border-top:1px solid var(--line); color:var(--ink-soft); font-size:0.78rem; display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px;}
+  .empty-note{color:var(--ink-soft); font-size:0.85rem; padding:20px; text-align:center;}
+  input[type=file]{display:none;}
+  .settings-box{background:var(--card); border:1px solid var(--line); border-radius:12px; padding:20px; max-width:640px; box-shadow:var(--shadow); margin-bottom:20px;}
+  .settings-box h3{margin-top:0;}
+  .settings-box ol{padding-left:20px; font-size:0.88rem; color:var(--ink-soft);}
+  .settings-box ol li{margin-bottom:6px;}
+  .settings-box textarea{
+    width:100%; min-height:110px; font-family:ui-monospace,Menlo,Consolas,monospace; font-size:0.8rem;
+    padding:10px; border:1px solid var(--line); border-radius:8px; resize:vertical; margin:10px 0;
+  }
+  .settings-box code{background:var(--accent-soft); padding:1px 5px; border-radius:4px;}
+  .settings-box .rules-box{
+    background:#2b2620; color:#f0e4d4; font-family:ui-monospace,Menlo,Consolas,monospace; font-size:0.76rem;
+    padding:12px; border-radius:8px; white-space:pre; overflow-x:auto; margin:10px 0;
+  }
+  .install-banner{
+    background:var(--accent-soft); border:1px solid var(--accent); border-radius:10px; padding:12px 16px;
+    font-size:0.85rem; margin-bottom:18px; display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap;
+  }
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<script>
+/* ---------------- Data model ---------------- */
+const CATEGORIES = [
+  { id:'pentateuch', name:'The Pentateuch', color:'#7a4b2e',
+    books:[{name:'Genesis',chapters:50},{name:'Exodus',chapters:40},{name:'Leviticus',chapters:27},{name:'Numbers',chapters:36},{name:'Deuteronomy',chapters:34}] },
+  { id:'history', name:'The History', color:'#8a5a2b',
+    books:[{name:'Joshua',chapters:24},{name:'Judges',chapters:21},{name:'Ruth',chapters:4},{name:'1 Samuel',chapters:31},{name:'2 Samuel',chapters:24},
+           {name:'1 Kings',chapters:22},{name:'2 Kings',chapters:25},{name:'1 Chronicles',chapters:29},{name:'2 Chronicles',chapters:36},
+           {name:'Ezra',chapters:10},{name:'Nehemiah',chapters:13},{name:'Esther',chapters:10}] },
+  { id:'gospels', name:'The Gospels & Acts', color:'#2f6b4f',
+    books:[{name:'Matthew',chapters:28},{name:'Mark',chapters:16},{name:'Luke',chapters:24},{name:'Acts',chapters:28},{name:'John',chapters:21}] },
+  { id:'psalms', name:'Psalms', color:'#3d6b8a',
+    books:[{name:'Psalms',chapters:150}] },
+  { id:'proverbs', name:'Proverbs', color:'#4a5f8a',
+    books:[{name:'Proverbs',chapters:31}] },
+  { id:'majorprophets', name:'Major Prophets', color:'#8a3d5c',
+    books:[{name:'Isaiah',chapters:66},{name:'Jeremiah',chapters:52},{name:'Lamentations',chapters:5},{name:'Ezekiel',chapters:48},{name:'Daniel',chapters:12}] },
+  { id:'minorprophets', name:'Minor Prophets', color:'#a34b3e',
+    books:[{name:'Hosea',chapters:14},{name:'Joel',chapters:3},{name:'Amos',chapters:9},{name:'Obadiah',chapters:1},{name:'Jonah',chapters:4},
+           {name:'Micah',chapters:7},{name:'Nahum',chapters:3},{name:'Habakkuk',chapters:3},{name:'Zephaniah',chapters:3},{name:'Haggai',chapters:2},
+           {name:'Zechariah',chapters:14},{name:'Malachi',chapters:4}] },
+  { id:'wisdom', name:'Job, Ecclesiastes & Song of Solomon', color:'#6b4f8a',
+    books:[{name:'Job',chapters:42},{name:'Ecclesiastes',chapters:12},{name:'Song of Solomon',chapters:8}] },
+  { id:'pauline', name:'Pauline Epistles', color:'#b8860b',
+    books:[{name:'Romans',chapters:16},{name:'1 Corinthians',chapters:16},{name:'2 Corinthians',chapters:13},{name:'Galatians',chapters:6},
+           {name:'Ephesians',chapters:6},{name:'Philippians',chapters:4},{name:'Colossians',chapters:4},{name:'1 Thessalonians',chapters:5},
+           {name:'2 Thessalonians',chapters:3},{name:'1 Timothy',chapters:6},{name:'2 Timothy',chapters:4},{name:'Titus',chapters:3},
+           {name:'Philemon',chapters:1},{name:'Hebrews',chapters:13}] },
+  { id:'otherepistles', name:'Other Epistles & Revelation', color:'#5c5248',
+    books:[{name:'James',chapters:5},{name:'1 Peter',chapters:5},{name:'2 Peter',chapters:3},{name:'1 John',chapters:5},{name:'2 John',chapters:1},
+           {name:'3 John',chapters:1},{name:'Jude',chapters:1},{name:'Revelation',chapters:22}] }
+];
+
+CATEGORIES.forEach(cat=>{
+  let flat=[], ranges=[];
+  cat.books.forEach(b=>{
+    const start=flat.length;
+    for(let ch=1; ch<=b.chapters; ch++) flat.push({book:b.name, chapter:ch});
+    ranges.push({name:b.name, chapters:b.chapters, start, end:flat.length});
+  });
+  cat.flat=flat; cat.bookRanges=ranges; cat.total=flat.length;
+});
+const TOTAL_CHAPTERS_ALL = CATEGORIES.reduce((s,c)=>s+c.total,0);
+
+/* ---------------- State ---------------- */
+const STORAGE_KEY = 'bibleReadingTrackerState_v1';
+const FIREBASE_CFG_KEY = 'bibleReadingTrackerFirebaseConfig_v1';
+const CLIENT_ID = 'c' + Math.random().toString(36).slice(2) + Date.now().toString(36);
+
+function defaultState(){
+  const cursors={}, cycles={};
+  CATEGORIES.forEach(c=>{ cursors[c.id]=0; cycles[c.id]=0; });
+  return { cursors, cycles, log:[] };
+}
+function loadState(){
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(!raw) return defaultState();
+    const parsed = JSON.parse(raw);
+    const d = defaultState();
+    return {
+      cursors: Object.assign(d.cursors, parsed.cursors||{}),
+      cycles: Object.assign(d.cycles, parsed.cycles||{}),
+      log: Array.isArray(parsed.log) ? parsed.log : []
+    };
+  }catch(e){ return defaultState(); }
+}
+function saveState(opts){
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  if(!opts || !opts.skipSync) scheduleRemoteSync();
+}
+
+let state = loadState();
+let activeTab = 'today';
+let selectedDate = todayStr();
+let deferredInstallPrompt = null;
+
+function todayStr(){
+  const d = new Date();
+  return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+}
+function pad(n){ return String(n).padStart(2,'0'); }
+function fmtDate(iso){
+  const [y,m,d] = iso.split('-').map(Number);
+  const dt = new Date(y, m-1, d);
+  return dt.toLocaleDateString(undefined, {weekday:'short', month:'short', day:'numeric', year:'numeric'});
+}
+function catById(id){ return CATEGORIES.find(c=>c.id===id); }
+
+/* ---------------- Core actions ---------------- */
+function getDue(catId){
+  const cat = catById(catId);
+  const idx = state.cursors[catId]||0;
+  return cat.flat[idx];
+}
+function logEntriesFor(catId, date){
+  return state.log.filter(e=>e.categoryId===catId && e.date===date);
+}
+function lastLogEntry(catId){
+  for(let i=state.log.length-1;i>=0;i--){
+    if(state.log[i].categoryId===catId) return {entry:state.log[i], index:i};
+  }
+  return null;
+}
+function completeReading(catId, date){
+  const cat = catById(catId);
+  const idx = state.cursors[catId]||0;
+  const due = cat.flat[idx];
+  state.log.push({date, categoryId:catId, book:due.book, chapter:due.chapter, status:'complete', ts:Date.now()});
+  let next = idx+1;
+  if(next >= cat.total){ next = 0; state.cycles[catId] = (state.cycles[catId]||0)+1; }
+  state.cursors[catId] = next;
+  saveState(); render();
+}
+function skipReading(catId, date){
+  const cat = catById(catId);
+  const idx = state.cursors[catId]||0;
+  const due = cat.flat[idx];
+  state.log.push({date, categoryId:catId, book:due.book, chapter:due.chapter, status:'skipped', ts:Date.now()});
+  saveState(); render();
+}
+function undoLast(catId){
+  const found = lastLogEntry(catId);
+  if(!found) return;
+  const { entry, index } = found;
+  state.log.splice(index,1);
+  if(entry.status==='complete'){
+    const cat = catById(catId);
+    let idx = state.cursors[catId]-1;
+    if(idx < 0){
+      idx = cat.total-1;
+      state.cycles[catId] = Math.max(0, (state.cycles[catId]||0)-1);
+    }
+    state.cursors[catId] = idx;
+  }
+  saveState(); render();
+}
+
+/* ---------------- Book stats for dashboard ---------------- */
+function bookStats(cat){
+  const idx = state.cursors[cat.id]||0;
+  const cycles = state.cycles[cat.id]||0;
+  return cat.bookRanges.map(b=>{
+    let passes, progress;
+    if(idx >= b.end){ passes = cycles+1; progress = 100; }
+    else if(idx >= b.start && idx < b.end){ passes = cycles; progress = Math.round((idx-b.start)/b.chapters*100); }
+    else { passes = cycles; progress = 0; }
+    let lastDate = null;
+    for(let i=state.log.length-1;i>=0;i--){
+      const e = state.log[i];
+      if(e.book===b.name && e.status==='complete'){ lastDate = e.date; break; }
+    }
+    return { ...b, passes, progress, lastDate };
+  });
+}
+
+/* ---------------- Firebase sync ---------------- */
+let syncStatus = 'unconfigured'; // unconfigured | connecting | synced | offline | error
+let syncMessage = '';
+let lastSyncedAt = null;
+let fbApp=null, fbAuth=null, fbDb=null, fbUnsub=null, fbFirstSnapshotHandled=false;
+let syncDebounceTimer=null;
+
+function loadFirebaseConfig(){
+  try{ const raw = localStorage.getItem(FIREBASE_CFG_KEY); return raw ? JSON.parse(raw) : null; }
+  catch(e){ return null; }
+}
+function saveFirebaseConfig(cfg){
+  localStorage.setItem(FIREBASE_CFG_KEY, JSON.stringify(cfg));
+}
+function clearFirebaseConfig(){
+  localStorage.removeItem(FIREBASE_CFG_KEY);
+  if(fbUnsub){ fbUnsub(); fbUnsub=null; }
+  fbApp=null; fbAuth=null; fbDb=null; fbFirstSnapshotHandled=false;
+  syncStatus='unconfigured'; syncMessage=''; lastSyncedAt=null;
+  render();
+}
+function parseFirebaseConfigText(text){
+  const match = text.match(/\{[\s\S]*\}/);
+  if(!match) throw new Error('no object found');
+  let raw = match[0];
+  raw = raw.replace(/([{,]\s*)([A-Za-z0-9_$]+)\s*:/g, '$1"$2":');
+  raw = raw.replace(/,(\s*[}\]])/g, '$1');
+  const cfg = JSON.parse(raw);
+  if(!cfg.apiKey || !cfg.projectId) throw new Error('missing required fields');
+  return cfg;
+}
+
+function initSync(){
+  const cfg = loadFirebaseConfig();
+  if(!cfg){ syncStatus='unconfigured'; return; }
+  if(typeof firebase === 'undefined'){ syncStatus='offline'; syncMessage='No internet connection to load sync library.'; render(); return; }
+  syncStatus='connecting'; render();
+  try{
+    fbApp = firebase.apps && firebase.apps.length ? firebase.apps[0] : firebase.initializeApp(cfg);
+    fbAuth = firebase.auth();
+    fbDb = firebase.firestore();
+    fbAuth.signInAnonymously().catch(err=>{
+      syncStatus='error'; syncMessage='Sign-in failed: '+err.message; render();
+    });
+    fbAuth.onAuthStateChanged(user=>{
+      if(!user) return;
+      subscribeToDoc();
+    });
+  }catch(err){
+    syncStatus='error'; syncMessage=err.message; render();
+  }
+}
+
+function subscribeToDoc(){
+  if(fbUnsub) fbUnsub();
+  const docRef = fbDb.collection('bibleTracker').doc('state');
+  fbUnsub = docRef.onSnapshot(snap=>{
+    if(!snap.exists){
+      pushStateNow(docRef);
+      syncStatus='synced'; lastSyncedAt=Date.now(); fbFirstSnapshotHandled=true; render();
+      return;
+    }
+    const data = snap.data();
+    if(data._writerId === CLIENT_ID){
+      syncStatus='synced'; lastSyncedAt=Date.now(); render();
+      return;
+    }
+    if(!fbFirstSnapshotHandled){
+      fbFirstSnapshotHandled = true;
+      const localHasData = state.log.length > 0;
+      const remoteHasData = (data.log||[]).length > 0;
+      if(localHasData && remoteHasData){
+        const useCloud = confirm(
+          'Both this device and your cloud sync already have reading progress saved.\n\n' +
+          'Press OK to use the CLOUD version (recommended if you already set up sync elsewhere).\n' +
+          'Press Cancel to keep THIS DEVICE\'S data and overwrite the cloud with it.'
+        );
+        if(!useCloud){ pushStateNow(docRef); syncStatus='synced'; lastSyncedAt=Date.now(); render(); return; }
+      } else if(localHasData && !remoteHasData){
+        pushStateNow(docRef); syncStatus='synced'; lastSyncedAt=Date.now(); render(); return;
+      }
+    }
+    state = { cursors: data.cursors||defaultState().cursors, cycles: data.cycles||defaultState().cycles, log: data.log||[] };
+    saveState({skipSync:true});
+    syncStatus='synced'; lastSyncedAt=Date.now();
+    render();
+  }, err=>{
+    syncStatus='error'; syncMessage=err.message; render();
+  });
+}
+
+function pushStateNow(docRefOverride){
+  if(!fbDb) return;
+  const docRef = docRefOverride || fbDb.collection('bibleTracker').doc('state');
+  docRef.set({
+    cursors: state.cursors, cycles: state.cycles, log: state.log,
+    _writerId: CLIENT_ID, _updatedAt: Date.now()
+  }).catch(err=>{ syncStatus='error'; syncMessage=err.message; render(); });
+}
+function scheduleRemoteSync(){
+  if(!loadFirebaseConfig()) return;
+  clearTimeout(syncDebounceTimer);
+  syncDebounceTimer = setTimeout(()=>{
+    if(!fbDb){ return; }
+    if(!navigator.onLine){ syncStatus='offline'; syncMessage='No connection — will sync when back online.'; render(); return; }
+    pushStateNow();
+  }, 500);
+}
+window.addEventListener('online', ()=>{ if(loadFirebaseConfig()){ if(fbDb) pushStateNow(); else initSync(); } });
+window.addEventListener('offline', ()=>{ if(loadFirebaseConfig()){ syncStatus='offline'; syncMessage='No connection — working locally.'; render(); } });
+
+/* ---------------- Install prompt (Android/Chrome) ---------------- */
+window.addEventListener('beforeinstallprompt', (e)=>{
+  e.preventDefault();
+  deferredInstallPrompt = e;
+  render();
+});
+window.addEventListener('appinstalled', ()=>{ deferredInstallPrompt = null; render(); });
+function isStandalone(){
+  return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+}
+
+/* ---------------- Rendering ---------------- */
+function render(){
+  const app = document.getElementById('app');
+  app.innerHTML = `
+    ${renderHeader()}
+    ${renderInstallBanner()}
+    ${renderTabs()}
+    ${activeTab==='today' ? renderToday() : ''}
+    ${activeTab==='log' ? renderLog() : ''}
+    ${activeTab==='dashboard' ? renderDashboard() : ''}
+    ${activeTab==='settings' ? renderSettings() : ''}
+    ${renderFooter()}
+    <input type="file" id="importFile" accept="application/json">
+  `;
+  attachEvents();
+}
+
+function renderInstallBanner(){
+  if(isStandalone()) return '';
+  if(deferredInstallPrompt){
+    return `<div class="install-banner">
+      <span>Install this as an app on your device for a full-screen, offline-ready experience.</span>
+      <button class="btn primary small" id="installBtn">Install app</button>
+    </div>`;
+  }
+  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  if(isIOS){
+    return `<div class="install-banner">
+      <span>On iPhone/iPad: tap the Share icon in Safari, then "Add to Home Screen" to install this as an app.</span>
+    </div>`;
+  }
+  return '';
+}
+
+function syncPillHtml(){
+  const map = {
+    unconfigured: ['unconfigured', 'Sync not set up — working locally only'],
+    connecting: ['unconfigured', 'Connecting…'],
+    synced: ['synced', 'Synced' + (lastSyncedAt ? ' · ' + new Date(lastSyncedAt).toLocaleTimeString() : '')],
+    offline: ['offline', syncMessage || 'Offline — working locally'],
+    error: ['error', 'Sync error: ' + syncMessage]
+  };
+  const [cls, label] = map[syncStatus] || map.unconfigured;
+  return `<span class="sync-pill ${cls}">&#9679; ${label}</span>`;
+}
+
+function renderHeader(){
+  const totalComplete = state.log.filter(e=>e.status==='complete').length;
+  return `
+  <header class="top">
+    <div>
+      <h1>Bible Reading Tracker</h1>
+      <div class="sub">${CATEGORIES.length} categories &middot; ${totalComplete} chapters logged all-time</div>
+      <div>${syncPillHtml()}</div>
+    </div>
+    <div class="toolbar">
+      <button class="btn" id="exportBtn">Export backup</button>
+      <button class="btn" id="importBtn">Import backup</button>
+    </div>
+  </header>`;
+}
+
+function renderTabs(){
+  const tabs = [['today','Today'],['log','Log'],['dashboard','Dashboard'],['settings','Sync Settings']];
+  return `<nav class="tabs">
+    ${tabs.map(([id,label])=>`<button data-tab="${id}" class="${activeTab===id?'active':''}">${label}</button>`).join('')}
+  </nav>`;
+}
+
+function renderToday(){
+  const isToday = selectedDate===todayStr();
+  const cards = CATEGORIES.map(cat=>{
+    const due = getDue(cat.id);
+    const entriesToday = logEntriesFor(cat.id, selectedDate);
+    const lastEntry = entriesToday[entriesToday.length-1];
+    let statusHtml = '';
+    if(lastEntry){
+      if(lastEntry.status==='complete'){
+        statusHtml = `<span class="status-pill complete">&#10003; Completed today</span>`;
+      } else {
+        statusHtml = `<span class="status-pill skipped">&#8631; Skipped &mdash; pushed to next time</span>`;
+      }
+    }
+    const priorLogsHtml = entriesToday.length ? `
+      <div class="today-log-list">
+        ${entriesToday.map(e=>`<div>${e.status==='complete'?'&#10003;':'&#8631;'} ${e.book} ${e.chapter} &mdash; ${e.status}</div>`).join('')}
+      </div>` : '';
+    return `
+      <div class="card" style="--cat-color:${cat.color}">
+        <div class="cat-name">${cat.name}</div>
+        ${statusHtml}
+        <div class="due">${due.book} ${due.chapter}</div>
+        <div class="meta">Next up &middot; cycle ${(state.cycles[cat.id]||0)+1} &middot; ${state.cursors[cat.id]||0}/${cat.total} chapters into this pass</div>
+        <div class="actions">
+          <button class="btn primary" data-action="complete" data-cat="${cat.id}">Mark complete</button>
+          <button class="btn" data-action="skip" data-cat="${cat.id}">Skip &rarr; next time</button>
+          ${lastLogEntry(cat.id) ? `<button class="btn small" data-action="undo" data-cat="${cat.id}">Undo last</button>` : ''}
+        </div>
+        ${priorLogsHtml}
+      </div>`;
+  }).join('');
+
+  return `
+    <div class="toolbar">
+      <label for="dateSel" style="font-size:0.85rem; color:var(--ink-soft);">Logging for:</label>
+      <input type="date" id="dateSel" value="${selectedDate}" max="${todayStr()}">
+      ${!isToday ? `<button class="btn small" id="backToToday">Back to today</button>` : ''}
+      <span style="font-size:0.8rem; color:var(--ink-soft);">${fmtDate(selectedDate)}</span>
+    </div>
+    <div class="grid">${cards}</div>
+  `;
+}
+
+function renderLog(){
+  const dates = Array.from(new Set(state.log.map(e=>e.date))).sort().reverse();
+  if(!dates.length){
+    return `<div class="empty-note">No readings logged yet. Head to the Today tab to get started.</div>`;
+  }
+  const groups = {};
+  dates.forEach(d=>{
+    const ym = d.slice(0,7);
+    (groups[ym] = groups[ym]||[]).push(d);
+  });
+  const ymKeys = Object.keys(groups).sort().reverse();
+  const monthName = ym => {
+    const [y,m] = ym.split('-').map(Number);
+    return new Date(y, m-1, 1).toLocaleDateString(undefined,{month:'long', year:'numeric'});
+  };
+  return ymKeys.map((ym, i)=>{
+    const rows = groups[ym].map(date=>{
+      const cells = CATEGORIES.map(cat=>{
+        const entries = logEntriesFor(cat.id, date);
+        if(!entries.length) return `<td></td>`;
+        return `<td class="${entries.some(e=>e.status==='complete')?'cell-complete':'cell-skipped'}">
+          ${entries.map(e=>`${e.book} ${e.chapter}${e.status==='skipped'?' (skipped)':''}`).join(', ')}
+        </td>`;
+      }).join('');
+      return `<tr><td>${fmtDate(date)}</td>${cells}</tr>`;
+    }).join('');
+    return `
+      <details class="month-group" ${i===0?'open':''}>
+        <summary>${monthName(ym)} <span style="color:var(--ink-soft); font-weight:500;">${groups[ym].length} day(s) logged</span></summary>
+        <div class="log-scroll">
+          <table class="logtable">
+            <thead><tr><th>Date</th>${CATEGORIES.map(c=>`<th>${c.name}</th>`).join('')}</tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+      </details>`;
+  }).join('');
+}
+
+function renderDashboard(){
+  const uniqueChapters = new Set(state.log.filter(e=>e.status==='complete').map(e=>e.book+'|'+e.chapter));
+  const totalPassesAcrossAll = CATEGORIES.reduce((s,c)=>s+(state.cycles[c.id]||0),0);
+  const summary = `
+    <div class="dash-summary">
+      <div class="stat"><div class="num">${uniqueChapters.size} / ${TOTAL_CHAPTERS_ALL}</div><div class="label">Unique chapters read at least once</div></div>
+      <div class="stat"><div class="num">${Math.round(uniqueChapters.size/TOTAL_CHAPTERS_ALL*100)}%</div><div class="label">Whole-Bible coverage</div></div>
+      <div class="stat"><div class="num">${totalPassesAcrossAll}</div><div class="label">Total category cycles completed</div></div>
+      <div class="stat"><div class="num">${state.log.filter(e=>e.status==='complete').length}</div><div class="label">Chapters logged complete (all-time)</div></div>
+    </div>`;
+
+  const blocks = CATEGORIES.map(cat=>{
+    const stats = bookStats(cat);
+    const catCycle = state.cycles[cat.id]||0;
+    const catPct = Math.round((state.cursors[cat.id]||0)/cat.total*100);
+    const rows = stats.map(b=>`
+      <div class="book-row">
+        <div>${b.name}</div>
+        <div class="bar-track"><div class="bar-fill" style="width:${b.progress}%; background:${cat.color};"></div></div>
+        <div class="passes-badge" title="Times fully completed this cycle count">${b.passes}&times; read</div>
+        <div style="text-align:right; color:var(--ink-soft);">${b.progress}%</div>
+      </div>`).join('');
+    return `
+      <div class="cat-block">
+        <h3><span class="swatch" style="background:${cat.color}"></span>${cat.name}</h3>
+        <div class="cat-sub">Cycle ${catCycle+1} in progress &middot; ${catPct}% through current pass (${cat.total} chapters/cycle)</div>
+        ${rows}
+      </div>`;
+  }).join('');
+
+  return summary + blocks;
+}
+
+function renderSettings(){
+  const cfg = loadFirebaseConfig();
+  const rulesText = `rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /bibleTracker/{doc} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}`;
+  return `
+    <div class="settings-box">
+      <h3>Cross-device sync (Firebase &mdash; free)</h3>
+      <p style="font-size:0.85rem; color:var(--ink-soft);">
+        One-time setup, about 5 minutes. This lets your phone and laptop share progress in real time.
+        Skip this entirely and the tracker still works great on a single device, fully offline.
+      </p>
+      <ol>
+        <li>Go to <code>console.firebase.google.com</code>, sign in, click <strong>Add project</strong> (Analytics not needed).</li>
+        <li><strong>Build &rarr; Firestore Database &rarr; Create database</strong> &rarr; production mode &rarr; pick a region &rarr; Enable.</li>
+        <li>In Firestore, open the <strong>Rules</strong> tab, replace the contents with this, then Publish:</li>
+      </ol>
+      <div class="rules-box">${rulesText}</div>
+      <ol start="4">
+        <li><strong>Build &rarr; Authentication &rarr; Get started &rarr; Sign-in method</strong> &rarr; enable <strong>Anonymous</strong>.</li>
+        <li><strong>Project settings</strong> (gear icon) &rarr; scroll to "Your apps" &rarr; click the <code>&lt;/&gt;</code> web icon &rarr; register an app.</li>
+        <li>Copy the <code>firebaseConfig</code> object it shows you, and paste the whole thing below.</li>
+      </ol>
+      <textarea id="fbConfigInput" placeholder='Paste your firebaseConfig object here, e.g.&#10;const firebaseConfig = { apiKey: "...", authDomain: "...", projectId: "...", ... };'>${cfg ? JSON.stringify(cfg, null, 2) : ''}</textarea>
+      <div class="actions" style="display:flex; gap:8px;">
+        <button class="btn primary" id="saveFbConfig">Save & connect</button>
+        ${cfg ? `<button class="btn danger" id="clearFbConfig">Disconnect sync</button>` : ''}
+      </div>
+      <p style="font-size:0.8rem; margin-top:14px;">${syncPillHtml()}</p>
+      <p style="font-size:0.78rem; color:var(--ink-soft);">Repeat step 6 (copy config, paste here) on your other device to connect it to the same cloud project. That's it &mdash; both devices will then update live.</p>
+    </div>
+  `;
+}
+
+function renderFooter(){
+  return `<footer class="app-footer">
+    <span>Works fully offline once installed. Progress is always saved on this device first &mdash; sync (if configured) happens in the background.</span>
+    <span>All 66 books &middot; ${TOTAL_CHAPTERS_ALL} chapters total</span>
+  </footer>`;
+}
+
+/* ---------------- Events ---------------- */
+function attachEvents(){
+  document.querySelectorAll('nav.tabs button').forEach(btn=>{
+    btn.addEventListener('click', ()=>{ activeTab = btn.dataset.tab; render(); });
+  });
+  document.querySelectorAll('[data-action]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const catId = btn.dataset.cat;
+      const action = btn.dataset.action;
+      if(action==='complete') completeReading(catId, selectedDate);
+      else if(action==='skip') skipReading(catId, selectedDate);
+      else if(action==='undo') undoLast(catId);
+    });
+  });
+  const dateSel = document.getElementById('dateSel');
+  if(dateSel){
+    dateSel.addEventListener('change', ()=>{ selectedDate = dateSel.value || todayStr(); render(); });
+  }
+  const backBtn = document.getElementById('backToToday');
+  if(backBtn){ backBtn.addEventListener('click', ()=>{ selectedDate = todayStr(); render(); }); }
+
+  const exportBtn = document.getElementById('exportBtn');
+  if(exportBtn){
+    exportBtn.addEventListener('click', ()=>{
+      const blob = new Blob([JSON.stringify(state, null, 2)], {type:'application/json'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'bible-reading-tracker-backup-'+todayStr()+'.json';
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    });
+  }
+  const importBtn = document.getElementById('importBtn');
+  const importFile = document.getElementById('importFile');
+  if(importBtn && importFile){
+    importBtn.addEventListener('click', ()=> importFile.click());
+    importFile.addEventListener('change', (ev)=>{
+      const file = ev.target.files[0];
+      if(!file) return;
+      const reader = new FileReader();
+      reader.onload = (e)=>{
+        try{
+          const parsed = JSON.parse(e.target.result);
+          if(!parsed.cursors || !parsed.cycles || !Array.isArray(parsed.log)) throw new Error('bad file');
+          if(confirm('Import this backup and replace your current progress?')){
+            const d = defaultState();
+            state = {
+              cursors: Object.assign(d.cursors, parsed.cursors),
+              cycles: Object.assign(d.cycles, parsed.cycles),
+              log: parsed.log
+            };
+            saveState(); render();
+          }
+        }catch(err){ alert('Could not read that file as a valid backup.'); }
+      };
+      reader.readAsText(file);
+      importFile.value = '';
+    });
+  }
+  const saveFbBtn = document.getElementById('saveFbConfig');
+  if(saveFbBtn){
+    saveFbBtn.addEventListener('click', ()=>{
+      const text = document.getElementById('fbConfigInput').value;
+      try{
+        const cfg = parseFirebaseConfigText(text);
+        saveFirebaseConfig(cfg);
+        fbFirstSnapshotHandled = false;
+        initSync();
+      }catch(err){
+        alert('Could not read that as a valid Firebase config. Paste the full firebaseConfig object from the Firebase console.');
+      }
+    });
+  }
+  const clearFbBtn = document.getElementById('clearFbConfig');
+  if(clearFbBtn){
+    clearFbBtn.addEventListener('click', ()=>{
+      if(confirm('Disconnect this device from cloud sync? Your local progress stays intact.')) clearFirebaseConfig();
+    });
+  }
+  const installBtn = document.getElementById('installBtn');
+  if(installBtn){
+    installBtn.addEventListener('click', async ()=>{
+      if(!deferredInstallPrompt) return;
+      deferredInstallPrompt.prompt();
+      await deferredInstallPrompt.userChoice;
+      deferredInstallPrompt = null;
+      render();
+    });
+  }
+}
+
+render();
+initSync();
+
+/* ---------------- Service worker registration (installable + offline) ---------------- */
+if('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')){
+  window.addEventListener('load', ()=>{
+    navigator.serviceWorker.register('./sw.js').catch(()=>{ /* ignore, app still works without it */ });
+  });
+}
+</script>
+</body>
+</html>
