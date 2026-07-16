@@ -1,7 +1,7 @@
 {
-  "name": "Bible Reading Tracker",
-  "short_name": "Bible Tracker",
-  "description": "Daily, category-based Bible reading tracker with progress dashboard.",
+  "name": "Cultivate",
+  "short_name": "Cultivate",
+  "description": "Daily Bible reading tracker, reading plans, and prayer/prophetic journal with progress dashboard.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
