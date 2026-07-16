@@ -1,6 +1,11 @@
 // Bible Reading Tracker — service worker
 // Caches the app shell so it launches instantly and works offline once installed.
-const CACHE_NAME = 'bible-tracker-v1';
+//
+// IMPORTANT: bump CACHE_NAME any time the list of cached files changes, and it's good practice
+// to bump it on any meaningful release even if this list doesn't change — browsers only notice
+// a service worker update when the sw.js file's bytes change, so changing this string is what
+// makes browsers pick up new files at all.
+const CACHE_NAME = 'bible-tracker-v2';
 const APP_SHELL = [
   './',
   './index.html',
@@ -24,13 +29,33 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Cache-first for the app shell; for everything else (e.g. Firebase calls) go to the network
-// and don't try to cache it, so sync always talks to the real server when online.
+// Firebase/Firestore/auth calls: let them pass straight through, untouched.
+//
+// The HTML document itself: always try the network FIRST so that pushing an update to GitHub
+// shows up the next time the app loads, falling back to the cached copy only when offline.
+// (Cache-first here was the bug — it meant browsers kept serving the very first version
+// forever, regardless of what got deployed afterward.)
+//
+// Everything else (icons, manifest): cache-first is fine, since those essentially never change.
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
   const isSameOrigin = url.origin === self.location.origin;
+  if (!isSameOrigin) return;
 
-  if (!isSameOrigin) return; // let Firebase/Firestore/auth requests pass straight through
+  const isDocument = event.request.mode === 'navigate'
+    || url.pathname.endsWith('/index.html')
+    || url.pathname.endsWith('/');
+
+  if (isDocument) {
+    event.respondWith(
+      fetch(event.request).then((response) => {
+        const copy = response.clone();
+        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+        return response;
+      }).catch(() => caches.match('./index.html'))
+    );
+    return;
+  }
 
   event.respondWith(
     caches.match(event.request).then((cached) => {
@@ -39,7 +64,7 @@ self.addEventListener('fetch', (event) => {
         const copy = response.clone();
         caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
         return response;
-      }).catch(() => caches.match('./index.html'));
+      });
     })
   );
 });
