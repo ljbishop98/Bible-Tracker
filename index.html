@@ -15,10 +15,11 @@
 <link rel="apple-touch-icon" href="./icon-192.png">
 <link rel="icon" href="./icon-192.png">
 
-<!-- Firebase (only needed for cross-device sync; app works fully offline without it) -->
+<!-- Firebase (accounts + cross-device sync + reminders; app still works in guest/local-only mode without it) -->
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js"></script>
 <style>
   :root{
     --bg:#faf7f2;
@@ -47,12 +48,16 @@
   header.top h1{font-size:1.5rem; margin:0; font-weight:700;}
   header.top .sub{color:var(--ink-soft); font-size:0.9rem;}
   .sync-pill{
-    display:inline-flex; align-items:center; gap:6px; padding:5px 12px; border-radius:999px; font-size:0.78rem; font-weight:700; margin-top:6px;
+    display:inline-flex; align-items:center; gap:6px; padding:5px 12px; border-radius:999px; font-size:0.78rem; font-weight:700; margin-top:6px; margin-right:6px;
   }
   .sync-pill.synced{background:var(--good-soft); color:var(--good);}
   .sync-pill.offline{background:var(--skip-soft); color:var(--skip);}
   .sync-pill.unconfigured{background:var(--accent-soft); color:var(--accent);}
   .sync-pill.error{background:var(--bad-soft); color:var(--bad);}
+  .checkin-banner{
+    background:var(--skip-soft); border:1px solid var(--skip); border-radius:10px; padding:14px 16px;
+    font-size:0.88rem; margin-bottom:18px; display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap;
+  }
   nav.tabs{display:flex; gap:6px; margin-bottom:22px; border-bottom:1px solid var(--line); flex-wrap:wrap;}
   nav.tabs button{
     background:none; border:none; padding:10px 16px; font-size:0.95rem; cursor:pointer;
@@ -70,6 +75,7 @@
   .btn:hover{background:var(--accent-soft);}
   .btn.primary{background:var(--accent); color:#fff; border-color:var(--accent);}
   .btn.primary:hover{opacity:0.9;}
+  .btn.primary:disabled{opacity:0.6; cursor:default;}
   .btn.danger{color:var(--bad); border-color:var(--bad-soft);}
   .btn.small{padding:4px 10px; font-size:0.78rem;}
   .grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(300px,1fr)); gap:14px;}
@@ -127,94 +133,180 @@
   .settings-box h3{margin-top:0;}
   .settings-box ol{padding-left:20px; font-size:0.88rem; color:var(--ink-soft);}
   .settings-box ol li{margin-bottom:6px;}
-  .settings-box textarea{
-    width:100%; min-height:110px; font-family:ui-monospace,Menlo,Consolas,monospace; font-size:0.8rem;
-    padding:10px; border:1px solid var(--line); border-radius:8px; resize:vertical; margin:10px 0;
-  }
   .settings-box code{background:var(--accent-soft); padding:1px 5px; border-radius:4px;}
-  .settings-box .rules-box{
-    background:#2b2620; color:#f0e4d4; font-family:ui-monospace,Menlo,Consolas,monospace; font-size:0.76rem;
-    padding:12px; border-radius:8px; white-space:pre; overflow-x:auto; margin:10px 0;
-  }
   .install-banner{
     background:var(--accent-soft); border:1px solid var(--accent); border-radius:10px; padding:12px 16px;
     font-size:0.85rem; margin-bottom:18px; display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap;
   }
+  .auth-wrap{max-width:420px; margin:60px auto; padding:0 20px;}
+  .auth-brand{text-align:center; margin-bottom:24px;}
+  .auth-brand .name{font-size:1.6rem; font-weight:800; color:var(--accent);}
+  .auth-brand .tag{color:var(--ink-soft); font-size:0.85rem; margin-top:4px;}
+  .auth-error{color:var(--bad); font-size:0.85rem; background:var(--bad-soft); padding:8px 12px; border-radius:8px; margin-bottom:14px;}
+  .auth-field label{font-size:0.8rem; font-weight:600; display:block; margin-bottom:4px;}
+  .auth-field input{width:100%; padding:9px 10px; border:1px solid var(--line); border-radius:8px; margin-bottom:12px; font-size:0.9rem; font-family:inherit;}
+  .auth-links{text-align:center; margin-top:14px; font-size:0.82rem; display:flex; flex-direction:column; gap:8px;}
+  .auth-links a{color:var(--accent); text-decoration:none;}
+  .auth-links a.muted{color:var(--ink-soft);}
+  .onboard-wrap{max-width:900px; margin:0 auto;}
+  .plan-grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(260px,1fr)); gap:16px; margin:20px 0;}
+  .plan-card{background:var(--card); border:1px solid var(--line); border-radius:14px; padding:18px; box-shadow:var(--shadow); display:flex; flex-direction:column; gap:10px;}
+  .plan-card h4{margin:0; font-size:1.05rem;}
+  .plan-card p{margin:0; font-size:0.82rem; color:var(--ink-soft); flex-grow:1;}
+  .plan-card .swatches{display:flex; gap:4px; flex-wrap:wrap;}
+  .plan-card .swatches span{width:14px; height:14px; border-radius:4px; display:inline-block;}
+  .builder-cat{background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; margin-bottom:14px; box-shadow:var(--shadow);}
+  .builder-cat-head{display:flex; align-items:center; gap:10px; margin-bottom:10px; flex-wrap:wrap;}
+  .builder-cat-head input[type=text]{flex:1; min-width:160px; padding:7px 10px; border:1px solid var(--line); border-radius:8px; font-size:0.95rem; font-weight:700; font-family:inherit;}
+  .color-swatch-row{display:flex; gap:5px; flex-wrap:wrap;}
+  .color-swatch-row button{width:20px; height:20px; border-radius:5px; border:2px solid transparent; cursor:pointer; padding:0;}
+  .color-swatch-row button.selected{border-color:var(--ink);}
+  .builder-book-row{display:flex; align-items:center; justify-content:space-between; gap:8px; padding:5px 0; border-bottom:1px solid var(--line); font-size:0.85rem;}
+  .builder-book-row:last-child{border-bottom:none;}
+  .builder-add-row{display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;}
+  .builder-add-row select{flex:1; min-width:180px; padding:7px 10px; border:1px solid var(--line); border-radius:8px; font-size:0.85rem; font-family:inherit;}
 </style>
 </head>
 <body>
 <div id="app"></div>
 
 <script>
-/* ---------------- Data model ---------------- */
-const CATEGORIES = [
-  { id:'pentateuch', name:'The Pentateuch', color:'#7a4b2e',
-    books:[{name:'Genesis',chapters:50},{name:'Exodus',chapters:40},{name:'Leviticus',chapters:27},{name:'Numbers',chapters:36},{name:'Deuteronomy',chapters:34}] },
-  { id:'history', name:'The History', color:'#8a5a2b',
-    books:[{name:'Joshua',chapters:24},{name:'Judges',chapters:21},{name:'Ruth',chapters:4},{name:'1 Samuel',chapters:31},{name:'2 Samuel',chapters:24},
-           {name:'1 Kings',chapters:22},{name:'2 Kings',chapters:25},{name:'1 Chronicles',chapters:29},{name:'2 Chronicles',chapters:36},
-           {name:'Ezra',chapters:10},{name:'Nehemiah',chapters:13},{name:'Esther',chapters:10}] },
-  { id:'gospels', name:'The Gospels & Acts', color:'#2f6b4f',
-    books:[{name:'Matthew',chapters:28},{name:'Mark',chapters:16},{name:'Luke',chapters:24},{name:'Acts',chapters:28},{name:'John',chapters:21}] },
-  { id:'psalms', name:'Psalms', color:'#3d6b8a',
-    books:[{name:'Psalms',chapters:150}] },
-  { id:'proverbs', name:'Proverbs', color:'#4a5f8a',
-    books:[{name:'Proverbs',chapters:31}] },
-  { id:'majorprophets', name:'Major Prophets', color:'#8a3d5c',
-    books:[{name:'Isaiah',chapters:66},{name:'Jeremiah',chapters:52},{name:'Lamentations',chapters:5},{name:'Ezekiel',chapters:48},{name:'Daniel',chapters:12}] },
-  { id:'minorprophets', name:'Minor Prophets', color:'#a34b3e',
-    books:[{name:'Hosea',chapters:14},{name:'Joel',chapters:3},{name:'Amos',chapters:9},{name:'Obadiah',chapters:1},{name:'Jonah',chapters:4},
-           {name:'Micah',chapters:7},{name:'Nahum',chapters:3},{name:'Habakkuk',chapters:3},{name:'Zephaniah',chapters:3},{name:'Haggai',chapters:2},
-           {name:'Zechariah',chapters:14},{name:'Malachi',chapters:4}] },
-  { id:'wisdom', name:'Job, Ecclesiastes & Song of Solomon', color:'#6b4f8a',
-    books:[{name:'Job',chapters:42},{name:'Ecclesiastes',chapters:12},{name:'Song of Solomon',chapters:8}] },
-  { id:'pauline', name:'Pauline Epistles', color:'#b8860b',
-    books:[{name:'Romans',chapters:16},{name:'1 Corinthians',chapters:16},{name:'2 Corinthians',chapters:13},{name:'Galatians',chapters:6},
-           {name:'Ephesians',chapters:6},{name:'Philippians',chapters:4},{name:'Colossians',chapters:4},{name:'1 Thessalonians',chapters:5},
-           {name:'2 Thessalonians',chapters:3},{name:'1 Timothy',chapters:6},{name:'2 Timothy',chapters:4},{name:'Titus',chapters:3},
-           {name:'Philemon',chapters:1},{name:'Hebrews',chapters:13}] },
-  { id:'otherepistles', name:'Other Epistles & Revelation', color:'#5c5248',
-    books:[{name:'James',chapters:5},{name:'1 Peter',chapters:5},{name:'2 Peter',chapters:3},{name:'1 John',chapters:5},{name:'2 John',chapters:1},
-           {name:'3 John',chapters:1},{name:'Jude',chapters:1},{name:'Revelation',chapters:22}] }
+/* ---------------- Book library (canonical 66 books) ---------------- */
+const BOOK_LIBRARY = [
+  {name:'Genesis',chapters:50},{name:'Exodus',chapters:40},{name:'Leviticus',chapters:27},{name:'Numbers',chapters:36},{name:'Deuteronomy',chapters:34},
+  {name:'Joshua',chapters:24},{name:'Judges',chapters:21},{name:'Ruth',chapters:4},{name:'1 Samuel',chapters:31},{name:'2 Samuel',chapters:24},
+  {name:'1 Kings',chapters:22},{name:'2 Kings',chapters:25},{name:'1 Chronicles',chapters:29},{name:'2 Chronicles',chapters:36},
+  {name:'Ezra',chapters:10},{name:'Nehemiah',chapters:13},{name:'Esther',chapters:10},
+  {name:'Job',chapters:42},{name:'Psalms',chapters:150},{name:'Proverbs',chapters:31},{name:'Ecclesiastes',chapters:12},{name:'Song of Solomon',chapters:8},
+  {name:'Isaiah',chapters:66},{name:'Jeremiah',chapters:52},{name:'Lamentations',chapters:5},{name:'Ezekiel',chapters:48},{name:'Daniel',chapters:12},
+  {name:'Hosea',chapters:14},{name:'Joel',chapters:3},{name:'Amos',chapters:9},{name:'Obadiah',chapters:1},{name:'Jonah',chapters:4},{name:'Micah',chapters:7},
+  {name:'Nahum',chapters:3},{name:'Habakkuk',chapters:3},{name:'Zephaniah',chapters:3},{name:'Haggai',chapters:2},{name:'Zechariah',chapters:14},{name:'Malachi',chapters:4},
+  {name:'Matthew',chapters:28},{name:'Mark',chapters:16},{name:'Luke',chapters:24},{name:'John',chapters:21},{name:'Acts',chapters:28},
+  {name:'Romans',chapters:16},{name:'1 Corinthians',chapters:16},{name:'2 Corinthians',chapters:13},{name:'Galatians',chapters:6},{name:'Ephesians',chapters:6},
+  {name:'Philippians',chapters:4},{name:'Colossians',chapters:4},{name:'1 Thessalonians',chapters:5},{name:'2 Thessalonians',chapters:3},
+  {name:'1 Timothy',chapters:6},{name:'2 Timothy',chapters:4},{name:'Titus',chapters:3},{name:'Philemon',chapters:1},{name:'Hebrews',chapters:13},
+  {name:'James',chapters:5},{name:'1 Peter',chapters:5},{name:'2 Peter',chapters:3},{name:'1 John',chapters:5},{name:'2 John',chapters:1},{name:'3 John',chapters:1},
+  {name:'Jude',chapters:1},{name:'Revelation',chapters:22}
 ];
+const BIBLE_TOTAL_CHAPTERS = BOOK_LIBRARY.reduce((s,b)=>s+b.chapters,0);
+function chaptersFor(bookName){ const b = BOOK_LIBRARY.find(x=>x.name===bookName); return b ? b.chapters : 0; }
+function bookObj(bookName){ return {name: bookName, chapters: chaptersFor(bookName)}; }
 
-CATEGORIES.forEach(cat=>{
+const COLOR_PALETTE = ['#7a4b2e','#8a5a2b','#2f6b4f','#3d6b8a','#4a5f8a','#8a3d5c','#a34b3e','#6b4f8a','#b8860b','#5c5248','#4b6b3a','#6b3a5c'];
+
+function makeCategory(id, name, color, bookNames){
+  return { id, name, color, books: bookNames.map(bookObj) };
+}
+
+/* ---------------- Preset plans ---------------- */
+const PRESET_PLANS = {
+  balanced10: {
+    id:'balanced10', name:'Balanced 10',
+    description:'10 focused categories cycling in parallel — the original design. All 66 books, one chapter at a time, cycling independently.',
+    categories:[
+      makeCategory('pentateuch','The Pentateuch','#7a4b2e',['Genesis','Exodus','Leviticus','Numbers','Deuteronomy']),
+      makeCategory('history','The History','#8a5a2b',['Joshua','Judges','Ruth','1 Samuel','2 Samuel','1 Kings','2 Kings','1 Chronicles','2 Chronicles','Ezra','Nehemiah','Esther']),
+      makeCategory('gospels','The Gospels & Acts','#2f6b4f',['Matthew','Mark','Luke','Acts','John']),
+      makeCategory('psalms','Psalms','#3d6b8a',['Psalms']),
+      makeCategory('proverbs','Proverbs','#4a5f8a',['Proverbs']),
+      makeCategory('majorprophets','Major Prophets','#8a3d5c',['Isaiah','Jeremiah','Lamentations','Ezekiel','Daniel']),
+      makeCategory('minorprophets','Minor Prophets','#a34b3e',['Hosea','Joel','Amos','Obadiah','Jonah','Micah','Nahum','Habakkuk','Zephaniah','Haggai','Zechariah','Malachi']),
+      makeCategory('wisdom','Job, Ecclesiastes & Song of Solomon','#6b4f8a',['Job','Ecclesiastes','Song of Solomon']),
+      makeCategory('pauline','Pauline Epistles','#b8860b',['Romans','1 Corinthians','2 Corinthians','Galatians','Ephesians','Philippians','Colossians','1 Thessalonians','2 Thessalonians','1 Timothy','2 Timothy','Titus','Philemon','Hebrews']),
+      makeCategory('otherepistles','Other Epistles & Revelation','#5c5248',['James','1 Peter','2 Peter','1 John','2 John','3 John','Jude','Revelation'])
+    ]
+  },
+  simple5: {
+    id:'simple5', name:'Simple 5',
+    description:'Five broader categories for less juggling — good if ten parallel tracks feels like too much at once.',
+    categories:[
+      makeCategory('law_history','Law & History','#7a4b2e',['Genesis','Exodus','Leviticus','Numbers','Deuteronomy','Joshua','Judges','Ruth','1 Samuel','2 Samuel','1 Kings','2 Kings','1 Chronicles','2 Chronicles','Ezra','Nehemiah','Esther']),
+      makeCategory('wisdom_poetry','Wisdom & Poetry','#6b4f8a',['Job','Psalms','Proverbs','Ecclesiastes','Song of Solomon']),
+      makeCategory('prophets','Prophets','#8a3d5c',['Isaiah','Jeremiah','Lamentations','Ezekiel','Daniel','Hosea','Joel','Amos','Obadiah','Jonah','Micah','Nahum','Habakkuk','Zephaniah','Haggai','Zechariah','Malachi']),
+      makeCategory('gospels_acts','Gospels & Acts','#2f6b4f',['Matthew','Mark','Luke','Acts','John']),
+      makeCategory('epistles_rev','Epistles & Revelation','#b8860b',['Romans','1 Corinthians','2 Corinthians','Galatians','Ephesians','Philippians','Colossians','1 Thessalonians','2 Thessalonians','1 Timothy','2 Timothy','Titus','Philemon','Hebrews','James','1 Peter','2 Peter','1 John','2 John','3 John','Jude','Revelation'])
+    ]
+  },
+  ntfocus: {
+    id:'ntfocus', name:'New Testament Focus',
+    description:'Six categories weighted toward the New Testament — five NT tracks for depth, plus one slower-moving Old Testament track for context.',
+    categories:[
+      makeCategory('nt_gospels','Gospels','#2f6b4f',['Matthew','Mark','Luke','John']),
+      makeCategory('nt_acts','Acts','#3d6b8a',['Acts']),
+      makeCategory('nt_pauline','Pauline Epistles','#b8860b',['Romans','1 Corinthians','2 Corinthians','Galatians','Ephesians','Philippians','Colossians','1 Thessalonians','2 Thessalonians','1 Timothy','2 Timothy','Titus','Philemon','Hebrews']),
+      makeCategory('nt_general','General Epistles & Revelation','#5c5248',['James','1 Peter','2 Peter','1 John','2 John','3 John','Jude','Revelation']),
+      makeCategory('nt_psalmsprov','Psalms & Proverbs','#4a5f8a',['Psalms','Proverbs']),
+      makeCategory('nt_ot','Old Testament','#7a4b2e',['Genesis','Exodus','Leviticus','Numbers','Deuteronomy','Joshua','Judges','Ruth','1 Samuel','2 Samuel','1 Kings','2 Kings','1 Chronicles','2 Chronicles','Ezra','Nehemiah','Esther','Job','Ecclesiastes','Song of Solomon','Isaiah','Jeremiah','Lamentations','Ezekiel','Daniel','Hosea','Joel','Amos','Obadiah','Jonah','Micah','Nahum','Habakkuk','Zephaniah','Haggai','Zechariah','Malachi'])
+    ]
+  }
+};
+
+function cloneCategories(categories){
+  return categories.map(c => ({ id:c.id, name:c.name, color:c.color, books: c.books.map(b=>({name:b.name, chapters:b.chapters})) }));
+}
+function deriveCategory(cat){
   let flat=[], ranges=[];
   cat.books.forEach(b=>{
     const start=flat.length;
     for(let ch=1; ch<=b.chapters; ch++) flat.push({book:b.name, chapter:ch});
     ranges.push({name:b.name, chapters:b.chapters, start, end:flat.length});
   });
-  cat.flat=flat; cat.bookRanges=ranges; cat.total=flat.length;
-});
-const TOTAL_CHAPTERS_ALL = CATEGORIES.reduce((s,c)=>s+c.total,0);
+  return { ...cat, flat, bookRanges:ranges, total:flat.length };
+}
+
+/* ---------------- Active plan (per user) ---------------- */
+let ACTIVE_CATEGORIES = [];
+function setActivePlan(rawCategories){
+  ACTIVE_CATEGORIES = cloneCategories(rawCategories).map(deriveCategory);
+}
+function activeTotalChapters(){ return ACTIVE_CATEGORIES.reduce((s,c)=>s+c.total,0); }
+function catById(id){ return ACTIVE_CATEGORIES.find(c=>c.id===id); }
 
 /* ---------------- State ---------------- */
 const STORAGE_KEY = 'bibleReadingTrackerState_v1';
-const FIREBASE_CFG_KEY = 'bibleReadingTrackerFirebaseConfig_v1';
+const AUTH_CHOICE_KEY = 'bibleReadingTrackerAuthChoice_v1';
 const CLIENT_ID = 'c' + Math.random().toString(36).slice(2) + Date.now().toString(36);
 
 function defaultState(){
-  const cursors={}, cycles={};
-  CATEGORIES.forEach(c=>{ cursors[c.id]=0; cycles[c.id]=0; });
-  return { cursors, cycles, log:[] };
+  return { cursors:{}, cycles:{}, log:[], plan:null };
 }
 function loadState(){
   try{
     const raw = localStorage.getItem(STORAGE_KEY);
     if(!raw) return defaultState();
     const parsed = JSON.parse(raw);
-    const d = defaultState();
     return {
-      cursors: Object.assign(d.cursors, parsed.cursors||{}),
-      cycles: Object.assign(d.cycles, parsed.cycles||{}),
-      log: Array.isArray(parsed.log) ? parsed.log : []
+      cursors: parsed.cursors || {},
+      cycles: parsed.cycles || {},
+      log: Array.isArray(parsed.log) ? parsed.log : [],
+      plan: parsed.plan || null
     };
   }catch(e){ return defaultState(); }
 }
 function saveState(opts){
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   if(!opts || !opts.skipSync) scheduleRemoteSync();
+}
+function ensurePlanReady(){
+  if(state.plan && Array.isArray(state.plan.categories) && state.plan.categories.length){
+    setActivePlan(state.plan.categories);
+  } else if(state.log.length > 0){
+    // Existing activity but no plan on record (older data) -> assume the original default plan.
+    state.plan = { presetId:'balanced10', categories: cloneCategories(PRESET_PLANS.balanced10.categories) };
+    setActivePlan(state.plan.categories);
+    saveState();
+  } else {
+    ACTIVE_CATEGORIES = [];
+  }
+}
+function needsPlanOnboarding(){
+  return !state.plan && state.log.length === 0;
+}
+function applyPlan(presetIdOrCustom, categories){
+  state.plan = { presetId: presetIdOrCustom, categories: cloneCategories(categories) };
+  state.cursors = {}; state.cycles = {};
+  setActivePlan(state.plan.categories);
+  saveState(); render();
 }
 
 let state = loadState();
@@ -227,21 +319,30 @@ function todayStr(){
   return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
 }
 function pad(n){ return String(n).padStart(2,'0'); }
+function daysBetween(isoA, isoB){
+  const [ay,am,ad] = isoA.split('-').map(Number);
+  const [by,bm,bd] = isoB.split('-').map(Number);
+  const a = Date.UTC(ay,am-1,ad), b = Date.UTC(by,bm-1,bd);
+  return Math.round((b-a)/86400000);
+}
 function fmtDate(iso){
   const [y,m,d] = iso.split('-').map(Number);
   const dt = new Date(y, m-1, d);
   return dt.toLocaleDateString(undefined, {weekday:'short', month:'short', day:'numeric', year:'numeric'});
 }
-function catById(id){ return CATEGORIES.find(c=>c.id===id); }
 
 /* ---------------- Core actions ---------------- */
 function getDue(catId){
   const cat = catById(catId);
   const idx = state.cursors[catId]||0;
-  return cat.flat[idx];
+  return cat.flat[idx % cat.total];
 }
 function logEntriesFor(catId, date){
   return state.log.filter(e=>e.categoryId===catId && e.date===date);
+}
+function lastActivityDate(){
+  if(!state.log.length) return null;
+  return state.log.reduce((max,e)=> e.date > max ? e.date : max, state.log[0].date);
 }
 function lastLogEntry(catId){
   for(let i=state.log.length-1;i>=0;i--){
@@ -301,90 +402,122 @@ function bookStats(cat){
   });
 }
 
-/* ---------------- Firebase sync ---------------- */
-let syncStatus = 'unconfigured'; // unconfigured | connecting | synced | offline | error
-let syncMessage = '';
-let lastSyncedAt = null;
-let fbApp=null, fbAuth=null, fbDb=null, fbUnsub=null, fbFirstSnapshotHandled=false;
-let syncDebounceTimer=null;
+/* ---------------- Auth state ---------------- */
+let currentUser = null;
+let authView = 'login';
+let authError = '';
+let authBusy = false;
+let forceShowGate = false;
+let fbReady = false;
 
-function loadFirebaseConfig(){
-  try{ const raw = localStorage.getItem(FIREBASE_CFG_KEY); return raw ? JSON.parse(raw) : null; }
-  catch(e){ return null; }
+function shouldShowGate(){
+  if(currentUser) return false;
+  if(forceShowGate) return true;
+  if(!fbReady) return false;
+  return localStorage.getItem(AUTH_CHOICE_KEY) !== 'guest';
 }
-function saveFirebaseConfig(cfg){
-  localStorage.setItem(FIREBASE_CFG_KEY, JSON.stringify(cfg));
-}
-function clearFirebaseConfig(){
-  localStorage.removeItem(FIREBASE_CFG_KEY);
-  if(fbUnsub){ fbUnsub(); fbUnsub=null; }
-  fbApp=null; fbAuth=null; fbDb=null; fbFirstSnapshotHandled=false;
-  syncStatus='unconfigured'; syncMessage=''; lastSyncedAt=null;
+function continueAsGuest(){
+  localStorage.setItem(AUTH_CHOICE_KEY, 'guest');
+  forceShowGate = false;
   render();
 }
-function parseFirebaseConfigText(text){
-  if(!text || !text.trim()) throw new Error('The box is empty — nothing was pasted in. On iPhone, if a "Allow Paste" prompt appeared, make sure you tap Allow.');
-  // Normalize "smart quotes" (common when text passes through Notes/Mail/Messages with autocorrect on iOS)
-  // back into plain straight quotes so JSON.parse can read them.
-  let t = text
-    .replace(/[‘’′]/g, "'")
-    .replace(/[“”″]/g, '"');
-
-  // Anchor on "apiKey" rather than the first "{" in the text — Firebase's console snippet
-  // often includes an `import { initializeApp } from "firebase/app";` line above the config,
-  // whose braces would otherwise get picked up by mistake.
-  const keyIdx = t.search(/apiKey/i);
-  if(keyIdx === -1) throw new Error('Couldn\'t find "apiKey" in the pasted text — make sure the firebaseConfig object itself was included.');
-  let depth = 0, startIdx = -1;
-  for(let i = keyIdx; i >= 0; i--){
-    if(t[i] === '}') depth++;
-    else if(t[i] === '{'){ if(depth === 0){ startIdx = i; break; } depth--; }
-  }
-  if(startIdx === -1) throw new Error('Could not find the opening "{" for the config object.');
-  let depth2 = 0, endIdx = -1;
-  for(let i = startIdx; i < t.length; i++){
-    if(t[i] === '{') depth2++;
-    else if(t[i] === '}'){ depth2--; if(depth2 === 0){ endIdx = i; break; } }
-  }
-  if(endIdx === -1) throw new Error('The braces in the pasted text don\'t match up — the paste may have been cut off partway through.');
-
-  let raw = t.slice(startIdx, endIdx + 1);
-  raw = raw.replace(/([{,]\s*)([A-Za-z0-9_$]+)\s*:/g, '$1"$2":'); // unquoted keys -> valid JSON
-  raw = raw.replace(/,(\s*[}\]])/g, '$1'); // trailing commas
-
-  let cfg;
-  try{ cfg = JSON.parse(raw); }
-  catch(e){ throw new Error('Found an object but couldn\'t parse it (' + e.message + '). Try copying the config again from the Firebase console.'); }
-
-  const missing = ['apiKey','projectId'].filter(k => !cfg[k]);
-  if(missing.length) throw new Error('Missing required field(s): ' + missing.join(', ') + '. Fields found: ' + (Object.keys(cfg).join(', ') || 'none'));
-  return cfg;
+function friendlyAuthError(err){
+  const map = {
+    'auth/invalid-email': "That doesn't look like a valid email address.",
+    'auth/user-not-found': 'No account found with that email.',
+    'auth/wrong-password': 'Incorrect password.',
+    'auth/invalid-credential': 'Incorrect email or password.',
+    'auth/email-already-in-use': 'An account already exists with that email — try logging in instead.',
+    'auth/weak-password': 'Password should be at least 6 characters.',
+    'auth/too-many-requests': 'Too many attempts — please wait a bit and try again.',
+    'auth/network-request-failed': 'No internet connection right now.'
+  };
+  return (err && map[err.code]) || (err && err.message) || 'Something went wrong.';
+}
+function doSignUp(email, password){
+  authBusy = true; authError = ''; render();
+  fbAuth.createUserWithEmailAndPassword(email, password)
+    .catch(err => { authError = friendlyAuthError(err); })
+    .finally(() => { authBusy = false; render(); });
+}
+function doLogIn(email, password){
+  authBusy = true; authError = ''; render();
+  fbAuth.signInWithEmailAndPassword(email, password)
+    .catch(err => { authError = friendlyAuthError(err); })
+    .finally(() => { authBusy = false; render(); });
+}
+function doPasswordReset(email){
+  authBusy = true; authError = ''; render();
+  fbAuth.sendPasswordResetEmail(email)
+    .then(() => { alert('Password reset email sent — check your inbox.'); authView = 'login'; })
+    .catch(err => { authError = friendlyAuthError(err); })
+    .finally(() => { authBusy = false; render(); });
+}
+function doLogOut(){
+  if(!fbAuth) return;
+  fbAuth.signOut().then(() => {
+    if(fbUnsub){ fbUnsub(); fbUnsub = null; }
+    localStorage.removeItem(AUTH_CHOICE_KEY);
+    state = defaultState();
+    saveState({skipSync:true});
+    syncStatus = 'unconfigured'; lastSyncedAt = null;
+    render();
+  });
 }
 
-function initSync(){
-  const cfg = loadFirebaseConfig();
-  if(!cfg){ syncStatus='unconfigured'; return; }
-  if(typeof firebase === 'undefined'){ syncStatus='offline'; syncMessage='No internet connection to load sync library.'; render(); return; }
-  syncStatus='connecting'; render();
+/* ---------------- Firebase sync (per-user) ---------------- */
+let syncStatus = 'unconfigured';
+let syncMessage = '';
+let lastSyncedAt = null;
+let fbApp=null, fbAuth=null, fbDb=null, fbMessaging=null, fbUnsub=null, fbFirstSnapshotHandled=false;
+let syncDebounceTimer=null;
+
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyDvrN-zAralK-poWaEljoFK8_OV58XBsPk",
+  authDomain: "bible-tracker-4b8f4.firebaseapp.com",
+  projectId: "bible-tracker-4b8f4",
+  storageBucket: "bible-tracker-4b8f4.firebasestorage.app",
+  messagingSenderId: "1076567117129",
+  appId: "1:1076567117129:web:a444e419f79985a3dade98"
+};
+const FCM_VAPID_KEY = "BHph7TlqbyUtT7cuszwNskGl93JR_yXNwgTxKp31Cxz-_Vg4zz9ykalolX21_7ga0BVx1swm_Q-cN5nndxUy20M";
+
+function initFirebase(){
+  if(typeof firebase === 'undefined'){
+    syncStatus='offline'; syncMessage='No internet connection to load sync library.';
+    render();
+    return;
+  }
+  if(!FIREBASE_CONFIG.apiKey || FIREBASE_CONFIG.apiKey.indexOf('PASTE_') === 0){
+    return;
+  }
   try{
-    fbApp = firebase.apps && firebase.apps.length ? firebase.apps[0] : firebase.initializeApp(cfg);
+    fbApp = firebase.apps && firebase.apps.length ? firebase.apps[0] : firebase.initializeApp(FIREBASE_CONFIG);
     fbAuth = firebase.auth();
     fbDb = firebase.firestore();
-    fbAuth.signInAnonymously().catch(err=>{
-      syncStatus='error'; syncMessage='Sign-in failed: '+err.message; render();
+    fbReady = true;
+    fbAuth.onAuthStateChanged(user => {
+      currentUser = (user && !user.isAnonymous) ? user : null;
+      if(currentUser){
+        forceShowGate = false;
+        localStorage.removeItem(AUTH_CHOICE_KEY); // an account now exists, so a stale guest-mode choice shouldn't linger
+        fbFirstSnapshotHandled = false;
+        subscribeToUserDoc();
+      } else if(fbUnsub){
+        fbUnsub(); fbUnsub = null;
+      }
+      render();
     });
-    fbAuth.onAuthStateChanged(user=>{
-      if(!user) return;
-      subscribeToDoc();
-    });
+    render();
   }catch(err){
     syncStatus='error'; syncMessage=err.message; render();
   }
 }
 
-function subscribeToDoc(){
+function subscribeToUserDoc(){
+  if(!currentUser) return;
   if(fbUnsub) fbUnsub();
-  const docRef = fbDb.collection('bibleTracker').doc('state');
+  const docRef = fbDb.collection('userProgress').doc(currentUser.uid);
   fbUnsub = docRef.onSnapshot(snap=>{
     if(!snap.exists){
       pushStateNow(docRef);
@@ -392,26 +525,36 @@ function subscribeToDoc(){
       return;
     }
     const data = snap.data();
-    if(data._writerId === CLIENT_ID){
+    const isFirstSnapshot = !fbFirstSnapshotHandled;
+    // Only treat "this looks like our own write" as a no-op AFTER the first snapshot of this
+    // subscription. On the very first snapshot (right after signup/login), CLIENT_ID can coincidentally
+    // match a write from earlier in the same page session (e.g. logging out and back in without a
+    // reload) — that first snapshot must always be processed so the account's real cloud data loads.
+    if(!isFirstSnapshot && data._writerId === CLIENT_ID){
       syncStatus='synced'; lastSyncedAt=Date.now(); render();
       return;
     }
-    if(!fbFirstSnapshotHandled){
+    if(isFirstSnapshot){
       fbFirstSnapshotHandled = true;
       const localHasData = state.log.length > 0;
       const remoteHasData = (data.log||[]).length > 0;
       if(localHasData && remoteHasData){
         const useCloud = confirm(
-          'Both this device and your cloud sync already have reading progress saved.\n\n' +
-          'Press OK to use the CLOUD version (recommended if you already set up sync elsewhere).\n' +
-          'Press Cancel to keep THIS DEVICE\'S data and overwrite the cloud with it.'
+          'Both this device and your account already have reading progress saved.\n\n' +
+          'Press OK to use the ACCOUNT version (recommended).\n' +
+          'Press Cancel to keep THIS DEVICE\'S data and overwrite your account with it.'
         );
         if(!useCloud){ pushStateNow(docRef); syncStatus='synced'; lastSyncedAt=Date.now(); render(); return; }
       } else if(localHasData && !remoteHasData){
         pushStateNow(docRef); syncStatus='synced'; lastSyncedAt=Date.now(); render(); return;
       }
     }
-    state = { cursors: data.cursors||defaultState().cursors, cycles: data.cycles||defaultState().cycles, log: data.log||[] };
+    state = {
+      cursors: data.cursors || {},
+      cycles: data.cycles || {},
+      log: data.log || [],
+      plan: data.plan || null
+    };
     saveState({skipSync:true});
     syncStatus='synced'; lastSyncedAt=Date.now();
     render();
@@ -421,15 +564,15 @@ function subscribeToDoc(){
 }
 
 function pushStateNow(docRefOverride){
-  if(!fbDb) return;
-  const docRef = docRefOverride || fbDb.collection('bibleTracker').doc('state');
+  if(!fbDb || !currentUser) return;
+  const docRef = docRefOverride || fbDb.collection('userProgress').doc(currentUser.uid);
   docRef.set({
-    cursors: state.cursors, cycles: state.cycles, log: state.log,
+    cursors: state.cursors, cycles: state.cycles, log: state.log, plan: state.plan,
     _writerId: CLIENT_ID, _updatedAt: Date.now()
   }).catch(err=>{ syncStatus='error'; syncMessage=err.message; render(); });
 }
 function scheduleRemoteSync(){
-  if(!loadFirebaseConfig()) return;
+  if(!currentUser) return;
   clearTimeout(syncDebounceTimer);
   syncDebounceTimer = setTimeout(()=>{
     if(!fbDb){ return; }
@@ -437,8 +580,31 @@ function scheduleRemoteSync(){
     pushStateNow();
   }, 500);
 }
-window.addEventListener('online', ()=>{ if(loadFirebaseConfig()){ if(fbDb) pushStateNow(); else initSync(); } });
-window.addEventListener('offline', ()=>{ if(loadFirebaseConfig()){ syncStatus='offline'; syncMessage='No connection — working locally.'; render(); } });
+window.addEventListener('online', ()=>{ if(currentUser && fbDb) pushStateNow(); });
+window.addEventListener('offline', ()=>{ if(currentUser){ syncStatus='offline'; syncMessage='No connection — working locally.'; render(); } });
+
+/* ---------------- Check-in reminders (push notifications) ---------------- */
+let notifStatus = 'unknown'; // unknown | unsupported | default | denied | granted
+function refreshNotifStatus(){
+  notifStatus = (typeof Notification === 'undefined') ? 'unsupported' : Notification.permission;
+}
+function enableCheckinReminders(){
+  if(typeof Notification === 'undefined'){ alert('Notifications are not supported in this browser.'); return; }
+  Notification.requestPermission().then(perm=>{
+    notifStatus = perm;
+    if(perm === 'granted' && fbApp && currentUser) registerFcmToken();
+    render();
+  });
+}
+function registerFcmToken(){
+  try{
+    fbMessaging = fbMessaging || firebase.messaging();
+    fbMessaging.getToken({ vapidKey: FCM_VAPID_KEY }).then(token=>{
+      if(!token || !currentUser || !fbDb) return;
+      fbDb.collection('userProgress').doc(currentUser.uid).set({ fcmToken: token }, { merge:true });
+    }).catch(err=>{ console.warn('FCM token error', err); });
+  }catch(err){ console.warn('FCM unavailable', err); }
+}
 
 /* ---------------- Install prompt (Android/Chrome) ---------------- */
 window.addEventListener('beforeinstallprompt', (e)=>{
@@ -451,21 +617,279 @@ function isStandalone(){
   return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
 }
 
+/* ---------------- Plan onboarding / builder state ---------------- */
+let planChooserOpen = false;
+let onboardingStep = 'choose'; // 'choose' | 'custom'
+let customDraft = null;
+
+function openPlanChooser(){ planChooserOpen = true; onboardingStep = 'choose'; render(); }
+function closePlanChooser(){ planChooserOpen = false; render(); }
+function openCustomBuilder(){
+  customDraft = (state.plan && state.plan.presetId === 'custom')
+    ? cloneCategories(state.plan.categories)
+    : [{ id: newCategoryId(), name:'My Category', color: COLOR_PALETTE[0], books: [] }];
+  onboardingStep = 'custom';
+  render();
+}
+function newCategoryId(){ return 'custom_' + Math.random().toString(36).slice(2,9); }
+function addDraftCategory(){
+  customDraft.push({ id:newCategoryId(), name:'New Category', color: COLOR_PALETTE[customDraft.length % COLOR_PALETTE.length], books:[] });
+  render();
+}
+function removeDraftCategory(catId){
+  customDraft = customDraft.filter(c=>c.id!==catId);
+  render();
+}
+function saveCustomPlan(){
+  const cleaned = customDraft.filter(c => c.books.length > 0);
+  if(!cleaned.length){ alert('Add at least one book to at least one category before saving.'); return; }
+  applyPlan('custom', cleaned);
+  planChooserOpen = false;
+}
+
 /* ---------------- Rendering ---------------- */
 function render(){
+  ensurePlanReady();
   const app = document.getElementById('app');
+  if(shouldShowGate()){
+    app.innerHTML = renderAuthGate();
+    attachAuthGateEvents();
+    return;
+  }
+  const forced = needsPlanOnboarding();
+  if(forced || planChooserOpen){
+    app.innerHTML = `<div class="onboard-wrap">${onboardingStep==='custom' ? renderCustomBuilder(!forced) : renderPlanChoose(!forced)}</div>`;
+    attachPlanChooserEvents();
+    return;
+  }
   app.innerHTML = `
     ${renderHeader()}
+    ${renderCheckinBanner()}
     ${renderInstallBanner()}
     ${renderTabs()}
     ${activeTab==='today' ? renderToday() : ''}
     ${activeTab==='log' ? renderLog() : ''}
     ${activeTab==='dashboard' ? renderDashboard() : ''}
-    ${activeTab==='settings' ? renderSettings() : ''}
+    ${activeTab==='account' ? renderAccountTab() : ''}
     ${renderFooter()}
     <input type="file" id="importFile" accept="application/json">
   `;
   attachEvents();
+}
+
+function renderCheckinBanner(){
+  const last = lastActivityDate();
+  if(!last) return '';
+  const gap = daysBetween(last, todayStr());
+  if(gap < 3) return '';
+  return `<div class="checkin-banner">
+    <span>&#128075; Haven't seen a reading logged in ${gap} days. No pressure — pick back up whenever you're ready.</span>
+    <button class="btn small" data-action="dismiss-checkin">Dismiss</button>
+  </div>`;
+}
+
+function renderPlanChoose(allowCancel){
+  const cards = Object.values(PRESET_PLANS).map(p => `
+    <div class="plan-card">
+      <h4>${p.name}</h4>
+      <p>${p.description}</p>
+      <div class="swatches">${p.categories.map(c=>`<span style="background:${c.color}"></span>`).join('')}</div>
+      <div style="font-size:0.78rem; color:var(--ink-soft);">${p.categories.length} categories &middot; ${p.categories.reduce((s,c)=>s+c.books.reduce((s2,b)=>s2+b.chapters,0),0)} chapters</div>
+      <button class="btn primary" data-preset="${p.id}">Use this plan</button>
+    </div>`).join('');
+  return `
+    <div class="auth-brand">
+      <div class="name">Design your reading plan</div>
+      <div class="tag">Pick a preset to start reading today, or build your own from scratch.</div>
+    </div>
+    <div class="plan-grid">
+      ${cards}
+      <div class="plan-card" style="align-items:center; justify-content:center; text-align:center;">
+        <h4>Build your own</h4>
+        <p>Choose how many categories you want and which books go in each.</p>
+        <button class="btn primary" id="openCustomBuilder">Build a custom plan</button>
+      </div>
+    </div>
+    ${allowCancel ? `<div style="text-align:center;"><a href="#" id="cancelPlanChooser" style="color:var(--ink-soft); font-size:0.85rem;">Cancel, keep my current plan</a></div>` : ''}
+  `;
+}
+
+function renderCustomBuilder(allowCancel){
+  const usedElsewhereCount = {};
+  customDraft.forEach(c => c.books.forEach(b => { usedElsewhereCount[b.name] = (usedElsewhereCount[b.name]||0)+1; }));
+
+  const catsHtml = customDraft.map((cat, ci) => {
+    const availableBooks = BOOK_LIBRARY; // allow reuse across categories, no hard restriction
+    const bookRows = cat.books.map((b, bi) => `
+      <div class="builder-book-row">
+        <span>${b.name} <span style="color:var(--ink-soft);">(${b.chapters} ch)</span>${usedElsewhereCount[b.name] > 1 ? ' <span style="color:var(--skip);">&#9888; also in another category</span>' : ''}</span>
+        <span style="display:flex; gap:4px;">
+          <button class="btn small" data-move="up" data-cat="${cat.id}" data-idx="${bi}" ${bi===0?'disabled':''}>&uarr;</button>
+          <button class="btn small" data-move="down" data-cat="${cat.id}" data-idx="${bi}" ${bi===cat.books.length-1?'disabled':''}>&darr;</button>
+          <button class="btn small danger" data-remove-book="${cat.id}" data-idx="${bi}">Remove</button>
+        </span>
+      </div>`).join('') || `<div style="color:var(--ink-soft); font-size:0.82rem; padding:6px 0;">No books yet — add some below.</div>`;
+
+    return `
+      <div class="builder-cat">
+        <div class="builder-cat-head">
+          <input type="text" data-name-for="${cat.id}" value="${cat.name.replace(/"/g,'&quot;')}">
+          <div class="color-swatch-row">
+            ${COLOR_PALETTE.map(c=>`<button type="button" data-color-for="${cat.id}" data-color="${c}" style="background:${c}" class="${cat.color===c?'selected':''}"></button>`).join('')}
+          </div>
+          <button class="btn small danger" data-remove-cat="${cat.id}">Remove category</button>
+        </div>
+        ${bookRows}
+        <div class="builder-add-row">
+          <select data-book-select-for="${cat.id}">
+            ${availableBooks.map(b=>`<option value="${b.name}">${b.name} (${b.chapters} ch)</option>`).join('')}
+          </select>
+          <button class="btn small" data-add-book="${cat.id}">Add book</button>
+        </div>
+      </div>`;
+  }).join('');
+
+  return `
+    <div class="auth-brand">
+      <div class="name">Build your own plan</div>
+      <div class="tag">Create as many categories as you like, and choose which books belong to each. Order within a category matters — that's the reading sequence.</div>
+    </div>
+    ${catsHtml}
+    <div style="display:flex; gap:10px; flex-wrap:wrap; margin:16px 0;">
+      <button class="btn" id="addDraftCategory">+ Add another category</button>
+    </div>
+    <div style="display:flex; gap:10px; flex-wrap:wrap;">
+      <button class="btn primary" id="saveCustomPlan">Save & start reading</button>
+      <button class="btn" id="backToPresets">&larr; Back to presets</button>
+      ${allowCancel ? `<button class="btn" id="cancelPlanChooser">Cancel</button>` : ''}
+    </div>
+  `;
+}
+
+function attachPlanChooserEvents(){
+  document.querySelectorAll('[data-preset]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const preset = PRESET_PLANS[btn.dataset.preset];
+      applyPlan(preset.id, preset.categories);
+      planChooserOpen = false;
+    });
+  });
+  const openBuilder = document.getElementById('openCustomBuilder');
+  if(openBuilder) openBuilder.addEventListener('click', openCustomBuilder);
+  const cancel = document.getElementById('cancelPlanChooser');
+  if(cancel) cancel.addEventListener('click', e=>{ e.preventDefault(); closePlanChooser(); });
+  const backToPresets = document.getElementById('backToPresets');
+  if(backToPresets) backToPresets.addEventListener('click', ()=>{ onboardingStep='choose'; render(); });
+  const addCat = document.getElementById('addDraftCategory');
+  if(addCat) addCat.addEventListener('click', addDraftCategory);
+  const saveBtn = document.getElementById('saveCustomPlan');
+  if(saveBtn) saveBtn.addEventListener('click', saveCustomPlan);
+
+  document.querySelectorAll('[data-name-for]').forEach(inp=>{
+    inp.addEventListener('input', ()=>{
+      const cat = customDraft.find(c=>c.id===inp.dataset.nameFor);
+      if(cat) cat.name = inp.value;
+    });
+  });
+  document.querySelectorAll('[data-color-for]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const cat = customDraft.find(c=>c.id===btn.dataset.colorFor);
+      if(cat){ cat.color = btn.dataset.color; render(); }
+    });
+  });
+  document.querySelectorAll('[data-remove-cat]').forEach(btn=>{
+    btn.addEventListener('click', ()=> removeDraftCategory(btn.dataset.removeCat));
+  });
+  document.querySelectorAll('[data-add-book]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const cat = customDraft.find(c=>c.id===btn.dataset.addBook);
+      const select = document.querySelector(`[data-book-select-for="${btn.dataset.addBook}"]`);
+      if(cat && select) cat.books.push(bookObj(select.value));
+      render();
+    });
+  });
+  document.querySelectorAll('[data-remove-book]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const cat = customDraft.find(c=>c.id===btn.dataset.removeBook);
+      if(cat) cat.books.splice(Number(btn.dataset.idx), 1);
+      render();
+    });
+  });
+  document.querySelectorAll('[data-move]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const cat = customDraft.find(c=>c.id===btn.dataset.cat);
+      if(!cat) return;
+      const idx = Number(btn.dataset.idx);
+      const dir = btn.dataset.move === 'up' ? -1 : 1;
+      const swapIdx = idx + dir;
+      if(swapIdx < 0 || swapIdx >= cat.books.length) return;
+      [cat.books[idx], cat.books[swapIdx]] = [cat.books[swapIdx], cat.books[idx]];
+      render();
+    });
+  });
+}
+
+function renderAuthGate(){
+  const title = authView === 'signup' ? 'Create your account' : authView === 'reset' ? 'Reset your password' : 'Log in';
+  const showGuestLink = !forceShowGate;
+  return `
+  <div class="auth-wrap">
+    <div class="auth-brand">
+      <div class="name">Bible Reading Tracker</div>
+      <div class="tag">Design a reading plan that fits you — one chapter at a time.</div>
+    </div>
+    <div class="settings-box" style="max-width:none;">
+      <h3>${title}</h3>
+      ${authError ? `<div class="auth-error">${authError}</div>` : ''}
+      <div class="auth-field">
+        <label for="authEmail">Email</label>
+        <input type="email" id="authEmail" autocomplete="email">
+      </div>
+      ${authView !== 'reset' ? `
+        <div class="auth-field">
+          <label for="authPassword">Password</label>
+          <input type="password" id="authPassword" autocomplete="${authView==='signup'?'new-password':'current-password'}">
+        </div>` : ''}
+      <button class="btn primary" id="authSubmit" style="width:100%; padding:10px;" ${authBusy?'disabled':''}>
+        ${authBusy ? 'Please wait…' : (authView === 'signup' ? 'Create account' : authView === 'reset' ? 'Send reset email' : 'Log in')}
+      </button>
+      <div class="auth-links">
+        ${authView === 'login' ? `<a href="#" id="toSignup">Need an account? Sign up</a><a href="#" id="toReset" class="muted">Forgot password?</a>` : ''}
+        ${authView === 'signup' ? `<a href="#" id="toLogin">Already have an account? Log in</a>` : ''}
+        ${authView === 'reset' ? `<a href="#" id="toLogin">Back to log in</a>` : ''}
+        ${showGuestLink
+          ? `<a href="#" id="toGuest" class="muted" style="margin-top:6px;">Continue without an account &rarr;</a>`
+          : `<a href="#" id="cancelGate" class="muted" style="margin-top:6px;">Cancel</a>`}
+      </div>
+    </div>
+  </div>`;
+}
+
+function attachAuthGateEvents(){
+  const submit = document.getElementById('authSubmit');
+  if(submit){
+    submit.addEventListener('click', ()=>{
+      if(!fbReady){ authError = 'Sync isn\'t set up yet on this app — continue as a guest instead.'; render(); return; }
+      const email = (document.getElementById('authEmail').value || '').trim();
+      const pwField = document.getElementById('authPassword');
+      const password = pwField ? pwField.value : '';
+      if(!email){ authError = 'Enter your email address.'; render(); return; }
+      if(authView === 'reset'){ doPasswordReset(email); return; }
+      if(!password){ authError = 'Enter your password.'; render(); return; }
+      if(authView === 'signup') doSignUp(email, password);
+      else doLogIn(email, password);
+    });
+  }
+  const toSignup = document.getElementById('toSignup');
+  if(toSignup) toSignup.addEventListener('click', e=>{ e.preventDefault(); authView='signup'; authError=''; render(); });
+  const toLogin = document.getElementById('toLogin');
+  if(toLogin) toLogin.addEventListener('click', e=>{ e.preventDefault(); authView='login'; authError=''; render(); });
+  const toReset = document.getElementById('toReset');
+  if(toReset) toReset.addEventListener('click', e=>{ e.preventDefault(); authView='reset'; authError=''; render(); });
+  const toGuest = document.getElementById('toGuest');
+  if(toGuest) toGuest.addEventListener('click', e=>{ e.preventDefault(); continueAsGuest(); });
+  const cancelGate = document.getElementById('cancelGate');
+  if(cancelGate) cancelGate.addEventListener('click', e=>{ e.preventDefault(); forceShowGate=false; authView='login'; authError=''; render(); });
 }
 
 function renderInstallBanner(){
@@ -487,7 +911,7 @@ function renderInstallBanner(){
 
 function syncPillHtml(){
   const map = {
-    unconfigured: ['unconfigured', 'Sync not set up — working locally only'],
+    unconfigured: ['unconfigured', 'Guest mode — saved on this device only'],
     connecting: ['unconfigured', 'Connecting…'],
     synced: ['synced', 'Synced' + (lastSyncedAt ? ' · ' + new Date(lastSyncedAt).toLocaleTimeString() : '')],
     offline: ['offline', syncMessage || 'Offline — working locally'],
@@ -499,11 +923,12 @@ function syncPillHtml(){
 
 function renderHeader(){
   const totalComplete = state.log.filter(e=>e.status==='complete').length;
+  const planName = state.plan ? (PRESET_PLANS[state.plan.presetId] ? PRESET_PLANS[state.plan.presetId].name : 'Custom plan') : '';
   return `
   <header class="top">
     <div>
       <h1>Bible Reading Tracker</h1>
-      <div class="sub">${CATEGORIES.length} categories &middot; ${totalComplete} chapters logged all-time</div>
+      <div class="sub">${planName} &middot; ${ACTIVE_CATEGORIES.length} categories &middot; ${totalComplete} chapters logged all-time${currentUser ? ' &middot; ' + currentUser.email : ''}</div>
       <div>${syncPillHtml()}</div>
     </div>
     <div class="toolbar">
@@ -514,7 +939,7 @@ function renderHeader(){
 }
 
 function renderTabs(){
-  const tabs = [['today','Today'],['log','Log'],['dashboard','Dashboard'],['settings','Sync Settings']];
+  const tabs = [['today','Today'],['log','Log'],['dashboard','Dashboard'],['account','Account']];
   return `<nav class="tabs">
     ${tabs.map(([id,label])=>`<button data-tab="${id}" class="${activeTab===id?'active':''}">${label}</button>`).join('')}
   </nav>`;
@@ -522,7 +947,7 @@ function renderTabs(){
 
 function renderToday(){
   const isToday = selectedDate===todayStr();
-  const cards = CATEGORIES.map(cat=>{
+  const cards = ACTIVE_CATEGORIES.map(cat=>{
     const due = getDue(cat.id);
     const entriesToday = logEntriesFor(cat.id, selectedDate);
     const lastEntry = entriesToday[entriesToday.length-1];
@@ -581,7 +1006,7 @@ function renderLog(){
   };
   return ymKeys.map((ym, i)=>{
     const rows = groups[ym].map(date=>{
-      const cells = CATEGORIES.map(cat=>{
+      const cells = ACTIVE_CATEGORIES.map(cat=>{
         const entries = logEntriesFor(cat.id, date);
         if(!entries.length) return `<td></td>`;
         return `<td class="${entries.some(e=>e.status==='complete')?'cell-complete':'cell-skipped'}">
@@ -595,7 +1020,7 @@ function renderLog(){
         <summary>${monthName(ym)} <span style="color:var(--ink-soft); font-weight:500;">${groups[ym].length} day(s) logged</span></summary>
         <div class="log-scroll">
           <table class="logtable">
-            <thead><tr><th>Date</th>${CATEGORIES.map(c=>`<th>${c.name}</th>`).join('')}</tr></thead>
+            <thead><tr><th>Date</th>${ACTIVE_CATEGORIES.map(c=>`<th>${c.name}</th>`).join('')}</tr></thead>
             <tbody>${rows}</tbody>
           </table>
         </div>
@@ -605,16 +1030,16 @@ function renderLog(){
 
 function renderDashboard(){
   const uniqueChapters = new Set(state.log.filter(e=>e.status==='complete').map(e=>e.book+'|'+e.chapter));
-  const totalPassesAcrossAll = CATEGORIES.reduce((s,c)=>s+(state.cycles[c.id]||0),0);
+  const totalPassesAcrossAll = ACTIVE_CATEGORIES.reduce((s,c)=>s+(state.cycles[c.id]||0),0);
   const summary = `
     <div class="dash-summary">
-      <div class="stat"><div class="num">${uniqueChapters.size} / ${TOTAL_CHAPTERS_ALL}</div><div class="label">Unique chapters read at least once</div></div>
-      <div class="stat"><div class="num">${Math.round(uniqueChapters.size/TOTAL_CHAPTERS_ALL*100)}%</div><div class="label">Whole-Bible coverage</div></div>
+      <div class="stat"><div class="num">${uniqueChapters.size} / ${BIBLE_TOTAL_CHAPTERS}</div><div class="label">Unique chapters read at least once</div></div>
+      <div class="stat"><div class="num">${Math.round(uniqueChapters.size/BIBLE_TOTAL_CHAPTERS*100)}%</div><div class="label">Whole-Bible coverage</div></div>
       <div class="stat"><div class="num">${totalPassesAcrossAll}</div><div class="label">Total category cycles completed</div></div>
       <div class="stat"><div class="num">${state.log.filter(e=>e.status==='complete').length}</div><div class="label">Chapters logged complete (all-time)</div></div>
     </div>`;
 
-  const blocks = CATEGORIES.map(cat=>{
+  const blocks = ACTIVE_CATEGORIES.map(cat=>{
     const stats = bookStats(cat);
     const catCycle = state.cycles[cat.id]||0;
     const catPct = Math.round((state.cursors[cat.id]||0)/cat.total*100);
@@ -636,49 +1061,48 @@ function renderDashboard(){
   return summary + blocks;
 }
 
-function renderSettings(){
-  const cfg = loadFirebaseConfig();
-  const rulesText = `rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    match /bibleTracker/{doc} {
-      allow read, write: if request.auth != null;
-    }
+function renderAccountTab(){
+  const planBox = `
+    <div class="settings-box">
+      <h3>Reading plan</h3>
+      <p style="font-size:0.85rem; color:var(--ink-soft);">Currently: <strong>${state.plan && PRESET_PLANS[state.plan.presetId] ? PRESET_PLANS[state.plan.presetId].name : 'Custom plan'}</strong> (${ACTIVE_CATEGORIES.length} categories).</p>
+      <button class="btn primary" id="changePlanBtn">Change plan</button>
+    </div>`;
+  const notifBox = `
+    <div class="settings-box">
+      <h3>Check-in reminders</h3>
+      <p style="font-size:0.85rem; color:var(--ink-soft);">Get a gentle nudge if you haven't logged a reading in 3 days.</p>
+      ${notifStatus === 'granted'
+        ? `<p style="font-size:0.85rem; color:var(--good);">&#10003; Reminders enabled on this device.</p>`
+        : notifStatus === 'denied'
+          ? `<p style="font-size:0.85rem; color:var(--bad);">Notifications are blocked for this app in your browser/device settings.</p>`
+          : `<button class="btn primary" id="enableRemindersBtn">Enable check-in reminders</button>`}
+    </div>`;
+  if(currentUser){
+    return `
+    <div class="settings-box">
+      <h3>Account</h3>
+      <p style="font-size:0.85rem; color:var(--ink-soft);">Signed in as <strong>${currentUser.email}</strong>. Your progress syncs automatically across every device you log into.</p>
+      <p>${syncPillHtml()}</p>
+      <button class="btn danger" id="logoutBtn">Log out</button>
+    </div>
+    ${planBox}
+    ${notifBox}`;
   }
-}`;
   return `
     <div class="settings-box">
-      <h3>Cross-device sync (Firebase &mdash; free)</h3>
-      <p style="font-size:0.85rem; color:var(--ink-soft);">
-        One-time setup, about 5 minutes. This lets your phone and laptop share progress in real time.
-        Skip this entirely and the tracker still works great on a single device, fully offline.
-      </p>
-      <ol>
-        <li>Go to <code>console.firebase.google.com</code>, sign in, click <strong>Add project</strong> (Analytics not needed).</li>
-        <li><strong>Build &rarr; Firestore Database &rarr; Create database</strong> &rarr; production mode &rarr; pick a region &rarr; Enable.</li>
-        <li>In Firestore, open the <strong>Rules</strong> tab, replace the contents with this, then Publish:</li>
-      </ol>
-      <div class="rules-box">${rulesText}</div>
-      <ol start="4">
-        <li><strong>Build &rarr; Authentication &rarr; Get started &rarr; Sign-in method</strong> &rarr; enable <strong>Anonymous</strong>.</li>
-        <li><strong>Project settings</strong> (gear icon) &rarr; scroll to "Your apps" &rarr; click the <code>&lt;/&gt;</code> web icon &rarr; register an app.</li>
-        <li>Copy the <code>firebaseConfig</code> object it shows you, and paste the whole thing below.</li>
-      </ol>
-      <textarea id="fbConfigInput" placeholder='Paste your firebaseConfig object here, e.g.&#10;const firebaseConfig = { apiKey: "...", authDomain: "...", projectId: "...", ... };'>${cfg ? JSON.stringify(cfg, null, 2) : ''}</textarea>
-      <div class="actions" style="display:flex; gap:8px;">
-        <button class="btn primary" id="saveFbConfig">Save & connect</button>
-        ${cfg ? `<button class="btn danger" id="clearFbConfig">Disconnect sync</button>` : ''}
-      </div>
-      <p style="font-size:0.8rem; margin-top:14px;">${syncPillHtml()}</p>
-      <p style="font-size:0.78rem; color:var(--ink-soft);">Repeat step 6 (copy config, paste here) on your other device to connect it to the same cloud project. That's it &mdash; both devices will then update live.</p>
+      <h3>Account</h3>
+      <p style="font-size:0.85rem; color:var(--ink-soft);">You're using guest mode &mdash; your progress is only saved on this device. Create a free account to sync across your phone and laptop.</p>
+      <button class="btn primary" id="upgradeAccountBtn">Create an account / log in</button>
     </div>
-  `;
+    ${planBox}
+    ${notifBox}`;
 }
 
 function renderFooter(){
   return `<footer class="app-footer">
-    <span>Works fully offline once installed. Progress is always saved on this device first &mdash; sync (if configured) happens in the background.</span>
-    <span>All 66 books &middot; ${TOTAL_CHAPTERS_ALL} chapters total</span>
+    <span>Works fully offline once installed. Progress is always saved on this device first &mdash; sync (if signed in) happens in the background.</span>
+    <span>${ACTIVE_CATEGORIES.reduce((s,c)=>s+c.books.length,0)} books &middot; ${activeTotalChapters()} chapters in your plan</span>
   </footer>`;
 }
 
@@ -687,7 +1111,7 @@ function attachEvents(){
   document.querySelectorAll('nav.tabs button').forEach(btn=>{
     btn.addEventListener('click', ()=>{ activeTab = btn.dataset.tab; render(); });
   });
-  document.querySelectorAll('[data-action]').forEach(btn=>{
+  document.querySelectorAll('[data-action="complete"],[data-action="skip"],[data-action="undo"]').forEach(btn=>{
     btn.addEventListener('click', ()=>{
       const catId = btn.dataset.cat;
       const action = btn.dataset.action;
@@ -695,6 +1119,11 @@ function attachEvents(){
       else if(action==='skip') skipReading(catId, selectedDate);
       else if(action==='undo') undoLast(catId);
     });
+  });
+  const dismissCheckin = document.querySelector('[data-action="dismiss-checkin"]');
+  if(dismissCheckin) dismissCheckin.addEventListener('click', ()=>{
+    const el = dismissCheckin.closest('.checkin-banner');
+    if(el) el.style.display = 'none';
   });
   const dateSel = document.getElementById('dateSel');
   if(dateSel){
@@ -728,11 +1157,11 @@ function attachEvents(){
           const parsed = JSON.parse(e.target.result);
           if(!parsed.cursors || !parsed.cycles || !Array.isArray(parsed.log)) throw new Error('bad file');
           if(confirm('Import this backup and replace your current progress?')){
-            const d = defaultState();
             state = {
-              cursors: Object.assign(d.cursors, parsed.cursors),
-              cycles: Object.assign(d.cycles, parsed.cycles),
-              log: parsed.log
+              cursors: parsed.cursors || {},
+              cycles: parsed.cycles || {},
+              log: parsed.log,
+              plan: parsed.plan || null
             };
             saveState(); render();
           }
@@ -742,26 +1171,20 @@ function attachEvents(){
       importFile.value = '';
     });
   }
-  const saveFbBtn = document.getElementById('saveFbConfig');
-  if(saveFbBtn){
-    saveFbBtn.addEventListener('click', ()=>{
-      const text = document.getElementById('fbConfigInput').value;
-      try{
-        const cfg = parseFirebaseConfigText(text);
-        saveFirebaseConfig(cfg);
-        fbFirstSnapshotHandled = false;
-        initSync();
-      }catch(err){
-        alert('Could not use that config:\n\n' + err.message);
-      }
+  const logoutBtn = document.getElementById('logoutBtn');
+  if(logoutBtn){
+    logoutBtn.addEventListener('click', ()=>{
+      if(confirm('Log out? Your data stays safely in your account.')) doLogOut();
     });
   }
-  const clearFbBtn = document.getElementById('clearFbConfig');
-  if(clearFbBtn){
-    clearFbBtn.addEventListener('click', ()=>{
-      if(confirm('Disconnect this device from cloud sync? Your local progress stays intact.')) clearFirebaseConfig();
-    });
+  const upgradeBtn = document.getElementById('upgradeAccountBtn');
+  if(upgradeBtn){
+    upgradeBtn.addEventListener('click', ()=>{ forceShowGate = true; authView = 'signup'; authError=''; render(); });
   }
+  const changePlanBtn = document.getElementById('changePlanBtn');
+  if(changePlanBtn) changePlanBtn.addEventListener('click', openPlanChooser);
+  const enableRemindersBtn = document.getElementById('enableRemindersBtn');
+  if(enableRemindersBtn) enableRemindersBtn.addEventListener('click', enableCheckinReminders);
   const installBtn = document.getElementById('installBtn');
   if(installBtn){
     installBtn.addEventListener('click', async ()=>{
@@ -774,8 +1197,9 @@ function attachEvents(){
   }
 }
 
+refreshNotifStatus();
 render();
-initSync();
+initFirebase();
 
 /* ---------------- Service worker registration (installable + offline) ---------------- */
 if('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')){
