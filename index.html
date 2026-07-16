@@ -354,12 +354,24 @@ const STORAGE_KEY = 'bibleReadingTrackerState_v1';
 const AUTH_CHOICE_KEY = 'bibleReadingTrackerAuthChoice_v1';
 const CLIENT_ID = 'c' + Math.random().toString(36).slice(2) + Date.now().toString(36);
 
-const JOURNAL_TAGS = ['prophetic','prayer','revelation'];
-const JOURNAL_TAG_LABELS = { prophetic:'Prophetic', prayer:'Prayer', revelation:'Revelation' };
-const JOURNAL_TAG_COLORS = { prophetic:'#6b4f8a', prayer:'#3d6b8a', revelation:'#b8860b' };
+const JOURNAL_TAGS = ['prophetic','prayer','revelation','bible'];
+const JOURNAL_TAG_LABELS = { prophetic:'Prophetic', prayer:'Prayer', revelation:'Revelation', bible:'Bible' };
+const JOURNAL_TAG_COLORS = { prophetic:'#6b4f8a', prayer:'#3d6b8a', revelation:'#b8860b', bible:'#2f6b4f' };
 
 function defaultState(){
-  return { cursors:{}, cycles:{}, log:[], plan:null, journal:[], readingApp:'biblegateway' };
+  return {
+    cursors:{}, cycles:{}, log:[], plan:null, journal:[], readingApp:'biblegateway',
+    memorization:[], extraLog:[], checkins:[],
+    profile:{ displayName:'', bio:'', color: COLOR_PALETTE[0] }
+  };
+}
+function sanitizeProfile(p){
+  if(!p || typeof p !== 'object') return defaultState().profile;
+  return {
+    displayName: typeof p.displayName === 'string' ? p.displayName.slice(0,60) : '',
+    bio: typeof p.bio === 'string' ? p.bio.slice(0,240) : '',
+    color: typeof p.color === 'string' ? p.color : COLOR_PALETTE[0]
+  };
 }
 function loadState(){
   try{
@@ -372,7 +384,11 @@ function loadState(){
       log: Array.isArray(parsed.log) ? parsed.log : [],
       plan: parsed.plan || null,
       journal: Array.isArray(parsed.journal) ? parsed.journal : [],
-      readingApp: READING_APPS[parsed.readingApp] ? parsed.readingApp : 'biblegateway'
+      readingApp: READING_APPS[parsed.readingApp] ? parsed.readingApp : 'biblegateway',
+      memorization: Array.isArray(parsed.memorization) ? parsed.memorization : [],
+      extraLog: Array.isArray(parsed.extraLog) ? parsed.extraLog : [],
+      checkins: Array.isArray(parsed.checkins) ? parsed.checkins : [],
+      profile: sanitizeProfile(parsed.profile)
     };
   }catch(e){ return defaultState(); }
 }
@@ -481,17 +497,25 @@ function undoLast(catId){
 }
 
 /* ---------------- Journal ---------------- */
-function addJournalEntry(date, tag, content, title){
+function addJournalEntry(date, tag, content, title, reference){
   if(!JOURNAL_TAGS.includes(tag)) tag = 'prayer';
   const entry = {
     id: 'j' + Math.random().toString(36).slice(2,9) + Date.now().toString(36),
     date, tag,
     title: (title||'').trim(),
     content: (content||'').trim(),
+    reference: (reference && reference.book) ? { book: reference.book, chapter: reference.chapter || null, verse: reference.verse || null } : null,
     ts: Date.now()
   };
   state.journal.push(entry);
   saveState(); render();
+}
+function formatReference(ref){
+  if(!ref || !ref.book) return '';
+  let out = ref.book;
+  if(ref.chapter) out += ' ' + ref.chapter;
+  if(ref.verse) out += ':' + ref.verse;
+  return out;
 }
 function deleteJournalEntry(id){
   state.journal = state.journal.filter(e=>e.id!==id);
@@ -499,6 +523,118 @@ function deleteJournalEntry(id){
 }
 function journalSorted(){
   return state.journal.slice().sort((a,b)=> a.date===b.date ? b.ts-a.ts : (a.date < b.date ? 1 : -1));
+}
+
+/* ---------------- Bible memorization ---------------- */
+function addMemoryVerse(reference, text){
+  if(!reference || !reference.trim()) return;
+  state.memorization.push({
+    id: 'm' + Math.random().toString(36).slice(2,9) + Date.now().toString(36),
+    reference: reference.trim(), text: (text||'').trim(),
+    status: 'learning', reviewCount: 0, lastReviewed: null, dateAdded: todayStr()
+  });
+  saveState(); render();
+}
+function reviewMemoryVerse(id){
+  const v = state.memorization.find(m=>m.id===id);
+  if(!v) return;
+  v.reviewCount = (v.reviewCount||0)+1;
+  v.lastReviewed = todayStr();
+  saveState(); render();
+}
+function toggleMemoryMastered(id){
+  const v = state.memorization.find(m=>m.id===id);
+  if(!v) return;
+  v.status = v.status === 'mastered' ? 'learning' : 'mastered';
+  saveState(); render();
+}
+function deleteMemoryVerse(id){
+  state.memorization = state.memorization.filter(m=>m.id!==id);
+  saveState(); render();
+}
+
+/* ---------------- Extra / outside-plan reading ---------------- */
+function addExtraReading(date, book, chapter, note){
+  if(!book) return;
+  state.extraLog.push({
+    id: 'x' + Math.random().toString(36).slice(2,9) + Date.now().toString(36),
+    date, book, chapter: chapter || null, note: (note||'').trim(), ts: Date.now()
+  });
+  saveState(); render();
+}
+function deleteExtraReading(id){
+  state.extraLog = state.extraLog.filter(e=>e.id!==id);
+  saveState(); render();
+}
+
+/* ---------------- Custom profile ---------------- */
+function updateProfile(displayName, bio, color){
+  state.profile = sanitizeProfile({ displayName, bio, color });
+  saveState(); render();
+  syncPublicActivity();
+}
+function displayNameOr(fallback){
+  return (state.profile && state.profile.displayName) ? state.profile.displayName : fallback;
+}
+
+/* ---------------- Spiritual temperature check-in ---------------- */
+const CHECKIN_LABELS = { 1:'Distant', 2:'Dry', 3:'Steady', 4:'Warm', 5:'Close' };
+function setCheckin(date, value, note){
+  const existing = state.checkins.find(c=>c.date===date);
+  if(existing){ existing.value = value; existing.note = (note||'').trim(); existing.ts = Date.now(); }
+  else { state.checkins.push({ date, value, note:(note||'').trim(), ts: Date.now() }); }
+  saveState(); render();
+}
+function checkinFor(date){
+  return state.checkins.find(c=>c.date===date) || null;
+}
+
+/* ---------------- One year ago resurfacing ---------------- */
+function oneYearAgoStr(){
+  const d = new Date();
+  d.setFullYear(d.getFullYear()-1);
+  return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+}
+function oneYearAgoEntries(){
+  const target = oneYearAgoStr();
+  return {
+    journal: state.journal.filter(e=>e.date===target),
+    log: state.log.filter(e=>e.date===target && e.status==='complete'),
+    date: target
+  };
+}
+
+/* ---------------- Year in review & monthly summary (reflection framing, not scorecards) ---------------- */
+function yearInReviewStats(year){
+  const yr = String(year);
+  const yearLog = state.log.filter(e=>e.date.slice(0,4)===yr && e.status==='complete');
+  const booksTouched = new Set(yearLog.map(e=>e.book));
+  const yearJournal = state.journal.filter(e=>e.date.slice(0,4)===yr);
+  const tagCounts = {};
+  JOURNAL_TAGS.forEach(t=>tagCounts[t]=0);
+  yearJournal.forEach(e=>{ tagCounts[e.tag] = (tagCounts[e.tag]||0)+1; });
+  const cyclesThisYear = ACTIVE_CATEGORIES.reduce((s,c)=>s+(state.cycles[c.id]||0),0);
+  return {
+    year: yr,
+    chaptersRead: yearLog.length,
+    booksTouched: booksTouched.size,
+    journalEntries: yearJournal.length,
+    tagCounts,
+    cyclesCompletedAllTime: cyclesThisYear
+  };
+}
+function monthSummaryStats(ym){
+  const monthLog = state.log.filter(e=>e.date.slice(0,7)===ym && e.status==='complete');
+  const booksTouched = new Set(monthLog.map(e=>e.book));
+  const monthJournal = state.journal.filter(e=>e.date.slice(0,7)===ym);
+  const daysActive = new Set(monthLog.map(e=>e.date)).size;
+  return { ym, chaptersRead: monthLog.length, booksTouched: booksTouched.size, journalEntries: monthJournal.length, daysActive };
+}
+function monthsWithActivity(){
+  const set = new Set();
+  state.log.forEach(e=>{ if(e.status==='complete') set.add(e.date.slice(0,7)); });
+  state.journal.forEach(e=>set.add(e.date.slice(0,7)));
+  return Array.from(set).sort().reverse();
 }
 
 /* ---------------- Reading app preference ---------------- */
@@ -598,6 +734,8 @@ function doLogOut(){
   if(!fbAuth) return;
   fbAuth.signOut().then(() => {
     if(fbUnsub){ fbUnsub(); fbUnsub = null; }
+    if(friendsUnsub){ friendsUnsub(); friendsUnsub = null; }
+    friendLinksData = []; friendActivityCache = {};
     localStorage.removeItem(AUTH_CHOICE_KEY);
     state = defaultState();
     saveState({skipSync:true});
@@ -646,8 +784,11 @@ function initFirebase(){
         if(wasSignedOut) activeTab = 'today'; // every fresh login/signup should land on Today, not wherever the tab happened to be left (e.g. Account, right where Log out lives)
         fbFirstSnapshotHandled = false;
         subscribeToUserDoc();
+        ensureEmailIndex();
+        subscribeFriends();
       } else if(fbUnsub){
         fbUnsub(); fbUnsub = null;
+        if(friendsUnsub){ friendsUnsub(); friendsUnsub = null; }
       }
       render();
     });
@@ -698,7 +839,11 @@ function subscribeToUserDoc(){
       log: data.log || [],
       plan: data.plan || null,
       journal: Array.isArray(data.journal) ? data.journal : [],
-      readingApp: READING_APPS[data.readingApp] ? data.readingApp : 'biblegateway'
+      readingApp: READING_APPS[data.readingApp] ? data.readingApp : 'biblegateway',
+      memorization: Array.isArray(data.memorization) ? data.memorization : [],
+      extraLog: Array.isArray(data.extraLog) ? data.extraLog : [],
+      checkins: Array.isArray(data.checkins) ? data.checkins : [],
+      profile: sanitizeProfile(data.profile)
     };
     saveState({skipSync:true});
     syncStatus='synced'; lastSyncedAt=Date.now();
@@ -713,8 +858,10 @@ function pushStateNow(docRefOverride){
   const docRef = docRefOverride || fbDb.collection('userProgress').doc(currentUser.uid);
   docRef.set({
     cursors: state.cursors, cycles: state.cycles, log: state.log, plan: state.plan, journal: state.journal, readingApp: state.readingApp,
+    memorization: state.memorization, extraLog: state.extraLog, checkins: state.checkins, profile: state.profile,
     _writerId: CLIENT_ID, _updatedAt: Date.now()
   }).catch(err=>{ syncStatus='error'; syncMessage=err.message; render(); });
+  syncPublicActivity();
 }
 function scheduleRemoteSync(){
   if(!currentUser) return;
@@ -727,6 +874,83 @@ function scheduleRemoteSync(){
 }
 window.addEventListener('online', ()=>{ if(currentUser && fbDb) pushStateNow(); });
 window.addEventListener('offline', ()=>{ if(currentUser){ syncStatus='offline'; syncMessage='No connection — working locally.'; render(); } });
+
+/* ---------------- Friends & Family (deliberately minimal — no journal/log content is ever shared) ---------------- */
+function sanitizeEmailKey(email){
+  return (email||'').trim().toLowerCase().replace(/[^a-z0-9@._-]/g,'_');
+}
+function friendLinkId(uidA, uidB){
+  return uidA < uidB ? uidA + '_' + uidB : uidB + '_' + uidA;
+}
+let friendLinksData = []; // raw docs {id, ...}
+let friendActivityCache = {}; // uid -> publicActivity data
+let friendsUnsub = null;
+let friendRequestEmail = '';
+let friendRequestError = '';
+let friendRequestBusy = false;
+
+function ensureEmailIndex(){
+  if(!fbDb || !currentUser || !currentUser.email) return;
+  const key = sanitizeEmailKey(currentUser.email);
+  fbDb.collection('emailIndex').doc(key).set({ uid: currentUser.uid }, { merge:true }).catch(()=>{});
+}
+function syncPublicActivity(){
+  if(!fbDb || !currentUser) return;
+  const last30 = new Date(); last30.setDate(last30.getDate()-30);
+  const last30Str = last30.toISOString().slice(0,10);
+  const activeDays = new Set(state.log.filter(e=>e.status==='complete' && e.date >= last30Str).map(e=>e.date)).size;
+  const planName = state.plan ? (PRESET_PLANS[state.plan.presetId] ? PRESET_PLANS[state.plan.presetId].name : 'Custom plan') : '';
+  fbDb.collection('publicActivity').doc(currentUser.uid).set({
+    displayName: displayNameOr(currentUser.email.split('@')[0]),
+    lastActiveDate: lastActivityDate() || null,
+    activeDaysLast30: activeDays,
+    planName,
+    updatedAt: Date.now()
+  }, { merge:true }).catch(()=>{});
+}
+function subscribeFriends(){
+  if(!fbDb || !currentUser) return;
+  if(friendsUnsub) friendsUnsub();
+  friendsUnsub = fbDb.collection('friendLinks').where('userIds','array-contains',currentUser.uid)
+    .onSnapshot(snap=>{
+      friendLinksData = snap.docs.map(d=>({ id:d.id, ...d.data() }));
+      const acceptedUids = friendLinksData.filter(l=>l.status==='accepted').map(l=> l.userIds.find(u=>u!==currentUser.uid));
+      acceptedUids.forEach(uid=>{
+        if(!friendActivityCache[uid]){
+          fbDb.collection('publicActivity').doc(uid).get().then(doc=>{
+            friendActivityCache[uid] = doc.exists ? doc.data() : { displayName:'(unknown)' };
+            render();
+          }).catch(()=>{});
+        }
+      });
+      render();
+    }, err=>{ console.warn('friends listener error', err); });
+}
+function sendFriendRequest(email){
+  friendRequestError = ''; friendRequestBusy = true; render();
+  const key = sanitizeEmailKey(email);
+  fbDb.collection('emailIndex').doc(key).get().then(doc=>{
+    if(!doc.exists){ friendRequestError = 'No Cultivate account found with that email.'; friendRequestBusy=false; render(); return; }
+    const targetUid = doc.data().uid;
+    if(targetUid === currentUser.uid){ friendRequestError = "That's your own email."; friendRequestBusy=false; render(); return; }
+    const linkId = friendLinkId(currentUser.uid, targetUid);
+    const ref = fbDb.collection('friendLinks').doc(linkId);
+    ref.get().then(existing=>{
+      if(existing.exists){ friendRequestError = 'You already have a connection (or pending request) with this person.'; friendRequestBusy=false; render(); return; }
+      ref.set({
+        userIds: [currentUser.uid, targetUid].sort(),
+        status:'pending', requestedBy: currentUser.uid, createdAt: Date.now()
+      }).then(()=>{ friendRequestBusy=false; friendRequestEmail=''; render(); })
+        .catch(err=>{ friendRequestError = err.message; friendRequestBusy=false; render(); });
+    });
+  }).catch(err=>{ friendRequestError = err.message; friendRequestBusy=false; render(); });
+}
+function acceptFriendRequest(linkId){
+  fbDb.collection('friendLinks').doc(linkId).set({ status:'accepted' }, { merge:true }).catch(()=>{});
+}
+function declineFriendRequest(linkId){
+  fbDb.collection('friendLinks').doc(linkId).delete().catch(()=>{});
+}
 
 /* ---------------- Check-in reminders (push notifications) ---------------- */
 let notifStatus = 'unknown'; // unknown | unsupported | default | denied | granted
@@ -815,7 +1039,9 @@ function render(){
     ${activeTab==='today' ? renderToday() : ''}
     ${activeTab==='log' ? renderLog() : ''}
     ${activeTab==='journal' ? renderJournal() : ''}
+    ${activeTab==='memorize' ? renderMemorize() : ''}
     ${activeTab==='dashboard' ? renderDashboard() : ''}
+    ${activeTab==='friends' ? renderFriends() : ''}
     ${activeTab==='account' ? renderAccountTab() : ''}
     ${renderFooter()}
     <input type="file" id="importFile" accept="application/json">
@@ -1085,7 +1311,7 @@ function renderHeader(){
 }
 
 function renderTabs(){
-  const tabs = [['today','Today'],['log','Log'],['journal','Journal'],['dashboard','Dashboard'],['account','Account']];
+  const tabs = [['today','Today'],['log','Log'],['journal','Journal'],['memorize','Memorize'],['dashboard','Dashboard'],['friends','Friends'],['account','Account']];
   return `<nav class="tabs">
     ${tabs.map(([id,label])=>`<button data-tab="${id}" class="${activeTab===id?'active':''}">${label}</button>`).join('')}
   </nav>`;
@@ -1125,6 +1351,30 @@ function renderToday(){
       </div>`;
   }).join('');
 
+  const existingCheckin = checkinFor(selectedDate);
+  const checkinHtml = `
+    <div class="settings-box" style="max-width:none;">
+      <h3>How's your walk today?</h3>
+      <p style="font-size:0.82rem; color:var(--ink-soft); margin-top:-6px;">Purely optional, just for you — no reminders, no tracking pressure.</p>
+      <div style="display:flex; gap:6px; flex-wrap:wrap;">
+        ${[1,2,3,4,5].map(v=>`<button class="btn small ${existingCheckin && existingCheckin.value===v ? 'primary' : ''}" data-checkin-value="${v}">${CHECKIN_LABELS[v]}</button>`).join('')}
+      </div>
+    </div>`;
+
+  const bookOptions = BOOK_LIBRARY.map(b=>`<option value="${b.name}">${b.name}</option>`).join('');
+  const extraTodayEntries = state.extraLog.filter(e=>e.date===selectedDate);
+  const extraReadingHtml = `
+    <div class="settings-box" style="max-width:none;">
+      <h3>Reading outside your plan</h3>
+      <p style="font-size:0.82rem; color:var(--ink-soft); margin-top:-6px;">Read something today that wasn't on today's cards? Log it here.</p>
+      <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;">
+        <select id="extraBook" style="padding:7px 10px; border:1px solid var(--line); border-radius:8px; font-size:0.85rem; font-family:inherit;">${bookOptions}</select>
+        <input type="number" id="extraChapter" placeholder="Chapter" min="1" style="width:90px; padding:7px 10px; border:1px solid var(--line); border-radius:8px; font-size:0.85rem; font-family:inherit;">
+        <button class="btn" id="addExtraBtn">Log it</button>
+      </div>
+      ${extraTodayEntries.length ? `<div class="today-log-list">${extraTodayEntries.map(e=>`<div>${e.book} ${e.chapter||''} <button class="btn small danger" data-delete-extra="${e.id}" style="margin-left:6px;">Remove</button></div>`).join('')}</div>` : ''}
+    </div>`;
+
   return `
     <div class="toolbar">
       <label for="dateSel" style="font-size:0.85rem; color:var(--ink-soft);">Logging for:</label>
@@ -1133,6 +1383,8 @@ function renderToday(){
       <span style="font-size:0.8rem; color:var(--ink-soft);">${fmtDate(selectedDate)}</span>
     </div>
     <div class="grid">${cards}</div>
+    ${checkinHtml}
+    ${extraReadingHtml}
   `;
 }
 
@@ -1179,7 +1431,25 @@ function journalTagPill(tag){
   return `<span class="journal-tag" style="background:${JOURNAL_TAG_COLORS[tag]}1a; color:${JOURNAL_TAG_COLORS[tag]};">${JOURNAL_TAG_LABELS[tag]}</span>`;
 }
 
+function renderOneYearAgo(){
+  const { journal, log, date } = oneYearAgoEntries();
+  if(!journal.length && !log.length) return '';
+  return `
+    <div class="settings-box" style="max-width:none; background:var(--accent-soft); border-color:var(--accent);">
+      <h3>One year ago today</h3>
+      <p style="font-size:0.85rem; color:var(--ink-soft); margin-top:-6px;">${fmtDate(date)}</p>
+      ${log.length ? `<p style="font-size:0.85rem;">You read: ${log.map(e=>`${e.book} ${e.chapter}`).join(', ')}</p>` : ''}
+      ${journal.map(e=>`
+        <div class="journal-entry">
+          <div class="journal-entry-head">${journalTagPill(e.tag)}${e.reference ? `<span style="font-size:0.8rem; color:var(--ink-soft);">${formatReference(e.reference)}</span>` : ''}</div>
+          ${e.title ? `<div class="journal-title">${e.title}</div>` : ''}
+          ${e.content ? `<div class="journal-content">${e.content.replace(/\n/g,'<br>')}</div>` : ''}
+        </div>`).join('')}
+    </div>`;
+}
+
 function renderJournal(){
+  const bookOptions = `<option value="">No specific passage</option>` + BOOK_LIBRARY.map(b=>`<option value="${b.name}">${b.name}</option>`).join('');
   const formHtml = `
     <div class="settings-box journal-form">
       <h3>New entry</h3>
@@ -1197,9 +1467,15 @@ function renderJournal(){
       </div>
       <input type="text" id="journalTitle" placeholder="Title (optional)" style="width:100%; padding:9px 10px; border:1px solid var(--line); border-radius:8px; margin-bottom:10px; font-size:0.9rem; font-family:inherit;">
       <textarea id="journalContent" placeholder="What happened? What did you sense, pray, or receive?" rows="4" style="width:100%; padding:9px 10px; border:1px solid var(--line); border-radius:8px; margin-bottom:10px; font-size:0.9rem; font-family:inherit; resize:vertical;"></textarea>
+      <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;">
+        <select id="journalRefBook" style="padding:7px 10px; border:1px solid var(--line); border-radius:8px; font-size:0.85rem; font-family:inherit;">${bookOptions}</select>
+        <input type="number" id="journalRefChapter" placeholder="Chapter" min="1" style="width:90px; padding:7px 10px; border:1px solid var(--line); border-radius:8px; font-size:0.85rem; font-family:inherit;">
+        <input type="number" id="journalRefVerse" placeholder="Verse (optional)" min="1" style="width:110px; padding:7px 10px; border:1px solid var(--line); border-radius:8px; font-size:0.85rem; font-family:inherit;">
+      </div>
       <button class="btn primary" id="saveJournalBtn">Save entry</button>
     </div>`;
 
+  const oneYearAgoHtml = renderOneYearAgo();
   const entries = journalSorted().filter(e => journalFilter==='all' || e.tag===journalFilter);
   const filterHtml = `
     <div class="toolbar" style="margin-top:24px;">
@@ -1208,7 +1484,7 @@ function renderJournal(){
     </div>`;
 
   if(!entries.length){
-    return formHtml + filterHtml + `<div class="empty-note">${state.journal.length ? 'No entries match this filter.' : 'No journal entries yet — add your first one above.'}</div>`;
+    return formHtml + oneYearAgoHtml + filterHtml + `<div class="empty-note">${state.journal.length ? 'No entries match this filter.' : 'No journal entries yet — add your first one above.'}</div>`;
   }
 
   const groups = {};
@@ -1227,6 +1503,7 @@ function renderJournal(){
         <div class="journal-entry-head">
           <span class="journal-date">${fmtDate(e.date)}</span>
           ${journalTagPill(e.tag)}
+          ${e.reference ? `<span style="font-size:0.8rem; color:var(--ink-soft);">&mdash; ${formatReference(e.reference)}</span>` : ''}
           <button class="btn small danger" data-delete-journal="${e.id}" style="margin-left:auto;">Delete</button>
         </div>
         ${e.title ? `<div class="journal-title">${e.title}</div>` : ''}
@@ -1239,12 +1516,138 @@ function renderJournal(){
       </details>`;
   }).join('');
 
-  return formHtml + filterHtml + `<div style="margin-top:14px;">${timelineHtml}</div>`;
+  return formHtml + oneYearAgoHtml + filterHtml + `<div style="margin-top:14px;">${timelineHtml}</div>`;
+}
+
+function renderMemorize(){
+  const bookOptions = BOOK_LIBRARY.map(b=>`<option value="${b.name}">${b.name}</option>`).join('');
+  const formHtml = `
+    <div class="settings-box">
+      <h3>Add a verse to memorize</h3>
+      <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;">
+        <input type="text" id="memRef" placeholder="Reference (e.g. Psalm 23:1)" style="flex:1; min-width:200px; padding:9px 10px; border:1px solid var(--line); border-radius:8px; font-size:0.9rem; font-family:inherit;">
+      </div>
+      <textarea id="memText" placeholder="Paste the verse text here (optional, if you'd like it shown while reviewing)" rows="3" style="width:100%; padding:9px 10px; border:1px solid var(--line); border-radius:8px; margin-bottom:10px; font-size:0.9rem; font-family:inherit; resize:vertical;"></textarea>
+      <button class="btn primary" id="addMemBtn">Add</button>
+    </div>`;
+  const learning = state.memorization.filter(m=>m.status!=='mastered');
+  const mastered = state.memorization.filter(m=>m.status==='mastered');
+  const cardHtml = m => `
+    <div class="card" style="--cat-color:${m.status==='mastered' ? '#3f7a4f' : '#7a4b2e'}; margin-bottom:12px;">
+      <div class="cat-name">${m.reference}</div>
+      ${m.text ? `<div style="font-size:0.88rem; color:var(--ink-soft); margin:6px 0;">${m.text}</div>` : ''}
+      <div class="meta">${m.status==='mastered' ? 'Mastered' : `Reviewed ${m.reviewCount||0} time${m.reviewCount===1?'':'s'}${m.lastReviewed ? ' · last on ' + fmtDate(m.lastReviewed) : ''}`}</div>
+      <div class="actions">
+        ${m.status!=='mastered' ? `<button class="btn primary small" data-mem-review="${m.id}">Reviewed today</button>` : ''}
+        <button class="btn small" data-mem-toggle="${m.id}">${m.status==='mastered' ? 'Move back to learning' : 'Mark mastered'}</button>
+        <button class="btn small danger" data-mem-delete="${m.id}">Remove</button>
+      </div>
+    </div>`;
+  if(!state.memorization.length){
+    return formHtml + `<div class="empty-note">No verses yet — add one above to start memorizing.</div>`;
+  }
+  return formHtml + `
+    <h3 style="margin-top:24px;">Learning (${learning.length})</h3>
+    ${learning.length ? learning.map(cardHtml).join('') : `<div class="empty-note">Nothing in progress — add a verse above.</div>`}
+    ${mastered.length ? `<h3 style="margin-top:24px;">Mastered (${mastered.length})</h3>${mastered.map(cardHtml).join('')}` : ''}
+  `;
+}
+
+function renderFriends(){
+  if(!currentUser){
+    return `<div class="empty-note">Friends & Family requires an account, since it connects your progress with someone else's. Create an account or log in from the Account tab.</div>`;
+  }
+  const myUid = currentUser.uid;
+  const accepted = friendLinksData.filter(l=>l.status==='accepted');
+  const incoming = friendLinksData.filter(l=>l.status==='pending' && l.requestedBy!==myUid);
+  const outgoing = friendLinksData.filter(l=>l.status==='pending' && l.requestedBy===myUid);
+
+  const addFormHtml = `
+    <div class="settings-box">
+      <h3>Add a friend</h3>
+      <p style="font-size:0.85rem; color:var(--ink-soft);">Enter the email they use for their Cultivate account. We only ever share your name, last-active date, and current plan &mdash; never your journal or reading log.</p>
+      ${friendRequestError ? `<div class="auth-error">${friendRequestError}</div>` : ''}
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <input type="email" id="friendEmailInput" placeholder="friend@example.com" value="${friendRequestEmail}" style="flex:1; min-width:220px; padding:9px 10px; border:1px solid var(--line); border-radius:8px; font-size:0.9rem; font-family:inherit;">
+        <button class="btn primary" id="sendFriendReqBtn" ${friendRequestBusy?'disabled':''}>${friendRequestBusy?'Sending…':'Send request'}</button>
+      </div>
+    </div>`;
+
+  const incomingHtml = incoming.length ? `
+    <div class="settings-box">
+      <h3>Requests waiting on you</h3>
+      ${incoming.map(l=>`
+        <div style="display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid var(--line);">
+          <span style="font-size:0.9rem;">${friendActivityCache[l.requestedBy] ? friendActivityCache[l.requestedBy].displayName : 'Someone'} wants to connect</span>
+          <span style="display:flex; gap:6px;">
+            <button class="btn small primary" data-friend-accept="${l.id}">Accept</button>
+            <button class="btn small danger" data-friend-decline="${l.id}">Decline</button>
+          </span>
+        </div>`).join('')}
+    </div>` : '';
+
+  const outgoingHtml = outgoing.length ? `
+    <div class="settings-box">
+      <p style="font-size:0.85rem; color:var(--ink-soft);">Waiting on: ${outgoing.length} pending request${outgoing.length===1?'':'s'} you sent.</p>
+    </div>` : '';
+
+  const acceptedHtml = accepted.length ? `
+    <div class="settings-box">
+      <h3>Connected</h3>
+      ${accepted.map(l=>{
+        const otherUid = l.userIds.find(u=>u!==myUid);
+        const act = friendActivityCache[otherUid];
+        return `
+        <div style="padding:10px 0; border-bottom:1px solid var(--line);">
+          <div style="font-weight:700;">${act ? act.displayName : 'Loading…'}</div>
+          ${act ? `<div style="font-size:0.82rem; color:var(--ink-soft);">${act.planName ? act.planName + ' &middot; ' : ''}${act.activeDaysLast30||0} of the last 30 days active${act.lastActiveDate ? ' &middot; last read ' + fmtDate(act.lastActiveDate) : ''}</div>` : ''}
+          <button class="btn small danger" data-friend-decline="${l.id}" style="margin-top:6px;">Remove</button>
+        </div>`;
+      }).join('')}
+    </div>` : `<div class="empty-note">No connections yet — add a friend or family member above. This is meant to feel like company, not a leaderboard: no percentages, no comparisons, just knowing someone else is walking with you.</div>`;
+
+  return addFormHtml + incomingHtml + outgoingHtml + acceptedHtml;
+}
+
+function renderYearInReview(){
+  const currentYear = todayStr().slice(0,4);
+  const s = yearInReviewStats(currentYear);
+  if(s.chaptersRead === 0 && s.journalEntries === 0) return '';
+  return `
+    <div class="settings-box" style="max-width:none; background:var(--accent-soft); border-color:var(--accent);">
+      <h3>${s.year} in review</h3>
+      <p style="font-size:0.92rem; line-height:1.7;">
+        This year you sat with <strong>${s.chaptersRead}</strong> chapter${s.chaptersRead===1?'':'s'} across <strong>${s.booksTouched}</strong> book${s.booksTouched===1?'':'s'} of the Bible.
+        ${s.journalEntries ? ` You wrote <strong>${s.journalEntries}</strong> journal entr${s.journalEntries===1?'y':'ies'}` : ''}
+        ${s.journalEntries ? (JOURNAL_TAGS.filter(t=>s.tagCounts[t]>0).map(t=>`${s.tagCounts[t]} ${JOURNAL_TAG_LABELS[t].toLowerCase()}`).join(', ') ? ' — ' + JOURNAL_TAGS.filter(t=>s.tagCounts[t]>0).map(t=>`${s.tagCounts[t]} ${JOURNAL_TAG_LABELS[t].toLowerCase()}`).join(', ') + '.' : '.') : ''}
+        ${s.cyclesCompletedAllTime ? ` You've completed <strong>${s.cyclesCompletedAllTime}</strong> full cycle${s.cyclesCompletedAllTime===1?'':'s'} through your plan's categories so far.` : ''}
+      </p>
+    </div>`;
+}
+
+function renderMonthlySummaries(){
+  const months = monthsWithActivity().slice(0,6);
+  if(!months.length) return '';
+  const monthName = ym => { const [y,m] = ym.split('-').map(Number); return new Date(y,m-1,1).toLocaleDateString(undefined,{month:'long', year:'numeric'}); };
+  const cards = months.map(ym=>{
+    const s = monthSummaryStats(ym);
+    return `
+      <div class="stat">
+        <div style="font-weight:700; margin-bottom:6px;">${monthName(ym)}</div>
+        <div style="font-size:0.85rem; color:var(--ink-soft); line-height:1.6;">
+          ${s.chaptersRead} chapter${s.chaptersRead===1?'':'s'} across ${s.booksTouched} book${s.booksTouched===1?'':'s'}<br>
+          Active ${s.daysActive} day${s.daysActive===1?'':'s'}${s.journalEntries ? ` &middot; ${s.journalEntries} journal entr${s.journalEntries===1?'y':'ies'}` : ''}
+        </div>
+      </div>`;
+  }).join('');
+  return `<h3 style="margin-top:6px;">Month by month</h3><div class="dash-summary">${cards}</div>`;
 }
 
 function renderDashboard(){
   const uniqueChapters = new Set(state.log.filter(e=>e.status==='complete').map(e=>e.book+'|'+e.chapter));
   const totalPassesAcrossAll = ACTIVE_CATEGORIES.reduce((s,c)=>s+(state.cycles[c.id]||0),0);
+  const yearInReview = renderYearInReview();
+  const monthlySummaries = renderMonthlySummaries();
   const summary = `
     <div class="dash-summary">
       <div class="stat"><div class="num">${uniqueChapters.size} / ${BIBLE_TOTAL_CHAPTERS}</div><div class="label">Unique chapters read at least once</div></div>
@@ -1272,7 +1675,7 @@ function renderDashboard(){
       </div>`;
   }).join('');
 
-  return summary + blocks;
+  return yearInReview + summary + monthlySummaries + blocks;
 }
 
 function renderAccountTab(){
@@ -1291,6 +1694,29 @@ function renderAccountTab(){
         : notifStatus === 'denied'
           ? `<p style="font-size:0.85rem; color:var(--bad);">Notifications are blocked for this app in your browser/device settings.</p>`
           : `<button class="btn primary" id="enableRemindersBtn">Enable check-in reminders</button>`}
+    </div>`;
+  const profileBox = `
+    <div class="settings-box">
+      <h3>Profile</h3>
+      <p style="font-size:0.85rem; color:var(--ink-soft);">Your display name is what friends see instead of your email.</p>
+      <div class="auth-field">
+        <label for="profileDisplayName">Display name</label>
+        <input type="text" id="profileDisplayName" value="${(state.profile.displayName||'').replace(/"/g,'&quot;')}" placeholder="${currentUser ? currentUser.email.split('@')[0] : 'Guest'}">
+      </div>
+      <div class="auth-field">
+        <label for="profileBio">Short bio (optional)</label>
+        <input type="text" id="profileBio" value="${(state.profile.bio||'').replace(/"/g,'&quot;')}" placeholder="A line about your walk with God">
+      </div>
+      <div class="color-swatch-row" style="margin-bottom:12px;">
+        ${COLOR_PALETTE.map(c=>`<button type="button" data-profile-color="${c}" style="background:${c}" class="${state.profile.color===c?'selected':''}"></button>`).join('')}
+      </div>
+      <button class="btn primary" id="saveProfileBtn">Save profile</button>
+    </div>`;
+  const exportBox = `
+    <div class="settings-box">
+      <h3>Export journal &amp; log</h3>
+      <p style="font-size:0.85rem; color:var(--ink-soft);">A readable text file of just your journal entries and reading history &mdash; separate from the full backup file above.</p>
+      <button class="btn" id="exportJournalLogBtn">Export journal + log</button>
     </div>`;
   const readingAppBox = `
     <div class="settings-box">
@@ -1328,6 +1754,8 @@ function renderAccountTab(){
       <button class="btn danger" id="logoutBtn">Log out</button>
     </div>
     ${planBox}
+    ${profileBox}
+    ${exportBox}
     ${readingAppBox}
     ${notifBox}
     ${feedbackBox}`;
@@ -1339,6 +1767,8 @@ function renderAccountTab(){
       <button class="btn primary" id="upgradeAccountBtn">Create an account / log in</button>
     </div>
     ${planBox}
+    ${profileBox}
+    ${exportBox}
     ${readingAppBox}
     ${notifBox}
     ${feedbackBox}`;
@@ -1395,11 +1825,15 @@ function attachEvents(){
       const dateEl = document.getElementById('journalDate');
       const titleEl = document.getElementById('journalTitle');
       const contentEl = document.getElementById('journalContent');
+      const refBookEl = document.getElementById('journalRefBook');
+      const refChapterEl = document.getElementById('journalRefChapter');
+      const refVerseEl = document.getElementById('journalRefVerse');
       const date = (dateEl && dateEl.value) || todayStr();
       const content = contentEl ? contentEl.value : '';
       const title = titleEl ? titleEl.value : '';
       if(!content.trim() && !title.trim()){ alert('Add a title or some content before saving.'); return; }
-      addJournalEntry(date, journalDraftTag, content, title);
+      const reference = (refBookEl && refBookEl.value) ? { book: refBookEl.value, chapter: refChapterEl.value ? Number(refChapterEl.value) : null, verse: refVerseEl.value ? Number(refVerseEl.value) : null } : null;
+      addJournalEntry(date, journalDraftTag, content, title, reference);
     });
   }
   document.querySelectorAll('[data-journal-filter]').forEach(btn=>{
@@ -1442,7 +1876,11 @@ function attachEvents(){
               log: parsed.log,
               plan: parsed.plan || null,
               journal: Array.isArray(parsed.journal) ? parsed.journal : [],
-              readingApp: READING_APPS[parsed.readingApp] ? parsed.readingApp : 'biblegateway'
+              readingApp: READING_APPS[parsed.readingApp] ? parsed.readingApp : 'biblegateway',
+              memorization: Array.isArray(parsed.memorization) ? parsed.memorization : [],
+              extraLog: Array.isArray(parsed.extraLog) ? parsed.extraLog : [],
+              checkins: Array.isArray(parsed.checkins) ? parsed.checkins : [],
+              profile: sanitizeProfile(parsed.profile)
             };
             saveState(); render();
           }
@@ -1484,6 +1922,95 @@ function attachEvents(){
   }
   const feedbackAnotherBtn = document.getElementById('feedbackAnotherBtn');
   if(feedbackAnotherBtn) feedbackAnotherBtn.addEventListener('click', ()=>{ feedbackStatus = 'idle'; render(); });
+
+  // Memorization
+  const addMemBtn = document.getElementById('addMemBtn');
+  if(addMemBtn){
+    addMemBtn.addEventListener('click', ()=>{
+      const refEl = document.getElementById('memRef');
+      const textEl = document.getElementById('memText');
+      if(!refEl.value.trim()){ alert('Add a reference first.'); return; }
+      addMemoryVerse(refEl.value, textEl ? textEl.value : '');
+    });
+  }
+  document.querySelectorAll('[data-mem-review]').forEach(btn=> btn.addEventListener('click', ()=> reviewMemoryVerse(btn.dataset.memReview)));
+  document.querySelectorAll('[data-mem-toggle]').forEach(btn=> btn.addEventListener('click', ()=> toggleMemoryMastered(btn.dataset.memToggle)));
+  document.querySelectorAll('[data-mem-delete]').forEach(btn=> btn.addEventListener('click', ()=>{ if(confirm('Remove this verse?')) deleteMemoryVerse(btn.dataset.memDelete); }));
+
+  // Extra / outside-plan reading
+  const addExtraBtn = document.getElementById('addExtraBtn');
+  if(addExtraBtn){
+    addExtraBtn.addEventListener('click', ()=>{
+      const bookEl = document.getElementById('extraBook');
+      const chapterEl = document.getElementById('extraChapter');
+      addExtraReading(selectedDate, bookEl.value, chapterEl.value ? Number(chapterEl.value) : null, '');
+    });
+  }
+  document.querySelectorAll('[data-delete-extra]').forEach(btn=> btn.addEventListener('click', ()=> deleteExtraReading(btn.dataset.deleteExtra)));
+
+  // Spiritual temperature check-in
+  document.querySelectorAll('[data-checkin-value]').forEach(btn=>{
+    btn.addEventListener('click', ()=> setCheckin(selectedDate, Number(btn.dataset.checkinValue), ''));
+  });
+
+  // Profile
+  const saveProfileBtn = document.getElementById('saveProfileBtn');
+  if(saveProfileBtn){
+    saveProfileBtn.addEventListener('click', ()=>{
+      const nameEl = document.getElementById('profileDisplayName');
+      const bioEl = document.getElementById('profileBio');
+      const selectedColorBtn = document.querySelector('[data-profile-color].selected');
+      updateProfile(nameEl.value, bioEl.value, selectedColorBtn ? selectedColorBtn.dataset.profileColor : state.profile.color);
+    });
+  }
+  document.querySelectorAll('[data-profile-color]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      document.querySelectorAll('[data-profile-color]').forEach(b=>b.classList.toggle('selected', b===btn));
+    });
+  });
+
+  // Journal + Log export (separate from full backup)
+  const exportJournalLogBtn = document.getElementById('exportJournalLogBtn');
+  if(exportJournalLogBtn){
+    exportJournalLogBtn.addEventListener('click', ()=>{
+      const lines = [];
+      lines.push('CULTIVATE — Journal & Reading Log Export');
+      lines.push('Exported ' + fmtDate(todayStr()));
+      lines.push('');
+      lines.push('=== JOURNAL ===');
+      journalSorted().slice().reverse().forEach(e=>{
+        lines.push('');
+        lines.push(fmtDate(e.date) + ' — ' + JOURNAL_TAG_LABELS[e.tag] + (e.reference ? ' — ' + formatReference(e.reference) : ''));
+        if(e.title) lines.push(e.title);
+        if(e.content) lines.push(e.content);
+      });
+      lines.push('');
+      lines.push('=== READING LOG ===');
+      state.log.slice().sort((a,b)=> a.date < b.date ? -1 : 1).forEach(e=>{
+        lines.push(fmtDate(e.date) + ' — ' + e.book + ' ' + e.chapter + (e.status==='skipped' ? ' (skipped)' : ''));
+      });
+      const blob = new Blob([lines.join('\n')], {type:'text/plain'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'cultivate-journal-and-log-'+todayStr()+'.txt';
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    });
+  }
+
+  // Friends & Family
+  const sendFriendReqBtn = document.getElementById('sendFriendReqBtn');
+  if(sendFriendReqBtn){
+    sendFriendReqBtn.addEventListener('click', ()=>{
+      const emailEl = document.getElementById('friendEmailInput');
+      const email = emailEl ? emailEl.value.trim() : '';
+      if(!email){ friendRequestError = 'Enter an email address.'; render(); return; }
+      friendRequestEmail = email;
+      sendFriendRequest(email);
+    });
+  }
+  document.querySelectorAll('[data-friend-accept]').forEach(btn=> btn.addEventListener('click', ()=> acceptFriendRequest(btn.dataset.friendAccept)));
+  document.querySelectorAll('[data-friend-decline]').forEach(btn=> btn.addEventListener('click', ()=>{ if(confirm('Remove this connection?')) declineFriendRequest(btn.dataset.friendDecline); }));
   const installBtn = document.getElementById('installBtn');
   if(installBtn){
     installBtn.addEventListener('click', async ()=>{
