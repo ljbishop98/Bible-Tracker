@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>Bible Reading Tracker</title>
+<title>Cultivate</title>
 
 <!-- PWA: installable app metadata -->
 <link rel="manifest" href="./manifest.json">
@@ -11,7 +11,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Bible Tracker">
+<meta name="apple-mobile-web-app-title" content="Cultivate">
 <link rel="apple-touch-icon" href="./icon-192.png">
 <link rel="icon" href="./icon-192.png">
 
@@ -165,6 +165,22 @@
   .builder-book-row:last-child{border-bottom:none;}
   .builder-add-row{display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;}
   .builder-add-row select{flex:1; min-width:180px; padding:7px 10px; border:1px solid var(--line); border-radius:8px; font-size:0.85rem; font-family:inherit;}
+  .journal-form{max-width:none;}
+  .journal-tag-picker{display:flex; gap:6px; flex-wrap:wrap;}
+  .journal-tag-btn{
+    padding:7px 12px; border-radius:999px; border:2px solid var(--tc); background:#fff; color:var(--tc);
+    font-size:0.8rem; font-weight:700; cursor:pointer;
+  }
+  .journal-tag-btn.selected{background:var(--tc); color:#fff;}
+  .journal-tag{
+    display:inline-flex; padding:3px 10px; border-radius:999px; font-size:0.72rem; font-weight:700;
+  }
+  .journal-entry{border-bottom:1px solid var(--line); padding:12px 0;}
+  .journal-entry:last-child{border-bottom:none;}
+  .journal-entry-head{display:flex; align-items:center; gap:10px; margin-bottom:6px;}
+  .journal-date{font-size:0.8rem; color:var(--ink-soft); font-weight:600;}
+  .journal-title{font-weight:700; margin-bottom:4px;}
+  .journal-content{font-size:0.88rem; color:var(--ink); white-space:pre-wrap;}
 </style>
 </head>
 <body>
@@ -238,6 +254,30 @@ const PRESET_PLANS = {
       makeCategory('nt_psalmsprov','Psalms & Proverbs','#4a5f8a',['Psalms','Proverbs']),
       makeCategory('nt_ot','Old Testament','#7a4b2e',['Genesis','Exodus','Leviticus','Numbers','Deuteronomy','Joshua','Judges','Ruth','1 Samuel','2 Samuel','1 Kings','2 Kings','1 Chronicles','2 Chronicles','Ezra','Nehemiah','Esther','Job','Ecclesiastes','Song of Solomon','Isaiah','Jeremiah','Lamentations','Ezekiel','Daniel','Hosea','Joel','Amos','Obadiah','Jonah','Micah','Nahum','Habakkuk','Zephaniah','Haggai','Zechariah','Malachi'])
     ]
+  },
+  canonical: {
+    id:'canonical', name:'Bible in a Year (Canonical)',
+    description:'The classic straight-through plan — one category, all 66 books in their normal Bible order, Genesis to Revelation. Simplest possible option: no juggling multiple tracks, just keep turning pages.',
+    categories:[
+      makeCategory('canonical_all','Genesis to Revelation','#7a4b2e',BOOK_LIBRARY.map(b=>b.name))
+    ]
+  },
+  chronological: {
+    id:'chronological', name:'Chronological',
+    description:'One category, reordered by approximate historical sequence rather than canonical order — Job near the patriarchs, Psalms and wisdom books around David and Solomon\'s reigns, prophets interleaved near the kings and events they addressed. A popular way to read the Bible "as it happened." Note: reordering happens at the whole-book level (chapters within each book stay in their normal order).',
+    categories:[
+      makeCategory('chrono_all','In Historical Order','#8a3d5c',['Job','Genesis','Exodus','Leviticus','Numbers','Deuteronomy','Joshua','Judges','Ruth','1 Samuel','2 Samuel','1 Kings','1 Chronicles','2 Chronicles','2 Kings','Psalms','Proverbs','Ecclesiastes','Song of Solomon','Obadiah','Joel','Jonah','Amos','Hosea','Isaiah','Micah','Nahum','Zephaniah','Jeremiah','Lamentations','Habakkuk','Ezekiel','Daniel','Ezra','Esther','Nehemiah','Haggai','Zechariah','Malachi','Matthew','Mark','Luke','John','Acts','James','Galatians','1 Thessalonians','2 Thessalonians','1 Corinthians','2 Corinthians','Romans','Ephesians','Philippians','Colossians','Philemon','1 Timothy','Titus','1 Peter','Hebrews','2 Timothy','2 Peter','Jude','1 John','2 John','3 John','Revelation'])
+    ]
+  },
+  mcheyne: {
+    id:'mcheyne', name:"M'Cheyne-Inspired",
+    description:"Inspired by Robert Murray M'Cheyne's famous 19th-century plan: four parallel tracks so you read across the whole Bible at once. Two tracks split the Old Testament (read once), and two tracks both cover the New Testament plus Psalms (so those get read twice as often) — approximated here at the book level rather than following his exact daily calendar.",
+    categories:[
+      makeCategory('mcheyne_ot1','OT: Law & History','#7a4b2e',['Genesis','Exodus','Leviticus','Numbers','Deuteronomy','Joshua','Judges','Ruth','1 Samuel','2 Samuel','1 Kings','2 Kings','1 Chronicles','2 Chronicles','Ezra','Nehemiah','Esther']),
+      makeCategory('mcheyne_ot2','OT: Wisdom & Prophets','#8a3d5c',['Job','Proverbs','Ecclesiastes','Song of Solomon','Isaiah','Jeremiah','Lamentations','Ezekiel','Daniel','Hosea','Joel','Amos','Obadiah','Jonah','Micah','Nahum','Habakkuk','Zephaniah','Haggai','Zechariah','Malachi']),
+      makeCategory('mcheyne_nt1','NT & Psalms I','#2f6b4f',['Psalms','Matthew','Mark','Luke','John','Acts','Romans','1 Corinthians','2 Corinthians','Galatians','Ephesians','Philippians','Colossians','1 Thessalonians','2 Thessalonians','1 Timothy','2 Timothy','Titus','Philemon','Hebrews','James','1 Peter','2 Peter','1 John','2 John','3 John','Jude','Revelation']),
+      makeCategory('mcheyne_nt2','NT & Psalms II','#3d6b8a',['Psalms','Matthew','Mark','Luke','John','Acts','Romans','1 Corinthians','2 Corinthians','Galatians','Ephesians','Philippians','Colossians','1 Thessalonians','2 Thessalonians','1 Timothy','2 Timothy','Titus','Philemon','Hebrews','James','1 Peter','2 Peter','1 John','2 John','3 John','Jude','Revelation'])
+    ]
   }
 };
 
@@ -267,8 +307,12 @@ const STORAGE_KEY = 'bibleReadingTrackerState_v1';
 const AUTH_CHOICE_KEY = 'bibleReadingTrackerAuthChoice_v1';
 const CLIENT_ID = 'c' + Math.random().toString(36).slice(2) + Date.now().toString(36);
 
+const JOURNAL_TAGS = ['prophetic','prayer','revelation'];
+const JOURNAL_TAG_LABELS = { prophetic:'Prophetic', prayer:'Prayer', revelation:'Revelation' };
+const JOURNAL_TAG_COLORS = { prophetic:'#6b4f8a', prayer:'#3d6b8a', revelation:'#b8860b' };
+
 function defaultState(){
-  return { cursors:{}, cycles:{}, log:[], plan:null };
+  return { cursors:{}, cycles:{}, log:[], plan:null, journal:[] };
 }
 function loadState(){
   try{
@@ -279,7 +323,8 @@ function loadState(){
       cursors: parsed.cursors || {},
       cycles: parsed.cycles || {},
       log: Array.isArray(parsed.log) ? parsed.log : [],
-      plan: parsed.plan || null
+      plan: parsed.plan || null,
+      journal: Array.isArray(parsed.journal) ? parsed.journal : []
     };
   }catch(e){ return defaultState(); }
 }
@@ -313,6 +358,8 @@ let state = loadState();
 let activeTab = 'today';
 let selectedDate = todayStr();
 let deferredInstallPrompt = null;
+let journalFilter = 'all'; // 'all' | 'prophetic' | 'prayer' | 'revelation'
+let journalDraftTag = JOURNAL_TAGS[0];
 
 function todayStr(){
   const d = new Date();
@@ -384,6 +431,27 @@ function undoLast(catId){
   saveState(); render();
 }
 
+/* ---------------- Journal ---------------- */
+function addJournalEntry(date, tag, content, title){
+  if(!JOURNAL_TAGS.includes(tag)) tag = 'prayer';
+  const entry = {
+    id: 'j' + Math.random().toString(36).slice(2,9) + Date.now().toString(36),
+    date, tag,
+    title: (title||'').trim(),
+    content: (content||'').trim(),
+    ts: Date.now()
+  };
+  state.journal.push(entry);
+  saveState(); render();
+}
+function deleteJournalEntry(id){
+  state.journal = state.journal.filter(e=>e.id!==id);
+  saveState(); render();
+}
+function journalSorted(){
+  return state.journal.slice().sort((a,b)=> a.date===b.date ? b.ts-a.ts : (a.date < b.date ? 1 : -1));
+}
+
 /* ---------------- Book stats for dashboard ---------------- */
 function bookStats(cat){
   const idx = state.cursors[cat.id]||0;
@@ -419,6 +487,7 @@ function shouldShowGate(){
 function continueAsGuest(){
   localStorage.setItem(AUTH_CHOICE_KEY, 'guest');
   forceShowGate = false;
+  activeTab = 'today';
   render();
 }
 function friendlyAuthError(err){
@@ -497,10 +566,12 @@ function initFirebase(){
     fbDb = firebase.firestore();
     fbReady = true;
     fbAuth.onAuthStateChanged(user => {
+      const wasSignedOut = !currentUser;
       currentUser = (user && !user.isAnonymous) ? user : null;
       if(currentUser){
         forceShowGate = false;
         localStorage.removeItem(AUTH_CHOICE_KEY); // an account now exists, so a stale guest-mode choice shouldn't linger
+        if(wasSignedOut) activeTab = 'today'; // every fresh login/signup should land on Today, not wherever the tab happened to be left (e.g. Account, right where Log out lives)
         fbFirstSnapshotHandled = false;
         subscribeToUserDoc();
       } else if(fbUnsub){
@@ -553,7 +624,8 @@ function subscribeToUserDoc(){
       cursors: data.cursors || {},
       cycles: data.cycles || {},
       log: data.log || [],
-      plan: data.plan || null
+      plan: data.plan || null,
+      journal: Array.isArray(data.journal) ? data.journal : []
     };
     saveState({skipSync:true});
     syncStatus='synced'; lastSyncedAt=Date.now();
@@ -567,7 +639,7 @@ function pushStateNow(docRefOverride){
   if(!fbDb || !currentUser) return;
   const docRef = docRefOverride || fbDb.collection('userProgress').doc(currentUser.uid);
   docRef.set({
-    cursors: state.cursors, cycles: state.cycles, log: state.log, plan: state.plan,
+    cursors: state.cursors, cycles: state.cycles, log: state.log, plan: state.plan, journal: state.journal,
     _writerId: CLIENT_ID, _updatedAt: Date.now()
   }).catch(err=>{ syncStatus='error'; syncMessage=err.message; render(); });
 }
@@ -669,6 +741,7 @@ function render(){
     ${renderTabs()}
     ${activeTab==='today' ? renderToday() : ''}
     ${activeTab==='log' ? renderLog() : ''}
+    ${activeTab==='journal' ? renderJournal() : ''}
     ${activeTab==='dashboard' ? renderDashboard() : ''}
     ${activeTab==='account' ? renderAccountTab() : ''}
     ${renderFooter()}
@@ -835,7 +908,7 @@ function renderAuthGate(){
   return `
   <div class="auth-wrap">
     <div class="auth-brand">
-      <div class="name">Bible Reading Tracker</div>
+      <div class="name">Cultivate</div>
       <div class="tag">Design a reading plan that fits you — one chapter at a time.</div>
     </div>
     <div class="settings-box" style="max-width:none;">
@@ -927,7 +1000,7 @@ function renderHeader(){
   return `
   <header class="top">
     <div>
-      <h1>Bible Reading Tracker</h1>
+      <h1>Cultivate</h1>
       <div class="sub">${planName} &middot; ${ACTIVE_CATEGORIES.length} categories &middot; ${totalComplete} chapters logged all-time${currentUser ? ' &middot; ' + currentUser.email : ''}</div>
       <div>${syncPillHtml()}</div>
     </div>
@@ -939,7 +1012,7 @@ function renderHeader(){
 }
 
 function renderTabs(){
-  const tabs = [['today','Today'],['log','Log'],['dashboard','Dashboard'],['account','Account']];
+  const tabs = [['today','Today'],['log','Log'],['journal','Journal'],['dashboard','Dashboard'],['account','Account']];
   return `<nav class="tabs">
     ${tabs.map(([id,label])=>`<button data-tab="${id}" class="${activeTab===id?'active':''}">${label}</button>`).join('')}
   </nav>`;
@@ -1026,6 +1099,73 @@ function renderLog(){
         </div>
       </details>`;
   }).join('');
+}
+
+function journalTagPill(tag){
+  return `<span class="journal-tag" style="background:${JOURNAL_TAG_COLORS[tag]}1a; color:${JOURNAL_TAG_COLORS[tag]};">${JOURNAL_TAG_LABELS[tag]}</span>`;
+}
+
+function renderJournal(){
+  const formHtml = `
+    <div class="settings-box journal-form">
+      <h3>New entry</h3>
+      <div style="display:flex; gap:12px; flex-wrap:wrap; margin-bottom:12px;">
+        <div>
+          <label style="font-size:0.8rem; font-weight:600; display:block; margin-bottom:4px;">Date</label>
+          <input type="date" id="journalDate" value="${todayStr()}" max="${todayStr()}">
+        </div>
+        <div>
+          <label style="font-size:0.8rem; font-weight:600; display:block; margin-bottom:4px;">Tag</label>
+          <div class="journal-tag-picker">
+            ${JOURNAL_TAGS.map(t=>`<button type="button" class="journal-tag-btn ${t===journalDraftTag?'selected':''}" data-tag="${t}" style="--tc:${JOURNAL_TAG_COLORS[t]}">${JOURNAL_TAG_LABELS[t]}</button>`).join('')}
+          </div>
+        </div>
+      </div>
+      <input type="text" id="journalTitle" placeholder="Title (optional)" style="width:100%; padding:9px 10px; border:1px solid var(--line); border-radius:8px; margin-bottom:10px; font-size:0.9rem; font-family:inherit;">
+      <textarea id="journalContent" placeholder="What happened? What did you sense, pray, or receive?" rows="4" style="width:100%; padding:9px 10px; border:1px solid var(--line); border-radius:8px; margin-bottom:10px; font-size:0.9rem; font-family:inherit; resize:vertical;"></textarea>
+      <button class="btn primary" id="saveJournalBtn">Save entry</button>
+    </div>`;
+
+  const entries = journalSorted().filter(e => journalFilter==='all' || e.tag===journalFilter);
+  const filterHtml = `
+    <div class="toolbar" style="margin-top:24px;">
+      <span style="font-size:0.85rem; color:var(--ink-soft);">Timeline:</span>
+      ${['all',...JOURNAL_TAGS].map(t=>`<button class="btn small ${journalFilter===t?'primary':''}" data-journal-filter="${t}">${t==='all'?'All':JOURNAL_TAG_LABELS[t]}</button>`).join('')}
+    </div>`;
+
+  if(!entries.length){
+    return formHtml + filterHtml + `<div class="empty-note">${state.journal.length ? 'No entries match this filter.' : 'No journal entries yet — add your first one above.'}</div>`;
+  }
+
+  const groups = {};
+  entries.forEach(e=>{
+    const ym = e.date.slice(0,7);
+    (groups[ym] = groups[ym]||[]).push(e);
+  });
+  const ymKeys = Object.keys(groups).sort().reverse();
+  const monthName = ym => {
+    const [y,m] = ym.split('-').map(Number);
+    return new Date(y, m-1, 1).toLocaleDateString(undefined,{month:'long', year:'numeric'});
+  };
+  const timelineHtml = ymKeys.map((ym,i)=>{
+    const items = groups[ym].map(e=>`
+      <div class="journal-entry">
+        <div class="journal-entry-head">
+          <span class="journal-date">${fmtDate(e.date)}</span>
+          ${journalTagPill(e.tag)}
+          <button class="btn small danger" data-delete-journal="${e.id}" style="margin-left:auto;">Delete</button>
+        </div>
+        ${e.title ? `<div class="journal-title">${e.title}</div>` : ''}
+        ${e.content ? `<div class="journal-content">${e.content.replace(/\n/g,'<br>')}</div>` : ''}
+      </div>`).join('');
+    return `
+      <details class="month-group" ${i===0?'open':''}>
+        <summary>${monthName(ym)} <span style="color:var(--ink-soft); font-weight:500;">${groups[ym].length} entr${groups[ym].length===1?'y':'ies'}</span></summary>
+        <div style="padding:0 16px 12px;">${items}</div>
+      </details>`;
+  }).join('');
+
+  return formHtml + filterHtml + `<div style="margin-top:14px;">${timelineHtml}</div>`;
 }
 
 function renderDashboard(){
@@ -1132,6 +1272,34 @@ function attachEvents(){
   const backBtn = document.getElementById('backToToday');
   if(backBtn){ backBtn.addEventListener('click', ()=>{ selectedDate = todayStr(); render(); }); }
 
+  document.querySelectorAll('.journal-tag-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      journalDraftTag = btn.dataset.tag;
+      document.querySelectorAll('.journal-tag-btn').forEach(b=>b.classList.toggle('selected', b===btn));
+    });
+  });
+  const saveJournalBtn = document.getElementById('saveJournalBtn');
+  if(saveJournalBtn){
+    saveJournalBtn.addEventListener('click', ()=>{
+      const dateEl = document.getElementById('journalDate');
+      const titleEl = document.getElementById('journalTitle');
+      const contentEl = document.getElementById('journalContent');
+      const date = (dateEl && dateEl.value) || todayStr();
+      const content = contentEl ? contentEl.value : '';
+      const title = titleEl ? titleEl.value : '';
+      if(!content.trim() && !title.trim()){ alert('Add a title or some content before saving.'); return; }
+      addJournalEntry(date, journalDraftTag, content, title);
+    });
+  }
+  document.querySelectorAll('[data-journal-filter]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{ journalFilter = btn.dataset.journalFilter; render(); });
+  });
+  document.querySelectorAll('[data-delete-journal]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      if(confirm('Delete this journal entry?')) deleteJournalEntry(btn.dataset.deleteJournal);
+    });
+  });
+
   const exportBtn = document.getElementById('exportBtn');
   if(exportBtn){
     exportBtn.addEventListener('click', ()=>{
@@ -1161,7 +1329,8 @@ function attachEvents(){
               cursors: parsed.cursors || {},
               cycles: parsed.cycles || {},
               log: parsed.log,
-              plan: parsed.plan || null
+              plan: parsed.plan || null,
+              journal: Array.isArray(parsed.journal) ? parsed.journal : []
             };
             saveState(); render();
           }
