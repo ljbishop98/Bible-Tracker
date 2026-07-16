@@ -888,6 +888,7 @@ let friendsUnsub = null;
 let friendRequestEmail = '';
 let friendRequestError = '';
 let friendRequestBusy = false;
+let friendRequestSent = false;
 
 function ensureEmailIndex(){
   if(!fbDb || !currentUser || !currentUser.email) return;
@@ -927,23 +928,30 @@ function subscribeFriends(){
     }, err=>{ console.warn('friends listener error', err); });
 }
 function sendFriendRequest(email){
-  friendRequestError = ''; friendRequestBusy = true; render();
+  friendRequestError = ''; friendRequestSent = false; friendRequestBusy = true; render();
   const key = sanitizeEmailKey(email);
+  // Single chained promise all the way through, so ANY failure at ANY step — including ones
+  // that used to be an orphaned inner .then() with no .catch() — reliably lands in the one
+  // .catch() at the bottom instead of leaving the button stuck on "Sending…" forever.
   fbDb.collection('emailIndex').doc(key).get().then(doc=>{
-    if(!doc.exists){ friendRequestError = 'No Cultivate account found with that email.'; friendRequestBusy=false; render(); return; }
+    if(!doc.exists) throw { message: 'No Cultivate account found with that email. Have they opened Cultivate and signed in at least once?' };
     const targetUid = doc.data().uid;
-    if(targetUid === currentUser.uid){ friendRequestError = "That's your own email."; friendRequestBusy=false; render(); return; }
+    if(targetUid === currentUser.uid) throw { message: "That's your own email." };
     const linkId = friendLinkId(currentUser.uid, targetUid);
     const ref = fbDb.collection('friendLinks').doc(linkId);
-    ref.get().then(existing=>{
-      if(existing.exists){ friendRequestError = 'You already have a connection (or pending request) with this person.'; friendRequestBusy=false; render(); return; }
-      ref.set({
+    return ref.get().then(existing=>{
+      if(existing.exists) throw { message: 'You already have a connection (or pending request) with this person.' };
+      return ref.set({
         userIds: [currentUser.uid, targetUid].sort(),
         status:'pending', requestedBy: currentUser.uid, createdAt: Date.now()
-      }).then(()=>{ friendRequestBusy=false; friendRequestEmail=''; render(); })
-        .catch(err=>{ friendRequestError = err.message; friendRequestBusy=false; render(); });
+      });
     });
-  }).catch(err=>{ friendRequestError = err.message; friendRequestBusy=false; render(); });
+  }).then(()=>{
+    friendRequestBusy = false; friendRequestEmail = ''; friendRequestSent = true; render();
+  }).catch(err=>{
+    friendRequestError = (err && err.message) || 'Something went wrong sending that request — check your connection and try again.';
+    friendRequestBusy = false; render();
+  });
 }
 function acceptFriendRequest(linkId){
   fbDb.collection('friendLinks').doc(linkId).set({ status:'accepted' }, { merge:true }).catch(()=>{});
@@ -1567,6 +1575,7 @@ function renderFriends(){
       <h3>Add a friend</h3>
       <p style="font-size:0.85rem; color:var(--ink-soft);">Enter the email they use for their Cultivate account. We only ever share your name, last-active date, and current plan &mdash; never your journal or reading log.</p>
       ${friendRequestError ? `<div class="auth-error">${friendRequestError}</div>` : ''}
+      ${friendRequestSent ? `<p style="font-size:0.85rem; color:var(--good);">&#10003; Request sent — it'll show up for them under "Requests waiting on you."</p>` : ''}
       <div style="display:flex; gap:8px; flex-wrap:wrap;">
         <input type="email" id="friendEmailInput" placeholder="friend@example.com" value="${friendRequestEmail}" style="flex:1; min-width:220px; padding:9px 10px; border:1px solid var(--line); border-radius:8px; font-size:0.9rem; font-family:inherit;">
         <button class="btn primary" id="sendFriendReqBtn" ${friendRequestBusy?'disabled':''}>${friendRequestBusy?'Sending…':'Send request'}</button>
