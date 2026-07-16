@@ -1,11 +1,11 @@
-// Bible Reading Tracker — service worker
+// Cultivate — service worker
 // Caches the app shell so it launches instantly and works offline once installed.
 //
 // IMPORTANT: bump CACHE_NAME any time the list of cached files changes, and it's good practice
 // to bump it on any meaningful release even if this list doesn't change — browsers only notice
 // a service worker update when the sw.js file's bytes change, so changing this string is what
 // makes browsers pick up new files at all.
-const CACHE_NAME = 'bible-tracker-v2';
+const CACHE_NAME = 'cultivate-v3';
 const APP_SHELL = [
   './',
   './index.html',
