@@ -210,6 +210,53 @@ function bookObj(bookName){ return {name: bookName, chapters: chaptersFor(bookNa
 
 const COLOR_PALETTE = ['#7a4b2e','#8a5a2b','#2f6b4f','#3d6b8a','#4a5f8a','#8a3d5c','#a34b3e','#6b4f8a','#b8860b','#5c5248','#4b6b3a','#6b3a5c'];
 
+/* ---------------- Deep links to Bible apps/sites (verified URL formats) ---------------- */
+const READING_APPS = {
+  biblegateway: { id:'biblegateway', label:'Bible Gateway', note:'Opens in your browser — works everywhere.' },
+  youversion:   { id:'youversion',   label:'YouVersion',     note:'Opens in your browser, auto-switches to the YouVersion app if installed.' },
+  blb:          { id:'blb',          label:'Blue Letter Bible', note:'Opens in your browser (King James Version).' },
+  olivetree:    { id:'olivetree',    label:'Olive Tree',     note:'Requires the Olive Tree app installed — no web fallback if it isn\'t.' }
+};
+// Uppercase 3-letter USFM codes YouVersion (bible.com) uses in its passage URLs.
+const YOUVERSION_BOOK_CODES = {
+  'Genesis':'GEN','Exodus':'EXO','Leviticus':'LEV','Numbers':'NUM','Deuteronomy':'DEU','Joshua':'JOS','Judges':'JDG','Ruth':'RUT',
+  '1 Samuel':'1SA','2 Samuel':'2SA','1 Kings':'1KI','2 Kings':'2KI','1 Chronicles':'1CH','2 Chronicles':'2CH','Ezra':'EZR','Nehemiah':'NEH','Esther':'EST',
+  'Job':'JOB','Psalms':'PSA','Proverbs':'PRO','Ecclesiastes':'ECC','Song of Solomon':'SNG',
+  'Isaiah':'ISA','Jeremiah':'JER','Lamentations':'LAM','Ezekiel':'EZK','Daniel':'DAN',
+  'Hosea':'HOS','Joel':'JOL','Amos':'AMO','Obadiah':'OBA','Jonah':'JON','Micah':'MIC','Nahum':'NAM','Habakkuk':'HAB','Zephaniah':'ZEP','Haggai':'HAG','Zechariah':'ZEC','Malachi':'MAL',
+  'Matthew':'MAT','Mark':'MRK','Luke':'LUK','John':'JHN','Acts':'ACT',
+  'Romans':'ROM','1 Corinthians':'1CO','2 Corinthians':'2CO','Galatians':'GAL','Ephesians':'EPH','Philippians':'PHP','Colossians':'COL',
+  '1 Thessalonians':'1TH','2 Thessalonians':'2TH','1 Timothy':'1TI','2 Timothy':'2TI','Titus':'TIT','Philemon':'PHM','Hebrews':'HEB',
+  'James':'JAS','1 Peter':'1PE','2 Peter':'2PE','1 John':'1JN','2 John':'2JN','3 John':'3JN','Jude':'JUD','Revelation':'REV'
+};
+// Lowercase 3-letter codes Blue Letter Bible uses — several diverge from YouVersion's (verified directly).
+const BLB_BOOK_CODES = {
+  'Genesis':'gen','Exodus':'exo','Leviticus':'lev','Numbers':'num','Deuteronomy':'deu','Joshua':'jos','Judges':'jdg','Ruth':'rth',
+  '1 Samuel':'1sa','2 Samuel':'2sa','1 Kings':'1ki','2 Kings':'2ki','1 Chronicles':'1ch','2 Chronicles':'2ch','Ezra':'ezr','Nehemiah':'neh','Esther':'est',
+  'Job':'job','Psalms':'psa','Proverbs':'pro','Ecclesiastes':'ecc','Song of Solomon':'sng',
+  'Isaiah':'isa','Jeremiah':'jer','Lamentations':'lam','Ezekiel':'eze','Daniel':'dan',
+  'Hosea':'hos','Joel':'joe','Amos':'amo','Obadiah':'oba','Jonah':'jon','Micah':'mic','Nahum':'nah','Habakkuk':'hab','Zephaniah':'zep','Haggai':'hag','Zechariah':'zec','Malachi':'mal',
+  'Matthew':'mat','Mark':'mar','Luke':'luk','John':'joh','Acts':'act',
+  'Romans':'rom','1 Corinthians':'1co','2 Corinthians':'2co','Galatians':'gal','Ephesians':'eph','Philippians':'phi','Colossians':'col',
+  '1 Thessalonians':'1th','2 Thessalonians':'2th','1 Timothy':'1ti','2 Timothy':'2ti','Titus':'tit','Philemon':'phm','Hebrews':'heb',
+  'James':'jam','1 Peter':'1pe','2 Peter':'2pe','1 John':'1jo','2 John':'2jo','3 John':'3jo','Jude':'jud','Revelation':'rev'
+};
+function buildReadingLink(appId, bookName, chapter){
+  if(appId === 'youversion'){
+    const code = YOUVERSION_BOOK_CODES[bookName];
+    return code ? `https://www.bible.com/bible/59/${code}.${chapter}.ESV` : null;
+  }
+  if(appId === 'blb'){
+    const code = BLB_BOOK_CODES[bookName];
+    return code ? `https://www.blueletterbible.org/kjv/${code}/${chapter}/1/` : null;
+  }
+  if(appId === 'olivetree'){
+    return `olivetree://bible/${encodeURIComponent(bookName)}.${chapter}.1`;
+  }
+  // default: Bible Gateway — takes plain book names, no lookup table needed.
+  return `https://www.biblegateway.com/passage/?search=${encodeURIComponent(bookName + ' ' + chapter)}&version=ESV`;
+}
+
 function makeCategory(id, name, color, bookNames){
   return { id, name, color, books: bookNames.map(bookObj) };
 }
@@ -312,7 +359,7 @@ const JOURNAL_TAG_LABELS = { prophetic:'Prophetic', prayer:'Prayer', revelation:
 const JOURNAL_TAG_COLORS = { prophetic:'#6b4f8a', prayer:'#3d6b8a', revelation:'#b8860b' };
 
 function defaultState(){
-  return { cursors:{}, cycles:{}, log:[], plan:null, journal:[] };
+  return { cursors:{}, cycles:{}, log:[], plan:null, journal:[], readingApp:'biblegateway' };
 }
 function loadState(){
   try{
@@ -324,7 +371,8 @@ function loadState(){
       cycles: parsed.cycles || {},
       log: Array.isArray(parsed.log) ? parsed.log : [],
       plan: parsed.plan || null,
-      journal: Array.isArray(parsed.journal) ? parsed.journal : []
+      journal: Array.isArray(parsed.journal) ? parsed.journal : [],
+      readingApp: READING_APPS[parsed.readingApp] ? parsed.readingApp : 'biblegateway'
     };
   }catch(e){ return defaultState(); }
 }
@@ -360,6 +408,7 @@ let selectedDate = todayStr();
 let deferredInstallPrompt = null;
 let journalFilter = 'all'; // 'all' | 'prophetic' | 'prayer' | 'revelation'
 let journalDraftTag = JOURNAL_TAGS[0];
+let feedbackType = 'suggestion'; // 'suggestion' | 'bug'
 
 function todayStr(){
   const d = new Date();
@@ -450,6 +499,29 @@ function deleteJournalEntry(id){
 }
 function journalSorted(){
   return state.journal.slice().sort((a,b)=> a.date===b.date ? b.ts-a.ts : (a.date < b.date ? 1 : -1));
+}
+
+/* ---------------- Reading app preference ---------------- */
+function setReadingApp(appId){
+  if(!READING_APPS[appId]) return;
+  state.readingApp = appId;
+  saveState(); render();
+}
+
+/* ---------------- Feedback (bug reports / suggestions) ---------------- */
+let feedbackStatus = 'idle'; // idle | sending | sent | error
+function submitFeedback(type, message, email){
+  if(!message || !message.trim()){ return; }
+  if(!fbDb){ feedbackStatus = 'error'; render(); return; }
+  feedbackStatus = 'sending'; render();
+  fbDb.collection('feedback').add({
+    type: (type === 'bug' ? 'bug' : 'suggestion'),
+    message: message.trim(),
+    email: (email||'').trim() || (currentUser ? currentUser.email : ''),
+    userId: currentUser ? currentUser.uid : null,
+    createdAt: Date.now()
+  }).then(()=>{ feedbackStatus = 'sent'; render(); })
+    .catch(()=>{ feedbackStatus = 'error'; render(); });
 }
 
 /* ---------------- Book stats for dashboard ---------------- */
@@ -625,7 +697,8 @@ function subscribeToUserDoc(){
       cycles: data.cycles || {},
       log: data.log || [],
       plan: data.plan || null,
-      journal: Array.isArray(data.journal) ? data.journal : []
+      journal: Array.isArray(data.journal) ? data.journal : [],
+      readingApp: READING_APPS[data.readingApp] ? data.readingApp : 'biblegateway'
     };
     saveState({skipSync:true});
     syncStatus='synced'; lastSyncedAt=Date.now();
@@ -639,7 +712,7 @@ function pushStateNow(docRefOverride){
   if(!fbDb || !currentUser) return;
   const docRef = docRefOverride || fbDb.collection('userProgress').doc(currentUser.uid);
   docRef.set({
-    cursors: state.cursors, cycles: state.cycles, log: state.log, plan: state.plan, journal: state.journal,
+    cursors: state.cursors, cycles: state.cycles, log: state.log, plan: state.plan, journal: state.journal, readingApp: state.readingApp,
     _writerId: CLIENT_ID, _updatedAt: Date.now()
   }).catch(err=>{ syncStatus='error'; syncMessage=err.message; render(); });
 }
@@ -1043,6 +1116,7 @@ function renderToday(){
         <div class="due">${due.book} ${due.chapter}</div>
         <div class="meta">Next up &middot; cycle ${(state.cycles[cat.id]||0)+1} &middot; ${state.cursors[cat.id]||0}/${cat.total} chapters into this pass</div>
         <div class="actions">
+          <button class="btn" data-read-book="${due.book}" data-read-chapter="${due.chapter}">Read in ${READING_APPS[state.readingApp].label} &rarr;</button>
           <button class="btn primary" data-action="complete" data-cat="${cat.id}">Mark complete</button>
           <button class="btn" data-action="skip" data-cat="${cat.id}">Skip &rarr; next time</button>
           ${lastLogEntry(cat.id) ? `<button class="btn small" data-action="undo" data-cat="${cat.id}">Undo last</button>` : ''}
@@ -1218,6 +1292,33 @@ function renderAccountTab(){
           ? `<p style="font-size:0.85rem; color:var(--bad);">Notifications are blocked for this app in your browser/device settings.</p>`
           : `<button class="btn primary" id="enableRemindersBtn">Enable check-in reminders</button>`}
     </div>`;
+  const readingAppBox = `
+    <div class="settings-box">
+      <h3>Read in your Bible app</h3>
+      <p style="font-size:0.85rem; color:var(--ink-soft);">Choose which app or site the "Read" button on Today's cards should open.</p>
+      <div style="display:flex; flex-direction:column; gap:8px; margin-top:10px;">
+        ${Object.values(READING_APPS).map(a=>`
+          <label style="display:flex; align-items:flex-start; gap:8px; font-size:0.88rem; cursor:pointer;">
+            <input type="radio" name="readingAppChoice" value="${a.id}" ${state.readingApp===a.id?'checked':''} style="margin-top:3px;">
+            <span><strong>${a.label}</strong><br><span style="color:var(--ink-soft); font-size:0.8rem;">${a.note}</span></span>
+          </label>`).join('')}
+      </div>
+    </div>`;
+  const feedbackBox = `
+    <div class="settings-box">
+      <h3>Feedback &amp; bug reports</h3>
+      <p style="font-size:0.85rem; color:var(--ink-soft);">Spot something broken, or have an idea? Let me know &mdash; this goes straight to me, not a support queue.</p>
+      ${feedbackStatus === 'sent' ? `<p style="font-size:0.85rem; color:var(--good);">&#10003; Sent — thank you!</p><button class="btn small" id="feedbackAnotherBtn">Send another</button>` : `
+        <div style="display:flex; gap:14px; margin-bottom:10px;">
+          <label style="font-size:0.85rem; display:flex; align-items:center; gap:5px;"><input type="radio" name="feedbackType" value="suggestion" ${feedbackType==='suggestion'?'checked':''}> Suggestion</label>
+          <label style="font-size:0.85rem; display:flex; align-items:center; gap:5px;"><input type="radio" name="feedbackType" value="bug" ${feedbackType==='bug'?'checked':''}> Bug report</label>
+        </div>
+        <textarea id="feedbackMessage" placeholder="${feedbackType==='bug' ? 'What happened, and what did you expect instead?' : 'What would you like to see added or changed?'}" rows="4" style="width:100%; padding:9px 10px; border:1px solid var(--line); border-radius:8px; margin-bottom:10px; font-size:0.9rem; font-family:inherit; resize:vertical;"></textarea>
+        <input type="email" id="feedbackEmail" placeholder="Your email (optional, in case I follow up)" value="${currentUser ? currentUser.email : ''}" style="width:100%; padding:9px 10px; border:1px solid var(--line); border-radius:8px; margin-bottom:10px; font-size:0.9rem; font-family:inherit;">
+        <button class="btn primary" id="submitFeedbackBtn" ${feedbackStatus==='sending'?'disabled':''}>${feedbackStatus==='sending'?'Sending…':'Send'}</button>
+        ${feedbackStatus==='error' ? `<p style="font-size:0.85rem; color:var(--bad); margin-top:8px;">Couldn't send that — check your connection and try again.</p>` : ''}
+      `}
+    </div>`;
   if(currentUser){
     return `
     <div class="settings-box">
@@ -1227,7 +1328,9 @@ function renderAccountTab(){
       <button class="btn danger" id="logoutBtn">Log out</button>
     </div>
     ${planBox}
-    ${notifBox}`;
+    ${readingAppBox}
+    ${notifBox}
+    ${feedbackBox}`;
   }
   return `
     <div class="settings-box">
@@ -1236,7 +1339,9 @@ function renderAccountTab(){
       <button class="btn primary" id="upgradeAccountBtn">Create an account / log in</button>
     </div>
     ${planBox}
-    ${notifBox}`;
+    ${readingAppBox}
+    ${notifBox}
+    ${feedbackBox}`;
 }
 
 function renderFooter(){
@@ -1250,6 +1355,12 @@ function renderFooter(){
 function attachEvents(){
   document.querySelectorAll('nav.tabs button').forEach(btn=>{
     btn.addEventListener('click', ()=>{ activeTab = btn.dataset.tab; render(); });
+  });
+  document.querySelectorAll('[data-read-book]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const url = buildReadingLink(state.readingApp, btn.dataset.readBook, Number(btn.dataset.readChapter));
+      if(url) window.open(url, '_blank');
+    });
   });
   document.querySelectorAll('[data-action="complete"],[data-action="skip"],[data-action="undo"]').forEach(btn=>{
     btn.addEventListener('click', ()=>{
@@ -1330,7 +1441,8 @@ function attachEvents(){
               cycles: parsed.cycles || {},
               log: parsed.log,
               plan: parsed.plan || null,
-              journal: Array.isArray(parsed.journal) ? parsed.journal : []
+              journal: Array.isArray(parsed.journal) ? parsed.journal : [],
+              readingApp: READING_APPS[parsed.readingApp] ? parsed.readingApp : 'biblegateway'
             };
             saveState(); render();
           }
@@ -1354,6 +1466,24 @@ function attachEvents(){
   if(changePlanBtn) changePlanBtn.addEventListener('click', openPlanChooser);
   const enableRemindersBtn = document.getElementById('enableRemindersBtn');
   if(enableRemindersBtn) enableRemindersBtn.addEventListener('click', enableCheckinReminders);
+  document.querySelectorAll('input[name="readingAppChoice"]').forEach(radio=>{
+    radio.addEventListener('change', ()=>{ if(radio.checked) setReadingApp(radio.value); });
+  });
+  document.querySelectorAll('input[name="feedbackType"]').forEach(radio=>{
+    radio.addEventListener('change', ()=>{ if(radio.checked){ feedbackType = radio.value; render(); } });
+  });
+  const submitFeedbackBtn = document.getElementById('submitFeedbackBtn');
+  if(submitFeedbackBtn){
+    submitFeedbackBtn.addEventListener('click', ()=>{
+      const msgEl = document.getElementById('feedbackMessage');
+      const emailEl = document.getElementById('feedbackEmail');
+      const message = msgEl ? msgEl.value : '';
+      if(!message.trim()){ alert('Add a message before sending.'); return; }
+      submitFeedback(feedbackType, message, emailEl ? emailEl.value : '');
+    });
+  }
+  const feedbackAnotherBtn = document.getElementById('feedbackAnotherBtn');
+  if(feedbackAnotherBtn) feedbackAnotherBtn.addEventListener('click', ()=>{ feedbackStatus = 'idle'; render(); });
   const installBtn = document.getElementById('installBtn');
   if(installBtn){
     installBtn.addEventListener('click', async ()=>{
