@@ -20,7 +20,7 @@ const messaging = firebase.messaging();
 
 // Shown when a check-in reminder arrives while the app isn't in the foreground.
 messaging.onBackgroundMessage((payload) => {
-  const title = (payload.notification && payload.notification.title) || 'Bible Reading Tracker';
+  const title = (payload.notification && payload.notification.title) || 'Cultivate';
   const options = {
     body: (payload.notification && payload.notification.body) || "It's been a few days — no pressure, just a gentle nudge.",
     icon: './icon-192.png',
