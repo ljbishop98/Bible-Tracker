@@ -5,15 +5,23 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>Cultivate</title>
 <script>
-  // Set the light/dark theme attribute as early as possible — before any CSS paints — so there's
-  // no flash of the wrong theme on load. Mirrors the same "auto unless overridden" logic the main
-  // app script uses later (see setThemeMode/applyTheme), duplicated here deliberately since this
-  // has to run synchronously before the big app script has even been parsed.
+  // Set the data-period (morning/noon/night) and data-theme (light/dark) attributes as early as
+  // possible — before any CSS paints — so there's no flash of the wrong palette on load. Mirrors
+  // the same time-adaptive logic the main app script uses later (see computePeriod/applyTheme),
+  // duplicated here deliberately since this has to run synchronously before the big app script has
+  // even been parsed. Old saved 'light'/'dark' modes (from before this was time-adaptive) are
+  // mapped onto their closest equivalent, same migration the main script does.
   (function(){
     try{
       var mode = localStorage.getItem('cultivateThemeMode') || 'auto';
-      var dark = mode === 'dark' || (mode === 'auto' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
-      document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+      if(mode === 'dark') mode = 'night'; else if(mode === 'light') mode = 'auto';
+      var period = mode;
+      if(period === 'auto'){
+        var h = new Date().getHours();
+        period = (h >= 5 && h < 12) ? 'morning' : (h >= 12 && h < 18) ? 'noon' : 'night';
+      }
+      document.documentElement.setAttribute('data-period', period);
+      document.documentElement.setAttribute('data-theme', period === 'night' ? 'dark' : 'light');
     }catch(e){}
   })();
 </script>
@@ -99,6 +107,70 @@
      flat translucent overlay instead and leans on --tile-color for the text/selected fill, which
      works against either background. */
   :root[data-theme="dark"] .book-tile{ background:rgba(255,255,255,0.06); }
+
+  /* ---- Time-adaptive palette (Morning / Noon / Night) ----
+     Psalm 55:17 — "Evening, morning, and at noon, I will pray" — the whole reason this app has a
+     color identity at all is the daily rhythm of turning back to God, so the app itself now shifts
+     through that same rhythm rather than sitting behind one flat, unchanging palette all day. Auto
+     mode (the default) recomputes which of the three is "now" from the device clock; the theme
+     toggle also lets someone pin one of the three deliberately regardless of the actual time.
+     data-period sets the mood (background/accent/glass); data-theme stays in sync as light/dark
+     purely so the couple of pre-existing dark-mode-specific selectors above still behave sanely —
+     night is always dark, morning/noon are always light. Declared AFTER the plain dark block above
+     so a period's values always win whenever both attributes are present on :root at once. */
+  :root[data-period="morning"]{
+    --bg:#fdf3e2;
+    --card:#fffaf0;
+    --ink:#3d2e1c;
+    --ink-soft:#8c7355;
+    --line:#f1decb;
+    --accent:#e0824a;
+    --accent-soft:#fae2ca;
+    --accent2:#7fabc9;
+    --accent2-soft:#e7f0f6;
+    --shadow: 0 1px 3px rgba(90,55,10,0.1), 0 1px 2px rgba(90,55,10,0.07);
+    --card-glass: rgba(255,250,240,0.7);
+  }
+  :root[data-period="noon"]{
+    --bg:#ffffff;
+    --card:#ffffff;
+    --ink:#20242e;
+    --ink-soft:#6d7480;
+    --line:#e2e7ee;
+    --accent:#2f6fb8;
+    --accent-soft:#dde9f6;
+    --accent2:#dba431;
+    --accent2-soft:#faedd0;
+    --shadow: 0 1px 3px rgba(20,30,50,0.08), 0 1px 2px rgba(20,30,50,0.06);
+    --card-glass: rgba(255,255,255,0.68);
+  }
+  :root[data-period="night"]{
+    --bg:#11142a;
+    --card:#1a1e3a;
+    --ink:#e9e6f6;
+    --ink-soft:#9a96c4;
+    --line:#2b2e54;
+    --accent:#9b8ce0;
+    --accent-soft:#2b2557;
+    --good:#7bc98d; --good-soft:#1e3324;
+    --skip:#e0b750; --skip-soft:#3a2f14;
+    --bad:#e08080; --bad-soft:#3a1f1f;
+    --accent2:#6d8fd6;
+    --accent2-soft:#232a52;
+    --shadow: 0 1px 3px rgba(0,0,0,0.5), 0 1px 2px rgba(0,0,0,0.4);
+    --card-glass: rgba(26,30,58,0.7);
+  }
+  /* The mood gradient (check-in icons) and book tiles still need to hold up against whichever
+     period is active, not just plain light/dark — night reuses the same brighter mood stops the
+     old dark theme used (readable against a near-black card); morning/noon keep the base set. */
+  :root[data-period="night"]{
+    --mood1:#9fb3c9; --mood1-soft:#26313d;
+    --mood2:#cdb877; --mood2-soft:#3a331d;
+    --mood3:#8fcf9b; --mood3-soft:#1f3324;
+    --mood4:#e8b164; --mood4-soft:#3a2c1a;
+    --mood5:#e2795e; --mood5-soft:#3a231d;
+  }
+  :root[data-period="night"] .book-tile{ background:rgba(255,255,255,0.06); }
   *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
   /* IMPORTANT: overflow-x:hidden on <html>/<body> themselves is a known trap — combined with
      overscroll-behavior on the same element, some WebKit/Safari versions lose track of which
@@ -1043,6 +1115,7 @@ function icon(name, size){
     close: '<path d="M6 6l12 12M18 6 6 18"/>',
     sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2.5M12 19v2.5M4.5 12H2M22 12h-2.5M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M18.4 5.6l-1.8 1.8M7.4 16.6l-1.8 1.8"/>',
     moon: '<path d="M20 14.3A8.3 8.3 0 1 1 9.7 4 6.7 6.7 0 0 0 20 14.3z"/>',
+    sunrise: '<path d="M4.5 16.2h15"/><path d="M6 16.2a6 6 0 0 1 12 0"/><path d="M12 5.5v3.2M6.9 9l1.7 1.7M17.1 9l-1.7 1.7"/>',
     auto: '<circle cx="12" cy="12" r="8.5"/><path d="M12 3.5v17" stroke-dasharray="0"/><path d="M12 3.5A8.5 8.5 0 0 1 12 20.5z" fill="currentColor" stroke="none"/>',
     check: '<path d="M5 12.5l4.5 4.5L19 7"/>',
     plus: '<path d="M12 5v14M5 12h14"/>',
@@ -1365,7 +1438,7 @@ function renderDialogOverlay(){
 function commandList(){
   return [
     ...ALL_TABS.map(([id,label,iconName])=>({ id:'tab:'+id, label:'Go to '+label, iconName, run: ()=> switchToTab(id) })),
-    { id:'theme', label:'Toggle light/dark theme', iconName:'auto', run: ()=> cycleThemeMode() },
+    { id:'theme', label:'Cycle Morning/Noon/Night theme', iconName:'auto', run: ()=> cycleThemeMode() },
   ];
 }
 function filteredCommands(){
@@ -1490,35 +1563,64 @@ function animateDashboardMetrics(){
   });
 }
 
-/* ---------------- Light/Dark theme ---------------- */
-// 'auto' follows the OS/browser preference; 'light'/'dark' are explicit overrides. A tiny inline
-// script in <head> already applied the theme synchronously before this script even loaded (to
-// avoid a flash of the wrong theme) — this just keeps it in sync with that same logic afterward.
+/* ---------------- Time-adaptive theme (Morning / Noon / Night) ----------------
+   Replaces the old flat light/dark/auto toggle: 'auto' (the default) now means "follow the actual
+   time of day" rather than "follow the OS preference" — the app itself moves through the same
+   morning/noon/night rhythm the check-in language and Consider Him section already lean on
+   (Psalm 55:17). 'morning'/'noon'/'night' are explicit overrides for pinning one mood regardless
+   of the clock. A tiny inline script in <head> already applied both attributes synchronously
+   before this script even loaded (to avoid a flash of the wrong theme) — this keeps it in sync
+   with that same logic afterward, and keeps re-deriving it as time actually passes while the app
+   stays open (see the setInterval below), not just once at load. */
 let themeMode = (function(){ try{ return localStorage.getItem('cultivateThemeMode') || 'auto'; }catch(e){ return 'auto'; } })();
-function effectiveTheme(){
-  if(themeMode === 'light' || themeMode === 'dark') return themeMode;
-  return (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
+// One-time migration: anyone who had the old 'light'/'dark' modes saved gets mapped onto the
+// closest new equivalent (dark -> night, light -> auto) rather than landing on an invalid mode.
+if(themeMode === 'dark') themeMode = 'night';
+else if(themeMode === 'light') themeMode = 'auto';
+function computePeriod(){
+  const h = new Date().getHours();
+  if(h >= 5 && h < 12) return 'morning';
+  if(h >= 12 && h < 18) return 'noon';
+  return 'night';
 }
+function effectivePeriod(){
+  return (themeMode === 'morning' || themeMode === 'noon' || themeMode === 'night') ? themeMode : computePeriod();
+}
+// Night is the only period that's actually dark — kept as its own data-theme:dark/light attribute
+// too (alongside data-period) purely so the couple of existing dark-mode-specific CSS selectors and
+// the Capacitor status bar icon color still behave correctly without needing their own period-aware
+// rewrite.
+function effectiveTheme(){ return effectivePeriod() === 'night' ? 'dark' : 'light'; }
 function applyTheme(){
-  if(document.documentElement) document.documentElement.setAttribute('data-theme', effectiveTheme());
+  if(document.documentElement){
+    document.documentElement.setAttribute('data-theme', effectiveTheme());
+    document.documentElement.setAttribute('data-period', effectivePeriod());
+  }
   syncCapacitorStatusBar();
 }
 function cycleThemeMode(){
-  themeMode = themeMode === 'auto' ? 'light' : themeMode === 'light' ? 'dark' : 'auto';
+  const order = ['auto','morning','noon','night'];
+  themeMode = order[(order.indexOf(themeMode)+1) % order.length];
   try{ localStorage.setItem('cultivateThemeMode', themeMode); }catch(e){}
   applyTheme();
   render();
 }
 applyTheme();
-if(window.matchMedia){
-  const darkMq = window.matchMedia('(prefers-color-scheme: dark)');
-  const onSystemThemeChange = ()=>{ if(themeMode === 'auto') applyTheme(); };
-  if(darkMq.addEventListener) darkMq.addEventListener('change', onSystemThemeChange);
-  else if(darkMq.addListener) darkMq.addListener(onSystemThemeChange); // older Safari
+// Re-derive the active period every few minutes so an app left open across a boundary (say, noon
+// ticking over to night) actually shifts instead of freezing at whatever period it launched in.
+// Guarded the same way the existing date-rollover poller is, since the Node vm sandboxes the test
+// harnesses run in don't provide setInterval.
+if(themeMode === 'auto' && typeof setInterval !== 'undefined'){
+  setInterval(()=>{ if(themeMode === 'auto') applyTheme(); }, 5 * 60000);
+}
+if(typeof document !== 'undefined' && document.addEventListener){
+  document.addEventListener('visibilitychange', ()=>{
+    if(document.visibilityState === 'visible' && themeMode === 'auto') applyTheme();
+  });
 }
 function themeToggleHtml(){
-  const iconNames = { auto:'auto', light:'sun', dark:'moon' };
-  const labels = { auto:'Auto', light:'Light', dark:'Dark' };
+  const iconNames = { auto:'auto', morning:'sunrise', noon:'sun', night:'moon' };
+  const labels = { auto:'Auto', morning:'Morning', noon:'Noon', night:'Night' };
   return `<button type="button" class="theme-toggle" data-set-theme title="Theme: ${labels[themeMode]} (tap to change)">${icon(iconNames[themeMode],16)} ${labels[themeMode]}</button>`;
 }
 
@@ -1551,7 +1653,14 @@ function syncCapacitorStatusBar(){
     // Capacitor's StatusBarStyle: 'Dark' = dark text/icons (for a light bar), 'Light' = light
     // text/icons (for a dark bar) — so a dark app theme needs the "Light" icon style, and vice versa.
     statusBar.setStyle({ style: dark ? 'Light' : 'Dark' });
-    if(statusBar.setBackgroundColor) statusBar.setBackgroundColor({ color: dark ? '#171310' : '#faf7f2' });
+    // Reads the ACTUAL --bg custom property rather than a hardcoded hex pair, since there are now
+    // three period backgrounds (morning/noon/night) instead of just light/dark — this way the
+    // status bar always matches whichever one is actually active without needing its own
+    // period-aware branch here.
+    if(statusBar.setBackgroundColor && typeof getComputedStyle !== 'undefined' && document.documentElement){
+      const bg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim();
+      if(bg) statusBar.setBackgroundColor({ color: bg });
+    }
   }catch(e){}
 }
 // The native splash screen is configured (see capacitor.config.json) to stay up until we
