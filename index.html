@@ -155,30 +155,18 @@
     padding:10px; background:var(--bg);
   }
   .book-tile{
-    position:relative; display:flex; align-items:center; gap:8px;
-    padding:6px 10px 6px 6px; border:1px solid var(--line); border-radius:999px;
-    cursor:pointer; font-size:0.8rem; font-weight:600; color:var(--ink); background:var(--card);
-    transition:border-color .12s ease, background .12s ease, box-shadow .12s ease;
+    position:relative; display:flex; align-items:center; justify-content:center;
+    padding:7px 12px; border-radius:999px; border:1.5px solid transparent;
+    cursor:pointer; font-size:0.8rem; font-weight:700; text-align:center;
+    background:var(--tile-soft, var(--accent-soft)); color:var(--tile-color, var(--accent));
+    transition:background .15s ease, color .15s ease, box-shadow .15s ease, transform .1s ease;
   }
-  .book-tile:hover{border-color:var(--tile-color, var(--accent)); box-shadow:var(--shadow);}
-  .book-tile:has(input:checked){
-    border-color:var(--tile-color, var(--accent)); background:var(--accent-soft); box-shadow:var(--shadow);
-  }
+  .book-tile:hover{box-shadow:var(--shadow); transform:translateY(-1px);}
   .book-tile input{position:absolute; opacity:0; width:0; height:0; margin:0; pointer-events:none;}
-  .book-tile-icon{
-    position:relative; width:22px; height:22px; border-radius:50%; flex-shrink:0;
-    background:var(--tile-color, var(--accent)); color:#fff; font-size:0.68rem; font-weight:700;
-    display:flex; align-items:center; justify-content:center; overflow:hidden;
+  .book-tile:has(input:checked){
+    background:var(--tile-color, var(--accent)); color:#fff; box-shadow:var(--shadow);
   }
-  .book-tile-icon .icon-letter, .book-tile-icon .icon-check{
-    position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
-    transition:opacity .15s ease, transform .15s ease;
-  }
-  .book-tile-icon .icon-check{opacity:0; transform:scale(0.4); font-size:0.8rem;}
-  .book-tile input:checked ~ .book-tile-icon .icon-letter{opacity:0; transform:scale(0.4);}
-  .book-tile input:checked ~ .book-tile-icon .icon-check{opacity:1; transform:scale(1);}
   .book-tile-name{overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
-  .book-tile input:checked ~ .book-tile-name{color:var(--tile-color, var(--accent));}
   .reading-preset-row{display:flex; gap:8px; margin:6px 0 10px; flex-wrap:wrap;}
   .reading-summary-line{font-size:0.82rem; color:var(--ink-soft); margin-top:2px;}
   .book-chip-list{display:flex; flex-wrap:wrap; gap:6px; margin-top:2px;}
@@ -313,14 +301,20 @@ function chaptersFor(bookName){ const b = BOOK_LIBRARY.find(x=>x.name===bookName
 function bookObj(bookName){ return {name: bookName, chapters: chaptersFor(bookName)}; }
 
 const COLOR_PALETTE = ['#7a4b2e','#8a5a2b','#2f6b4f','#3d6b8a','#4a5f8a','#8a3d5c','#a34b3e','#6b4f8a','#b8860b','#5c5248','#4b6b3a','#6b3a5c'];
-// Deterministic color for things that don't have a saved profile color of their own (e.g. group
-// icons) — same name always maps to the same palette entry, so a group's card color stays stable.
-function colorForName(str){
+// A soft/tinted counterpart for each COLOR_PALETTE entry, same index-for-index, the same way
+// --accent pairs with --accent-soft elsewhere in the app — used for pill-style tags (like the
+// book picker) that need a light unselected fill and a solid selected fill of the same hue.
+const COLOR_PALETTE_SOFT = ['#f0e4d4','#f2e6d6','#e1efe7','#e0ecf2','#e4e8f2','#f3e2ea','#f6e5e2','#eae3f2','#faf0d8','#eae6e0','#e5eee0','#f0e2ec'];
+function hashIndex(str, len){
   str = str || '';
   let h = 0;
   for(let i=0;i<str.length;i++){ h = (h*31 + str.charCodeAt(i)) >>> 0; }
-  return COLOR_PALETTE[h % COLOR_PALETTE.length];
+  return h % len;
 }
+// Deterministic color for things that don't have a saved profile color of their own (e.g. group
+// icons, book tags) — same name always maps to the same palette entry, so a card's color stays stable.
+function colorForName(str){ return COLOR_PALETTE[hashIndex(str, COLOR_PALETTE.length)]; }
+function softColorForName(str){ return COLOR_PALETTE_SOFT[hashIndex(str, COLOR_PALETTE_SOFT.length)]; }
 
 // Now that other people's text (group discussion messages, viewed profiles) renders on YOUR
 // screen — not just your own private journal — anything sourced from another user must be
@@ -2489,15 +2483,11 @@ function renderGroupsDirectory(){
 }
 
 function renderGroupCreateForm(){
-  const bookCheckbox = name => {
-    const initial = name.charAt(0).toUpperCase();
-    return `
-    <label class="book-tile" style="--tile-color:${colorForName(name)};">
+  const bookCheckbox = name => `
+    <label class="book-tile" style="--tile-color:${colorForName(name)}; --tile-soft:${softColorForName(name)};">
       <input type="checkbox" data-group-draft-book="${escapeHtml(name)}" ${groupDraftBooks.includes(name)?'checked':''}>
-      <span class="book-tile-icon"><span class="icon-letter">${initial}</span><span class="icon-check">&#10003;</span></span>
       <span class="book-tile-name">${escapeHtml(name)}</span>
     </label>`;
-  };
 
   const fq = bookFilterQuery.trim().toLowerCase();
   const matches = name => !fq || name.toLowerCase().includes(fq);
