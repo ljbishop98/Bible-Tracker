@@ -362,15 +362,23 @@ function defaultState(){
   return {
     cursors:{}, cycles:{}, log:[], plan:null, journal:[], readingApp:'biblegateway',
     memorization:[], extraLog:[], checkins:[],
-    profile:{ displayName:'', bio:'', color: COLOR_PALETTE[0] }
+    profile:{ displayName:'', bio:'', color: COLOR_PALETTE[0], photo:'' }
   };
 }
+// Photos are resized/compressed client-side to a small square thumbnail before ever reaching
+// here (see the profilePhotoInput handler in attachEvents), so 200,000 chars (~150KB, generous
+// for a base64 JPEG this small) is just a sanity ceiling against something going wrong upstream —
+// not the expected size in normal use.
+const PROFILE_PHOTO_MAX_LEN = 200000;
 function sanitizeProfile(p){
   if(!p || typeof p !== 'object') return defaultState().profile;
+  const photo = typeof p.photo === 'string' && p.photo.startsWith('data:image/') && p.photo.length <= PROFILE_PHOTO_MAX_LEN
+    ? p.photo : '';
   return {
     displayName: typeof p.displayName === 'string' ? p.displayName.slice(0,60) : '',
     bio: typeof p.bio === 'string' ? p.bio.slice(0,240) : '',
-    color: typeof p.color === 'string' ? p.color : COLOR_PALETTE[0]
+    color: typeof p.color === 'string' ? p.color : COLOR_PALETTE[0],
+    photo
   };
 }
 function loadState(){
@@ -568,14 +576,38 @@ function deleteExtraReading(id){
 }
 
 /* ---------------- Custom profile ---------------- */
+let profilePhotoError = '';
 function updateProfile(displayName, bio, color){
-  state.profile = sanitizeProfile({ displayName, bio, color });
+  // Spread the existing profile first so saving the name/bio/color form never wipes out
+  // a photo that was uploaded separately.
+  state.profile = sanitizeProfile(Object.assign({}, state.profile, { displayName, bio, color }));
   saveState(); render();
   syncPublicActivity();
   ensureUserDirectory();
 }
+function updateProfilePhoto(dataUrl){
+  state.profile = sanitizeProfile(Object.assign({}, state.profile, { photo: dataUrl }));
+  saveState(); render();
+  syncPublicActivity();
+}
+function removeProfilePhoto(){
+  state.profile = sanitizeProfile(Object.assign({}, state.profile, { photo: '' }));
+  saveState(); render();
+  syncPublicActivity();
+}
 function displayNameOr(fallback){
   return (state.profile && state.profile.displayName) ? state.profile.displayName : fallback;
+}
+// Renders either the user's uploaded photo or a colored circle with their initial — used for
+// the Account tab preview and (via publicActivity's copy of `photo`) the friends list.
+function renderAvatarHtml(profile, size){
+  profile = profile || {};
+  size = size || 40;
+  const initial = ((profile.displayName || '?').trim().charAt(0) || '?').toUpperCase();
+  if(profile.photo){
+    return `<img src="${profile.photo}" alt="" style="width:${size}px; height:${size}px; border-radius:50%; object-fit:cover; display:block; flex-shrink:0;">`;
+  }
+  return `<div style="width:${size}px; height:${size}px; border-radius:50%; background:${profile.color||COLOR_PALETTE[0]}; color:#fff; display:flex; align-items:center; justify-content:center; font-weight:600; font-size:${Math.round(size*0.42)}px; flex-shrink:0;">${initial}</div>`;
 }
 
 /* ---------------- Spiritual temperature check-in ---------------- */
@@ -915,19 +947,29 @@ function syncPublicActivity(){
   const planName = state.plan ? (PRESET_PLANS[state.plan.presetId] ? PRESET_PLANS[state.plan.presetId].name : 'Custom plan') : '';
   fbDb.collection('publicActivity').doc(currentUser.uid).set({
     displayName: displayNameOr(currentUser.email.split('@')[0]),
+    photo: (state.profile && state.profile.photo) || null,
     lastActiveDate: lastActivityDate() || null,
     activeDaysLast30: activeDays,
     planName,
     updatedAt: Date.now()
   }, { merge:true }).catch(()=>{});
 }
+// Names for a PENDING request's other party can't come from publicActivity — that collection
+// is friend-gated (accepted friends only), so reading it for someone you're not yet connected to
+// would just fail. userDirectory is the broadly-readable, name-only collection built for exactly
+// this kind of lookup, so pending incoming/outgoing rows use it instead (no photo there by design —
+// falls back to a colored initial until/unless the request is accepted).
+let friendNameCache = {}; // uid -> displayName, for pending links
+let friendsSubRetryCount = 0;
 function subscribeFriends(){
   if(!fbDb || !currentUser) return;
   if(friendsUnsub) friendsUnsub();
   friendsUnsub = fbDb.collection('friendLinks').where('userIds','array-contains',currentUser.uid)
     .onSnapshot(snap=>{
+      friendsSubRetryCount = 0; // a good snapshot means the connection is healthy again
       friendLinksData = snap.docs.map(d=>({ id:d.id, ...d.data() }));
       const acceptedUids = friendLinksData.filter(l=>l.status==='accepted').map(l=> l.userIds.find(u=>u!==currentUser.uid));
+      const pendingUids = friendLinksData.filter(l=>l.status==='pending').map(l=> l.userIds.find(u=>u!==currentUser.uid));
       acceptedUids.forEach(uid=>{
         if(!friendActivityCache[uid]){
           fbDb.collection('publicActivity').doc(uid).get().then(doc=>{
@@ -936,8 +978,28 @@ function subscribeFriends(){
           }).catch(()=>{});
         }
       });
+      pendingUids.forEach(uid=>{
+        if(!friendNameCache[uid]){
+          fbDb.collection('userDirectory').doc(uid).get().then(doc=>{
+            friendNameCache[uid] = doc.exists ? doc.data().displayName : '(unknown)';
+            render();
+          }).catch(()=>{});
+        }
+      });
       render();
-    }, err=>{ console.warn('friends listener error', err); });
+    }, err=>{
+      console.warn('friends listener error', err);
+      // Without this, a single transient error (a permission hiccup, a brief network drop, the
+      // kind of thing that can happen mid-way through changing Firestore data) kills this listener
+      // PERMANENTLY for the rest of the session — Firestore does not auto-retry a failed onSnapshot,
+      // and nothing was re-subscribing, so requests/friends would silently stop updating until the
+      // user manually reloaded the page. Retry with backoff instead, capped so a persistent problem
+      // (e.g. a genuine rules issue) doesn't retry forever.
+      if(friendsSubRetryCount < 5 && currentUser){
+        friendsSubRetryCount++;
+        setTimeout(()=>{ if(currentUser) subscribeFriends(); }, 2000 * friendsSubRetryCount);
+      }
+    });
 }
 // Shared core: create the pending link doc once we already know the target uid.
 function createFriendLink(targetUid){
@@ -997,6 +1059,35 @@ let friendSearchResults = [];
 let friendSearchBusy = false;
 let friendSearchToken = 0;
 let friendSearchDebounce = null;
+const FRIEND_SEARCH_LIMIT = 10;
+
+// Firestore can only do prefix-range queries efficiently (">= q" / "<= q+"), which means
+// typing "jo" would find "John" but never "Marjorie" — real substring/"contains" search has to
+// happen client-side. The user base is still small, so the simplest reliable approach is to cache
+// the whole (name-only, non-sensitive) userDirectory in memory and filter it in JS on every
+// keystroke — instant results, true partial matching, and zero extra Firestore reads per character
+// typed. Re-fetched at most once a minute, or whenever it's actually needed again after that.
+let friendDirectoryCache = [];
+let friendDirectoryCacheAt = 0;
+let friendDirectoryLoading = null; // in-flight promise, so parallel callers share one fetch
+function loadFriendDirectory(force){
+  if(!fbDb || !currentUser) return Promise.resolve();
+  const FRESH_MS = 60000;
+  if(!force && friendDirectoryCache.length && (Date.now() - friendDirectoryCacheAt) < FRESH_MS){
+    return Promise.resolve();
+  }
+  if(friendDirectoryLoading) return friendDirectoryLoading;
+  friendDirectoryLoading = fbDb.collection('userDirectory').limit(500).get().then(snap=>{
+    friendDirectoryCache = snap.docs.map(d=>{
+      const data = d.data();
+      const displayName = data.displayName || '';
+      return { uid: d.id, displayName, displayNameLower: data.displayNameLower || displayName.toLowerCase() };
+    });
+    friendDirectoryCacheAt = Date.now();
+    friendDirectoryLoading = null;
+  }).catch(()=>{ friendDirectoryLoading = null; });
+  return friendDirectoryLoading;
+}
 function searchFriends(queryText){
   friendSearchQuery = queryText;
   const q = queryText.trim();
@@ -1018,11 +1109,20 @@ function searchFriends(queryText){
   }
   const qLower = q.toLowerCase();
   tasks.push(
-    fbDb.collection('userDirectory')
-      .where('displayNameLower','>=',qLower).where('displayNameLower','<=',qLower+'')
-      .limit(15).get()
-      .then(snap=> snap.docs.map(d=>({ uid:d.id, displayName:d.data().displayName })))
-      .catch(()=>[])
+    loadFriendDirectory().then(()=>{
+      const scored = [];
+      friendDirectoryCache.forEach(entry=>{
+        if(entry.uid === currentUser.uid) return;
+        const idx = entry.displayNameLower.indexOf(qLower);
+        if(idx === -1) return;
+        // Names starting with what was typed rank above names that merely contain it somewhere
+        // in the middle; shorter names break ties (they're closer to an exact match).
+        const score = (idx === 0 ? 0 : 1000) + entry.displayName.length;
+        scored.push({ uid: entry.uid, displayName: entry.displayName, score });
+      });
+      scored.sort((a,b)=> a.score - b.score);
+      return scored.slice(0, FRIEND_SEARCH_LIMIT).map(r=>({ uid:r.uid, displayName:r.displayName }));
+    })
   );
   Promise.all(tasks).then(resultsArrays=>{
     if(myToken !== friendSearchToken) return; // a newer keystroke already superseded this search
@@ -1030,7 +1130,7 @@ function searchFriends(queryText){
     resultsArrays.flat().filter(Boolean).forEach(r=>{
       if(r.uid !== currentUser.uid && !seen.has(r.uid)){ seen.add(r.uid); merged.push(r); }
     });
-    friendSearchResults = merged;
+    friendSearchResults = merged.slice(0, FRIEND_SEARCH_LIMIT);
     friendSearchBusy = false;
     render();
   });
@@ -1681,7 +1781,7 @@ function renderFriends(){
     else actionHtml = `<button class="btn small primary" data-friend-send-uid="${r.uid}">Send request</button>`;
     return `
       <div style="display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid var(--line);">
-        <span style="font-size:0.9rem;">${r.displayName}</span>
+        <span style="display:flex; align-items:center; gap:10px; font-size:0.9rem;">${renderAvatarHtml({displayName:r.displayName}, 32)}${r.displayName}</span>
         ${actionHtml}
       </div>`;
   };
@@ -1703,14 +1803,18 @@ function renderFriends(){
   const incomingHtml = `
     <div class="settings-box">
       <h3>Requests received (${incoming.length})</h3>
-      ${incoming.length ? incoming.map(l=>`
+      ${incoming.length ? incoming.map(l=>{
+        const reqAct = friendActivityCache[l.requestedBy];
+        const name = reqAct ? reqAct.displayName : (friendNameCache[l.requestedBy] || 'Someone');
+        return `
         <div style="display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid var(--line);">
-          <span style="font-size:0.9rem;">${friendActivityCache[l.requestedBy] ? friendActivityCache[l.requestedBy].displayName : 'Someone'} wants to connect</span>
+          <span style="display:flex; align-items:center; gap:10px; font-size:0.9rem;">${renderAvatarHtml(reqAct||{displayName:name}, 32)}${name} wants to connect</span>
           <span style="display:flex; gap:6px;">
             <button class="btn small primary" data-friend-accept="${l.id}">Accept</button>
             <button class="btn small danger" data-friend-decline="${l.id}">Decline</button>
           </span>
-        </div>`).join('') : `<div style="font-size:0.82rem; color:var(--ink-soft);">Nothing waiting on you right now.</div>`}
+        </div>`;
+      }).join('') : `<div style="font-size:0.82rem; color:var(--ink-soft);">Nothing waiting on you right now.</div>`}
     </div>`;
 
   const outgoingHtml = `
@@ -1718,9 +1822,11 @@ function renderFriends(){
       <h3>Requests sent (${outgoing.length})</h3>
       ${outgoing.length ? outgoing.map(l=>{
         const otherUid = l.userIds.find(u=>u!==myUid);
+        const act = friendActivityCache[otherUid];
+        const name = act ? act.displayName : (friendNameCache[otherUid] || 'Waiting on a response');
         return `
         <div style="display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid var(--line);">
-          <span style="font-size:0.9rem;">${friendActivityCache[otherUid] ? friendActivityCache[otherUid].displayName : 'Waiting on a response'}</span>
+          <span style="display:flex; align-items:center; gap:10px; font-size:0.9rem;">${renderAvatarHtml(act||{displayName:name}, 32)}${name}</span>
           <button class="btn small danger" data-friend-cancel="${l.id}">Unsend</button>
         </div>`;
       }).join('') : `<div style="font-size:0.82rem; color:var(--ink-soft);">Nothing pending.</div>`}
@@ -1733,10 +1839,13 @@ function renderFriends(){
         const otherUid = l.userIds.find(u=>u!==myUid);
         const act = friendActivityCache[otherUid];
         return `
-        <div style="padding:10px 0; border-bottom:1px solid var(--line);">
-          <div style="font-weight:700;">${act ? act.displayName : 'Loading…'}</div>
-          ${act ? `<div style="font-size:0.82rem; color:var(--ink-soft);">${act.planName ? act.planName + ' &middot; ' : ''}${act.activeDaysLast30||0} of the last 30 days active${act.lastActiveDate ? ' &middot; last read ' + fmtDate(act.lastActiveDate) : ''}</div>` : ''}
-          <button class="btn small danger" data-friend-decline="${l.id}" style="margin-top:6px;">Remove</button>
+        <div style="display:flex; align-items:flex-start; gap:12px; padding:10px 0; border-bottom:1px solid var(--line);">
+          ${renderAvatarHtml(act||{}, 40)}
+          <div style="flex:1;">
+            <div style="font-weight:700;">${act ? act.displayName : 'Loading…'}</div>
+            ${act ? `<div style="font-size:0.82rem; color:var(--ink-soft);">${act.planName ? act.planName + ' &middot; ' : ''}${act.activeDaysLast30||0} of the last 30 days active${act.lastActiveDate ? ' &middot; last read ' + fmtDate(act.lastActiveDate) : ''}</div>` : ''}
+            <button class="btn small danger" data-friend-decline="${l.id}" style="margin-top:6px;">Remove</button>
+          </div>
         </div>`;
       }).join('')}
     </div>` : `<div class="empty-note">No connections yet — search for a friend or family member above. This is meant to feel like company, not a leaderboard: no percentages, no comparisons, just knowing someone else is walking with you.</div>`;
@@ -1834,6 +1943,17 @@ function renderAccountTab(){
     <div class="settings-box">
       <h3>Profile</h3>
       <p style="font-size:0.85rem; color:var(--ink-soft);">Your display name is what friends see instead of your email.</p>
+      <div style="display:flex; align-items:center; gap:14px; margin-bottom:16px;">
+        ${renderAvatarHtml(state.profile, 64)}
+        <div style="display:flex; flex-direction:column; gap:8px;">
+          <label class="btn" style="cursor:pointer; display:inline-block; text-align:center;">
+            ${state.profile.photo ? 'Change photo' : 'Add photo'}
+            <input type="file" id="profilePhotoInput" accept="image/*" style="display:none;">
+          </label>
+          ${state.profile.photo ? `<button type="button" class="btn" id="removeProfilePhotoBtn" style="font-size:0.8rem;">Remove photo</button>` : ''}
+          ${profilePhotoError ? `<p style="font-size:0.78rem; color:var(--bad); margin:0;">${profilePhotoError}</p>` : ''}
+        </div>
+      </div>
       <div class="auth-field">
         <label for="profileDisplayName">Display name</label>
         <input type="text" id="profileDisplayName" value="${(state.profile.displayName||'').replace(/"/g,'&quot;')}" placeholder="${currentUser ? currentUser.email.split('@')[0] : 'Guest'}">
@@ -1919,7 +2039,12 @@ function renderFooter(){
 /* ---------------- Events ---------------- */
 function attachEvents(){
   document.querySelectorAll('nav.tabs button').forEach(btn=>{
-    btn.addEventListener('click', ()=>{ activeTab = btn.dataset.tab; render(); });
+    btn.addEventListener('click', ()=>{
+      activeTab = btn.dataset.tab;
+      // Warm the search cache the moment the tab opens, so results feel instant once typing starts.
+      if(activeTab === 'friends') loadFriendDirectory();
+      render();
+    });
   });
   document.querySelectorAll('[data-read-book]').forEach(btn=>{
     btn.addEventListener('click', ()=>{
@@ -2103,6 +2228,50 @@ function attachEvents(){
       document.querySelectorAll('[data-profile-color]').forEach(b=>b.classList.toggle('selected', b===btn));
     });
   });
+  const profilePhotoInput = document.getElementById('profilePhotoInput');
+  if(profilePhotoInput){
+    profilePhotoInput.addEventListener('change', (e)=>{
+      const file = e.target.files && e.target.files[0];
+      if(!file) return;
+      profilePhotoError = '';
+      if(!file.type.startsWith('image/')){
+        profilePhotoError = 'That doesn\'t look like an image file.';
+        render();
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = (evt)=>{
+        const img = new Image();
+        img.onload = ()=>{
+          // Center-crop to a square, then downscale to a small fixed size — keeps every photo
+          // roughly the same (small) footprint in Firestore regardless of what the user uploads.
+          const SIZE = 200;
+          const canvas = document.createElement('canvas');
+          canvas.width = SIZE; canvas.height = SIZE;
+          const ctx = canvas.getContext('2d');
+          const side = Math.min(img.width, img.height);
+          const sx = (img.width - side) / 2;
+          const sy = (img.height - side) / 2;
+          ctx.drawImage(img, sx, sy, side, side, 0, 0, SIZE, SIZE);
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.72);
+          if(dataUrl.length > PROFILE_PHOTO_MAX_LEN){
+            profilePhotoError = 'That photo is too large even after compressing — try a different one.';
+            render();
+            return;
+          }
+          updateProfilePhoto(dataUrl);
+        };
+        img.onerror = ()=>{ profilePhotoError = 'Could not read that image — try a different file.'; render(); };
+        img.src = evt.target.result;
+      };
+      reader.onerror = ()=>{ profilePhotoError = 'Could not read that file.'; render(); };
+      reader.readAsDataURL(file);
+    });
+  }
+  const removeProfilePhotoBtn = document.getElementById('removeProfilePhotoBtn');
+  if(removeProfilePhotoBtn){
+    removeProfilePhotoBtn.addEventListener('click', ()=>{ profilePhotoError = ''; removeProfilePhoto(); });
+  }
 
   // Journal + Log export (separate from full backup)
   const exportJournalLogBtn = document.getElementById('exportJournalLogBtn');
