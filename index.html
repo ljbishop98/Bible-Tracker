@@ -50,6 +50,10 @@
     --bad:#a83e3e;
     --bad-soft:#f7e3e3;
     --shadow: 0 1px 3px rgba(40,30,10,0.08), 0 1px 2px rgba(40,30,10,0.06);
+    /* Translucent counterpart of --card, for frosted-glass surfaces (sticky header, bottom nav,
+       sidebar) sitting over backdrop-filter: blur() — a native "material" look instead of a flat
+       opaque bar, which is one of the bigger tells of a website versus an app shell. */
+    --card-glass: rgba(255,255,255,0.72);
   }
   :root[data-theme="dark"]{
     --bg:#171310;
@@ -66,6 +70,7 @@
     --bad:#e08080;
     --bad-soft:#3a1f1f;
     --shadow: 0 1px 3px rgba(0,0,0,0.45), 0 1px 2px rgba(0,0,0,0.35);
+    --card-glass: rgba(36,31,25,0.72);
   }
   /* Book tiles (Groups create form) carry their own per-book color as an inline --tile-color/
      --tile-soft custom property, computed against the light palette — the soft tint reads fine
@@ -73,15 +78,32 @@
      flat translucent overlay instead and leans on --tile-color for the text/selected fill, which
      works against either background. */
   :root[data-theme="dark"] .book-tile{ background:rgba(255,255,255,0.06); }
-  *{box-sizing:border-box;}
-  html{overflow-x:hidden; width:100%;}
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html{overflow-x:hidden; width:100%; background:var(--bg);}
   body{
     margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
     background:var(--bg); color:var(--ink); line-height:1.4;
     padding-top:env(safe-area-inset-top); padding-bottom:env(safe-area-inset-bottom);
     overflow-x:hidden; width:100%;
     transition:background .15s ease, color .15s ease;
+    /* Native apps don't let a bounce/rubber-band scroll reveal a mismatched white flash behind
+       the content — matching html's background to the theme (above) covers the overscroll area
+       on iOS; overscroll-behavior-y stops the browser's own pull-to-refresh/navigation gestures
+       from firing on top of the app's own gestures. */
+    overscroll-behavior-y: contain;
+    -webkit-font-smoothing: antialiased;
   }
+  /* Chrome that reads as "a website" — the blue/gray tap-flash on links and buttons, and text
+     selection highlighting on things that are controls rather than readable content — gets turned
+     off for interactive chrome, while normal text (journal entries, profile bios, verses) stays
+     selectable as expected. */
+  button, nav, .bottom-nav, .sidebar-panel, .tabs, .group-tabs{ -webkit-user-select:none; user-select:none; }
+  button{ -webkit-tap-highlight-color:transparent; }
+  /* Internal scroll containers keep working exactly the same, they just don't show the browser's
+     own scrollbar chrome — this is what makes something like the sidebar or a long checkbox list
+     read as part of the app's own surface instead of an embedded web widget. */
+  .sidebar-panel, .book-picker, .log-scroll{ scrollbar-width:none; -ms-overflow-style:none; }
+  .sidebar-panel::-webkit-scrollbar, .book-picker::-webkit-scrollbar, .log-scroll::-webkit-scrollbar{ display:none; }
   /* Anything that can legitimately overflow (long unbroken tokens, wide inline-blocks) should
      scroll within itself rather than pushing the whole page wider than the viewport — this is
      what caused sideways-scrolling on mobile before, since a single wide element anywhere on the
@@ -121,6 +143,7 @@
   .btn.primary:hover{opacity:0.9;}
   .btn.primary:disabled{opacity:0.6; cursor:default;}
   .btn.danger{color:var(--bad); border-color:var(--bad-soft);}
+  .btn.primary.danger{background:var(--bad); border-color:var(--bad); color:#fff;}
   .btn.small{padding:4px 10px; font-size:0.78rem;}
   .grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(min(300px,100%),1fr)); gap:14px;}
   .card{
@@ -322,6 +345,75 @@
   .journal-title{font-weight:700; margin-bottom:4px;}
   .journal-content{font-size:0.88rem; color:var(--ink); white-space:pre-wrap;}
 
+  /* ---- Bottom sheet (e.g. "Create a group") ----
+     Slides up from the bottom over whatever's already on screen, instead of replacing the page's
+     own content the way an inline expanding form used to — the native-app equivalent of opening a
+     compose sheet on top of a feed. */
+  .sheet-backdrop{
+    position:fixed; inset:0; background:rgba(20,15,8,0.45); z-index:70;
+    opacity:0; pointer-events:none; transition:opacity .2s ease;
+  }
+  .sheet-backdrop.open{ opacity:1; pointer-events:auto; }
+  .sheet-panel{
+    position:fixed; left:0; right:0; bottom:0; z-index:71; background:var(--card);
+    border-radius:20px 20px 0 0; box-shadow:0 -8px 30px rgba(0,0,0,0.22);
+    max-height:88vh; overflow-y:auto; transform:translateY(100%); transition:transform .28s cubic-bezier(.25,.8,.4,1);
+    padding:10px 20px calc(20px + env(safe-area-inset-bottom));
+    max-width:640px; margin:0 auto;
+  }
+  .sheet-panel.open{ transform:translateY(0); }
+  .sheet-handle{ width:36px; height:4px; border-radius:3px; background:var(--line); margin:6px auto 14px; }
+  .sheet-header{ display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
+  .sheet-header h3{ margin:0; }
+  .sheet-close-btn{
+    background:var(--accent-soft); border:none; color:var(--ink-soft); width:30px; height:30px;
+    border-radius:50%; display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0;
+  }
+  @media (prefers-reduced-motion: reduce){ .sheet-panel, .sheet-backdrop{ transition:none; } }
+
+  /* ---- Native-style dialog (replaces window.confirm/alert) ---- */
+  @keyframes dialogPop{ from{opacity:0; transform:translate(-50%,-50%) scale(0.94);} to{opacity:1; transform:translate(-50%,-50%) scale(1);} }
+  @keyframes dialogBackdropIn{ from{opacity:0;} to{opacity:1;} }
+  .dialog-backdrop{
+    position:fixed; inset:0; background:rgba(20,15,8,0.45); z-index:80;
+    animation:dialogBackdropIn .15s ease-out;
+  }
+  .dialog-card{
+    position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); z-index:81;
+    width:min(340px, calc(100vw - 48px)); background:var(--card); border-radius:16px;
+    padding:22px 20px 16px; box-shadow:0 12px 40px rgba(0,0,0,0.25);
+    animation:dialogPop .18s cubic-bezier(.25,.8,.4,1);
+  }
+  .dialog-message{margin:0 0 18px; font-size:0.92rem; line-height:1.5; text-align:center; color:var(--ink);}
+  .dialog-actions{display:flex; gap:10px; justify-content:center;}
+  .dialog-actions .btn{flex:1;}
+  @media (prefers-reduced-motion: reduce){ .dialog-card, .dialog-backdrop{ animation:none; } }
+
+  /* ---- Skeleton loading placeholders ---- */
+  @keyframes skeletonPulse{ 0%,100%{ opacity:0.5; } 50%{ opacity:1; } }
+  .skeleton{ background:var(--line); animation:skeletonPulse 1.2s ease-in-out infinite; }
+  @media (prefers-reduced-motion: reduce){ .skeleton{ animation:none; opacity:0.7; } }
+
+  /* ---- View transitions ---- */
+  /* Applied only when the actual "view" changed (see render()) — a top-level tab switch gets a
+     quick cross-fade, drilling into a profile or group detail gets a slide-in-from-right like a
+     native navigation push. Both are entrance-only (the old content is already gone by the time
+     these run, since app.innerHTML is rebuilt from scratch) but that's enough to read as
+     navigating somewhere rather than a page reload. */
+  @keyframes viewFadeIn{ from{opacity:0;} to{opacity:1;} }
+  @keyframes viewSlideIn{ from{opacity:0; transform:translateX(28px);} to{opacity:1; transform:translateX(0);} }
+  .view-enter-fade{ animation:viewFadeIn .18s ease-out; }
+  .view-enter-slide{ animation:viewSlideIn .22s cubic-bezier(.25,.8,.4,1); }
+  @media (prefers-reduced-motion: reduce){
+    .view-enter-fade, .view-enter-slide{ animation:none; }
+  }
+
+  /* ---- Icon set ---- */
+  .icon-svg{display:inline-block; vertical-align:-4px; flex-shrink:0;}
+  .btn .icon-svg{vertical-align:-3px; margin-right:2px;}
+  .back-btn{display:inline-flex; align-items:center; gap:4px;}
+  .chip-remove{display:inline-flex; align-items:center; justify-content:center;}
+
   /* ---- Theme toggle ---- */
   .theme-toggle{
     display:inline-flex; align-items:center; gap:6px; padding:6px 12px; border-radius:999px;
@@ -329,6 +421,7 @@
     font-weight:700; cursor:pointer; margin-top:6px;
   }
   .theme-toggle:hover{border-color:var(--accent); color:var(--accent);}
+  .theme-toggle .icon-svg{vertical-align:-3px;}
 
   /* ---- Check-in (moved to the top of Today, collapses once answered) ---- */
   .checkin-done-line{
@@ -346,9 +439,10 @@
      which one is visible once the viewport gets phone-sized. */
   .bottom-nav{
     display:none; position:fixed; left:0; right:0; bottom:0; z-index:40;
-    background:var(--card); border-top:1px solid var(--line);
+    background:var(--card-glass); border-top:1px solid var(--line);
     padding:6px 2px calc(6px + env(safe-area-inset-bottom));
     box-shadow:0 -2px 10px rgba(0,0,0,0.08);
+    backdrop-filter:blur(18px); -webkit-backdrop-filter:blur(18px);
   }
   .bottom-nav-row{display:flex; justify-content:space-around; align-items:stretch;}
   .bottom-nav-item{
@@ -366,10 +460,10 @@
   }
   .sidebar-backdrop.open{opacity:1; pointer-events:auto;}
   .sidebar-panel{
-    position:fixed; top:0; left:0; bottom:0; width:78%; max-width:300px; background:var(--card);
+    position:fixed; top:0; left:0; bottom:0; width:78%; max-width:300px; background:var(--card-glass);
     z-index:60; transform:translateX(-100%); transition:transform .25s ease; padding:20px 16px;
     padding-top:calc(20px + env(safe-area-inset-top)); box-shadow:2px 0 16px rgba(0,0,0,0.18);
-    overflow-y:auto;
+    overflow-y:auto; backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px);
   }
   .sidebar-panel.open{transform:translateX(0);}
   .sidebar-panel h2{font-size:1.1rem; margin:0 0 16px;}
@@ -388,8 +482,9 @@
   @media (max-width:760px){
     #app{padding:14px 14px 88px;}
     header.top{
-      position:sticky; top:0; z-index:30; background:var(--bg);
+      position:sticky; top:0; z-index:30; background:var(--card-glass);
       margin:-14px -14px 14px; padding:12px 14px 10px; border-bottom:1px solid var(--line);
+      backdrop-filter:blur(18px); -webkit-backdrop-filter:blur(18px);
     }
     header.top h1{font-size:1.2rem;}
     header.top .sub{font-size:0.72rem;}
@@ -443,11 +538,71 @@ function hashIndex(str, len){
 function colorForName(str){ return COLOR_PALETTE[hashIndex(str, COLOR_PALETTE.length)]; }
 function softColorForName(str){ return COLOR_PALETTE_SOFT[hashIndex(str, COLOR_PALETTE_SOFT.length)]; }
 
+/* ---------------- Skeleton loading placeholders ----------------
+   Shaped gray pulse blocks instead of literal "Loading…" text — a small thing, but plain text
+   reads as a website waiting on a server; a shape that mimics the content that's about to arrive
+   reads as an app that already knows what it's about to show you. */
+function skeletonBlock(width, height, radius){
+  return `<span class="skeleton" style="display:inline-block; width:${width}; height:${height}; border-radius:${radius||'6px'}; vertical-align:middle;"></span>`;
+}
+function skeletonLine(width){ return skeletonBlock(width||'100%','13px','7px'); }
+function skeletonProfileHtml(){
+  return `
+    <div style="display:flex; align-items:center; gap:16px; margin-bottom:14px;">
+      ${skeletonBlock('76px','76px','50%')}
+      <div style="flex:1; display:flex; flex-direction:column; gap:8px;">
+        ${skeletonLine('55%')}${skeletonLine('75%')}${skeletonLine('40%')}
+      </div>
+    </div>
+    <div style="display:flex; flex-direction:column; gap:8px;">
+      ${skeletonLine('100%')}${skeletonLine('90%')}${skeletonLine('60%')}
+    </div>`;
+}
+function skeletonCardListHtml(count){
+  return Array.from({length: count||3}).map(()=>`
+    <div class="group-card">
+      ${skeletonBlock('44px','44px','50%')}
+      <div class="group-info" style="display:flex; flex-direction:column; gap:6px; flex:1;">
+        ${skeletonLine('50%')}${skeletonLine('70%')}
+      </div>
+    </div>`).join('');
+}
+
 // Now that other people's text (group discussion messages, viewed profiles) renders on YOUR
 // screen — not just your own private journal — anything sourced from another user must be
 // escaped before going into innerHTML, or one user could break/inject markup into another's view.
 function escapeHtml(s){
   return (s==null ? '' : String(s)).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+}
+
+/* ---------------- Icon set ----------------
+   A small hand-rolled set of stroke-based line icons (24x24, currentColor) — used in place of
+   emoji for anything that's part of the app's chrome (nav, header, dialogs). Emoji read as a very
+   web/markdown-y shorthand; a consistent icon weight reads as an actual designed interface.
+   Returns an inline <svg> string, sized via the `size` param, colored via CSS currentColor so it
+   automatically follows text color (including active-state and dark-mode color changes). */
+function icon(name, size){
+  size = size || 20;
+  const paths = {
+    home: '<path d="M4 11.5 12 4l8 7.5"/><path d="M6 10v9a1 1 0 0 0 1 1h4v-6h2v6h4a1 1 0 0 0 1-1v-9"/>',
+    calendar: '<rect x="4" y="5.5" width="16" height="15" rx="2"/><path d="M4 10h16"/><path d="M8 3.5v3M16 3.5v3"/>',
+    chart: '<path d="M4 20V10M11 20V4M18 20v-7"/><path d="M2.5 20h19"/>',
+    users: '<circle cx="9" cy="8" r="3"/><path d="M2.5 20c0-3.5 3-6 6.5-6s6.5 2.5 6.5 6"/><circle cx="17" cy="9" r="2.4"/><path d="M15.7 14.2c2.6.4 4.8 2.5 4.8 5.8"/>',
+    userPlus: '<circle cx="9.5" cy="8" r="3.5"/><path d="M2.5 20.5c0-3.9 3.1-6.5 7-6.5s7 2.6 7 6.5"/><path d="M19 8v5M16.5 10.5h5"/>',
+    person: '<circle cx="12" cy="8" r="3.6"/><path d="M4.5 20c0-4.1 3.4-6.8 7.5-6.8s7.5 2.7 7.5 6.8"/>',
+    notebook: '<rect x="5" y="3.5" width="14" height="17" rx="1.6"/><path d="M9 3.5v17"/><path d="M12.5 8h4M12.5 11.5h4M12.5 15h2.5"/>',
+    bookmark: '<path d="M6 3.5h12v17l-6-4-6 4z"/>',
+    more: '<circle cx="12" cy="5.2" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="12" cy="18.8" r="1.4"/>',
+    back: '<path d="M15 5 8 12l7 7"/>',
+    close: '<path d="M6 6l12 12M18 6 6 18"/>',
+    sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2.5M12 19v2.5M4.5 12H2M22 12h-2.5M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M18.4 5.6l-1.8 1.8M7.4 16.6l-1.8 1.8"/>',
+    moon: '<path d="M20 14.3A8.3 8.3 0 1 1 9.7 4 6.7 6.7 0 0 0 20 14.3z"/>',
+    auto: '<circle cx="12" cy="12" r="8.5"/><path d="M12 3.5v17" stroke-dasharray="0"/><path d="M12 3.5A8.5 8.5 0 0 1 12 20.5z" fill="currentColor" stroke="none"/>',
+    check: '<path d="M5 12.5l4.5 4.5L19 7"/>',
+    plus: '<path d="M12 5v14M5 12h14"/>',
+  };
+  const d = paths[name] || '';
+  return `<svg class="icon-svg" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
 }
 
 /* ---------------- Deep links to Bible apps/sites (verified URL formats) ---------------- */
@@ -682,6 +837,51 @@ let journalDraftTag = JOURNAL_TAGS[0];
 let feedbackType = 'suggestion'; // 'suggestion' | 'bug'
 let sidebarOpen = false; // mobile "More" slide-in panel (Journal/Memorize/Friends)
 let checkinEditing = false; // lets you reopen the mood picker after already answering for the date
+let lastRenderedViewKey = null; // used to only play the view-enter animation when the view actually changes
+
+/* ---------------- Native-style dialogs (replaces window.confirm/alert) ----------------
+   The browser's built-in confirm()/alert() are a blocking OS-chrome popup — about as "web" as it
+   gets. This renders a centered card in the app's own visual language instead, and — since a real
+   dialog can't block synchronously — customConfirm() returns a Promise<boolean> so call sites just
+   add a .then() instead of wrapping an if() around a return value. */
+let activeDialog = null; // { message, mode:'confirm'|'alert', confirmLabel, cancelLabel, danger, resolve }
+function customConfirm(message, opts){
+  opts = opts || {};
+  return new Promise(resolve=>{
+    activeDialog = {
+      message, mode:'confirm', resolve,
+      confirmLabel: opts.confirmLabel || 'Confirm',
+      cancelLabel: opts.cancelLabel || 'Cancel',
+      danger: !!opts.danger,
+    };
+    render();
+  });
+}
+function customAlert(message, opts){
+  opts = opts || {};
+  activeDialog = { message, mode:'alert', resolve:null, confirmLabel: opts.confirmLabel || 'OK', danger:false };
+  render();
+}
+function closeDialog(result){
+  if(!activeDialog) return;
+  const resolve = activeDialog.resolve;
+  activeDialog = null;
+  render();
+  if(resolve) resolve(result);
+}
+function renderDialogOverlay(){
+  if(!activeDialog) return '';
+  const d = activeDialog;
+  return `
+  <div id="dialogBackdrop" class="dialog-backdrop"></div>
+  <div class="dialog-card" role="alertdialog" aria-modal="true">
+    <p class="dialog-message">${escapeHtml(d.message).replace(/\n/g,'<br>')}</p>
+    <div class="dialog-actions">
+      ${d.mode==='confirm' ? `<button class="btn" id="dialogCancelBtn">${escapeHtml(d.cancelLabel)}</button>` : ''}
+      <button class="btn primary ${d.danger?'danger':''}" id="dialogConfirmBtn">${escapeHtml(d.confirmLabel)}</button>
+    </div>
+  </div>`;
+}
 
 /* ---------------- Light/Dark theme ---------------- */
 // 'auto' follows the OS/browser preference; 'light'/'dark' are explicit overrides. A tiny inline
@@ -694,6 +894,7 @@ function effectiveTheme(){
 }
 function applyTheme(){
   if(document.documentElement) document.documentElement.setAttribute('data-theme', effectiveTheme());
+  syncCapacitorStatusBar();
 }
 function cycleThemeMode(){
   themeMode = themeMode === 'auto' ? 'light' : themeMode === 'light' ? 'dark' : 'auto';
@@ -709,9 +910,51 @@ if(window.matchMedia){
   else if(darkMq.addListener) darkMq.addListener(onSystemThemeChange); // older Safari
 }
 function themeToggleHtml(){
-  const icons = { auto:'&#9680;', light:'&#9728;', dark:'&#127769;' };
+  const iconNames = { auto:'auto', light:'sun', dark:'moon' };
   const labels = { auto:'Auto', light:'Light', dark:'Dark' };
-  return `<button type="button" class="theme-toggle" data-set-theme title="Theme: ${labels[themeMode]} (tap to change)">${icons[themeMode]} ${labels[themeMode]}</button>`;
+  return `<button type="button" class="theme-toggle" data-set-theme title="Theme: ${labels[themeMode]} (tap to change)">${icon(iconNames[themeMode],16)} ${labels[themeMode]}</button>`;
+}
+
+/* ---------------- Capacitor (native iOS shell) integration ----------------
+   This same index.html is deployed two ways: as a plain website on GitHub Pages, and copied
+   into ios-app/www and wrapped by Capacitor for the App Store build. `window.Capacitor` and its
+   `Plugins` registry only exist inside the native wrapper — on GitHub Pages/any regular browser
+   they're simply undefined, so every call here is feature-detected and wrapped in try/catch and
+   is a complete no-op on the web. Nothing about the GitHub Pages deployment depends on this. */
+function capacitorPlugin(name){
+  return (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins[name]) || null;
+}
+// A light tap of physical feedback on the actions that matter most — marking a reading complete,
+// answering the spiritual check-in, confirming a dialog. Native apps do this constantly and it's
+// one of the most "physical"-feeling things separating an app from a web page; on the web build
+// this whole function is just a no-op.
+function hapticTap(style){
+  const haptics = capacitorPlugin('Haptics');
+  if(!haptics) return;
+  try{ haptics.impact({ style: style || 'Light' }); }catch(e){}
+}
+// Keeps the native status bar's text/icon color in sync with light/dark mode, and its background
+// behind the notch matching the app's own --bg, instead of the OS default (a mismatched status
+// bar is one of the more obvious "this is just a wrapped website" tells).
+function syncCapacitorStatusBar(){
+  const statusBar = capacitorPlugin('StatusBar');
+  if(!statusBar) return;
+  try{
+    const dark = effectiveTheme() === 'dark';
+    // Capacitor's StatusBarStyle: 'Dark' = dark text/icons (for a light bar), 'Light' = light
+    // text/icons (for a dark bar) — so a dark app theme needs the "Light" icon style, and vice versa.
+    statusBar.setStyle({ style: dark ? 'Light' : 'Dark' });
+    if(statusBar.setBackgroundColor) statusBar.setBackgroundColor({ color: dark ? '#171310' : '#faf7f2' });
+  }catch(e){}
+}
+// The native splash screen is configured (see capacitor.config.json) to stay up until we
+// explicitly hide it, rather than auto-hiding the instant the WebView loads — that avoids a flash
+// of an unstyled/half-loaded page between the splash disappearing and the app actually being
+// ready, which is exactly the kind of seam that makes a wrapped web app feel like one.
+function hideCapacitorSplash(){
+  const splash = capacitorPlugin('SplashScreen');
+  if(!splash) return;
+  try{ splash.hide(); }catch(e){}
 }
 
 function todayStr(){
@@ -1045,7 +1288,7 @@ function doLogIn(email, password){
 function doPasswordReset(email){
   authBusy = true; authError = ''; render();
   fbAuth.sendPasswordResetEmail(email)
-    .then(() => { alert('Password reset email sent — check your inbox.'); authView = 'login'; })
+    .then(() => { customAlert('Password reset email sent — check your inbox.'); authView = 'login'; })
     .catch(err => { authError = friendlyAuthError(err); })
     .finally(() => { authBusy = false; render(); });
 }
@@ -1155,45 +1398,54 @@ function subscribeToUserDoc(){
       const localHasData = state.log.length > 0;
       const remoteHasData = (data.log||[]).length > 0;
       if(localHasData && remoteHasData){
-        const useCloud = confirm(
-          'Both this device and your account already have reading progress saved.\n\n' +
-          'Press OK to use the ACCOUNT version (recommended).\n' +
-          'Press Cancel to keep THIS DEVICE\'S data and overwrite your account with it.'
-        );
-        if(!useCloud){
-          pushStateNow(docRef); syncStatus='synced'; lastSyncedAt=Date.now(); render();
-          syncPublicActivity(); ensureUserDirectory();
-          return;
-        }
+        // customConfirm() is async (a real dialog can't block synchronously the way window.confirm
+        // did), so the rest of this snapshot's handling waits inside the .then() instead of just
+        // falling through below — everything after this if-block is unreachable until answered.
+        customConfirm(
+          "Both this device and your account already have reading progress saved.\n\n" +
+          "Choose Account to use the account version (recommended), or This device to keep this device's data and overwrite your account with it.",
+          { confirmLabel:'Use account', cancelLabel:'Use this device' }
+        ).then(useCloud=>{
+          if(!useCloud){
+            pushStateNow(docRef); syncStatus='synced'; lastSyncedAt=Date.now(); render();
+            syncPublicActivity(); ensureUserDirectory();
+          } else {
+            applyRemoteState(data);
+          }
+        });
+        return;
       } else if(localHasData && !remoteHasData){
         pushStateNow(docRef); syncStatus='synced'; lastSyncedAt=Date.now(); render();
         syncPublicActivity(); ensureUserDirectory();
         return;
       }
     }
-    state = {
-      cursors: data.cursors || {},
-      cycles: data.cycles || {},
-      log: data.log || [],
-      plan: data.plan || null,
-      journal: Array.isArray(data.journal) ? data.journal : [],
-      readingApp: READING_APPS[data.readingApp] ? data.readingApp : 'biblegateway',
-      memorization: Array.isArray(data.memorization) ? data.memorization : [],
-      extraLog: Array.isArray(data.extraLog) ? data.extraLog : [],
-      checkins: Array.isArray(data.checkins) ? data.checkins : [],
-      profile: sanitizeProfile(data.profile)
-    };
-    saveState({skipSync:true});
-    syncStatus='synced'; lastSyncedAt=Date.now();
-    render();
-    // Keeps the friend-visible activity summary and searchable directory entry fresh on every
-    // real sync — not just when someone happens to open their Profile and hit Save. Without this,
-    // anyone who never touched their profile settings would have no publicActivity document at
-    // all, and friends would see "Unknown" for them forever.
-    syncPublicActivity(); ensureUserDirectory();
+    applyRemoteState(data);
   }, err=>{
     syncStatus='error'; syncMessage=err.message; render();
   });
+}
+function applyRemoteState(data){
+  state = {
+    cursors: data.cursors || {},
+    cycles: data.cycles || {},
+    log: data.log || [],
+    plan: data.plan || null,
+    journal: Array.isArray(data.journal) ? data.journal : [],
+    readingApp: READING_APPS[data.readingApp] ? data.readingApp : 'biblegateway',
+    memorization: Array.isArray(data.memorization) ? data.memorization : [],
+    extraLog: Array.isArray(data.extraLog) ? data.extraLog : [],
+    checkins: Array.isArray(data.checkins) ? data.checkins : [],
+    profile: sanitizeProfile(data.profile)
+  };
+  saveState({skipSync:true});
+  syncStatus='synced'; lastSyncedAt=Date.now();
+  render();
+  // Keeps the friend-visible activity summary and searchable directory entry fresh on every
+  // real sync — not just when someone happens to open their Profile and hit Save. Without this,
+  // anyone who never touched their profile settings would have no publicActivity document at
+  // all, and friends would see "Unknown" for them forever.
+  syncPublicActivity(); ensureUserDirectory();
 }
 
 function pushStateNow(docRefOverride){
@@ -1415,7 +1667,7 @@ function closeViewedProfile(){ viewedProfileUid = null; viewedProfile = null; vi
 // with a real back button to return to wherever you were.
 function renderProfilePage(){
   let body;
-  if(viewedProfileLoading) body = `<div class="empty-note">Loading…</div>`;
+  if(viewedProfileLoading) body = skeletonProfileHtml();
   else if(viewedProfileError) body = `<div class="empty-note">${escapeHtml(viewedProfileError)}</div>`;
   else if(viewedProfile){
     const act = viewedProfile;
@@ -1441,7 +1693,7 @@ function renderProfilePage(){
   } else body = '';
   return `
     <div class="profile-page">
-      <button class="btn small" id="closeViewedProfileBtn" style="margin-bottom:14px;">&larr; Back</button>
+      <button class="btn small back-btn" id="closeViewedProfileBtn" style="margin-bottom:14px;">${icon('back',16)} Back</button>
       <div class="settings-box">${body}</div>
     </div>`;
 }
@@ -1832,7 +2084,7 @@ function refreshNotifStatus(){
   notifStatus = (typeof Notification === 'undefined') ? 'unsupported' : Notification.permission;
 }
 function enableCheckinReminders(){
-  if(typeof Notification === 'undefined'){ alert('Notifications are not supported in this browser.'); return; }
+  if(typeof Notification === 'undefined'){ customAlert('Notifications are not supported in this browser.'); return; }
   Notification.requestPermission().then(perm=>{
     notifStatus = perm;
     if(perm === 'granted' && fbApp && currentUser) registerFcmToken();
@@ -1885,7 +2137,7 @@ function removeDraftCategory(catId){
 }
 function saveCustomPlan(){
   const cleaned = customDraft.filter(c => c.books.length > 0);
-  if(!cleaned.length){ alert('Add at least one book to at least one category before saving.'); return; }
+  if(!cleaned.length){ customAlert('Add at least one book to at least one category before saving.'); return; }
   applyPlan('custom', cleaned);
   planChooserOpen = false;
 }
@@ -1940,16 +2192,29 @@ function render(){
     activeTab==='groups' ? renderGroups() :
     activeTab==='account' ? renderAccountTab() : ''
   );
+  // A full innerHTML rebuild on every render() call is what makes every navigation feel like an
+  // instant page-reload rather than moving between screens. render() runs constantly though (every
+  // keystroke in a search box, every tick of a timer), so the entrance animation below only plays
+  // when the actual VIEW has changed since the last render — a "drill-in" (opening a profile or a
+  // group) slides in from the right like a native navigation push; switching between top-level
+  // tabs just cross-fades. Anything that re-renders the same view (typing, a background sync
+  // completing) gets no animation class at all, so it stays instant as before.
+  const isDrillIn = !!viewedProfileUid || (activeTab==='groups' && !!activeGroupId);
+  const viewKey = activeTab + (viewedProfileUid ? ':profile:'+viewedProfileUid : '') + (activeTab==='groups' && activeGroupId ? ':group:'+activeGroupId : '');
+  const viewChanged = viewKey !== lastRenderedViewKey;
+  lastRenderedViewKey = viewKey;
+  const viewAnimClass = viewChanged ? (isDrillIn ? 'view-enter-slide' : 'view-enter-fade') : '';
   app.innerHTML = `
     ${renderHeader()}
     ${renderGroupInviteBanner()}
     ${renderCheckinBanner()}
     ${renderInstallBanner()}
     ${renderTabs()}
-    ${tabContent}
+    <div class="view-root ${viewAnimClass}">${tabContent}</div>
     ${renderFooter()}
     ${renderBottomNav()}
     ${renderSidebar()}
+    ${renderDialogOverlay()}
     <input type="file" id="importFile" accept="application/json">
   `;
   attachEvents();
@@ -2230,8 +2495,9 @@ function renderHeader(){
 
 // All 8 tabs, in one place — the desktop top nav shows all of them; the mobile bottom nav shows
 // only the first 5 (plus a "More" button), and the mobile sidebar shows whatever's left over.
-const MAIN_TABS = [['today','Today','&#127968;'],['log','Log','&#128197;'],['dashboard','Dashboard','&#128202;'],['groups','Groups','&#128101;'],['account','Account','&#128100;']];
-const MORE_TABS = [['journal','Journal','&#128221;'],['memorize','Memorize','&#129504;'],['friends','Friends','&#129309;']];
+// Icon names reference the icon() helper above (a small inline-SVG set) instead of emoji.
+const MAIN_TABS = [['today','Today','home'],['log','Log','calendar'],['dashboard','Dashboard','chart'],['groups','Groups','users'],['account','Account','person']];
+const MORE_TABS = [['journal','Journal','notebook'],['memorize','Memorize','bookmark'],['friends','Friends','userPlus']];
 const ALL_TABS = [['today','Today'],['log','Log'],['journal','Journal'],['memorize','Memorize'],['dashboard','Dashboard'],['friends','Friends'],['groups','Groups'],['account','Account']];
 
 function renderTabs(){
@@ -2245,12 +2511,12 @@ function renderBottomNav(){
   return `
   <nav class="bottom-nav">
     <div class="bottom-nav-row">
-      ${MAIN_TABS.map(([id,label,icon])=>`
+      ${MAIN_TABS.map(([id,label,iconName])=>`
         <button class="bottom-nav-item ${activeTab===id && !sidebarOpen ? 'active' : ''}" data-tab="${id}">
-          <span class="icon">${icon}</span><span class="label">${label}</span>
+          <span class="icon">${icon(iconName,22)}</span><span class="label">${label}</span>
         </button>`).join('')}
       <button class="bottom-nav-item ${moreActive ? 'active' : ''}" id="openSidebarBtn">
-        <span class="icon">&#9776;</span><span class="label">More</span>
+        <span class="icon">${icon('more',22)}</span><span class="label">More</span>
       </button>
     </div>
   </nav>`;
@@ -2260,11 +2526,11 @@ function renderSidebar(){
   return `
   <div id="sidebarBackdrop" class="sidebar-backdrop ${sidebarOpen?'open':''}"></div>
   <aside class="sidebar-panel ${sidebarOpen?'open':''}">
-    <button type="button" id="sidebarCloseBtn" class="sidebar-close" aria-label="Close menu">&times;</button>
+    <button type="button" id="sidebarCloseBtn" class="sidebar-close" aria-label="Close menu">${icon('close',20)}</button>
     <h2>Cultivate</h2>
-    ${MORE_TABS.map(([id,label,icon])=>`
+    ${MORE_TABS.map(([id,label,iconName])=>`
       <button class="sidebar-nav-item ${activeTab===id?'active':''}" data-tab="${id}">
-        <span class="icon">${icon}</span>${label}
+        <span class="icon">${icon(iconName,20)}</span>${label}
       </button>`).join('')}
   </aside>`;
 }
@@ -2591,8 +2857,8 @@ function renderFriends(){
         <div style="display:flex; align-items:flex-start; gap:12px; padding:10px 0; border-bottom:1px solid var(--line);">
           ${renderAvatarHtml(act||{}, 40)}
           <div style="flex:1;">
-            <div style="font-weight:700;">${act ? act.displayName : 'Loading…'}</div>
-            ${act ? `<div style="font-size:0.82rem; color:var(--ink-soft);">${act.planName ? act.planName + ' &middot; ' : ''}${act.activeDaysLast30||0} of the last 30 days active${act.lastActiveDate ? ' &middot; last read ' + fmtDate(act.lastActiveDate) : ''}</div>` : ''}
+            <div style="font-weight:700;">${act ? act.displayName : skeletonLine('120px')}</div>
+            ${act ? `<div style="font-size:0.82rem; color:var(--ink-soft);">${act.planName ? act.planName + ' &middot; ' : ''}${act.activeDaysLast30||0} of the last 30 days active${act.lastActiveDate ? ' &middot; last read ' + fmtDate(act.lastActiveDate) : ''}</div>` : `<div style="margin-top:6px;">${skeletonLine('180px')}</div>`}
             <div style="display:flex; gap:6px; margin-top:6px;">
               <button class="btn small" data-view-profile="${otherUid}">View profile</button>
               <button class="btn small danger" data-friend-decline="${l.id}">Remove</button>
@@ -2633,12 +2899,22 @@ function renderGroups(){
   if(!currentUser){
     return `<div class="empty-note">Groups require an account, since they're shared with other people — a Bible study, table, or devotion group. Create an account or log in from the Account tab.</div>`;
   }
-  return activeGroupId ? renderGroupDetail() : renderGroupsDirectory();
+  const page = activeGroupId ? renderGroupDetail() : renderGroupsDirectory();
+  // "Create a group" is a bottom sheet now — it slides up over whatever's already on screen
+  // instead of replacing it, so you never lose your place in the directory behind it.
+  return page + renderGroupCreateSheet();
+}
+
+function renderGroupCreateSheet(){
+  return `
+    <div id="groupSheetBackdrop" class="sheet-backdrop ${groupCreateOpen?'open':''}"></div>
+    <div class="sheet-panel ${groupCreateOpen?'open':''}">
+      <div class="sheet-handle"></div>
+      ${groupCreateOpen ? renderGroupCreateForm() : ''}
+    </div>`;
 }
 
 function renderGroupsDirectory(){
-  if(groupCreateOpen) return renderGroupCreateForm();
-
   const q = groupSearchQuery.trim().toLowerCase();
   // The search box only appears on the Discover tab, so it only filters Discover — My Groups
   // always shows everything you've joined, regardless of whatever was last typed in that box.
@@ -2668,7 +2944,7 @@ function renderGroupsDirectory(){
     listHtml = mine.length ? `<div class="group-card-list">${mine.map(groupCard).join('')}</div>`
       : `<div class="empty-note">${q ? 'No groups match that search.' : "You haven't joined a group yet — switch to Discover to browse or search."}</div>`;
   } else {
-    listHtml = groupsDirectoryLoading ? `<div style="font-size:0.82rem; color:var(--ink-soft);">Loading groups…</div>`
+    listHtml = groupsDirectoryLoading ? `<div class="group-card-list">${skeletonCardListHtml(3)}</div>`
       : (discover.length ? `<div class="group-card-list">${discover.map(groupCard).join('')}</div>`
         : `<div class="empty-note">${q ? 'No groups match that search.' : 'No groups yet — be the first to create one.'}</div>`);
   }
@@ -2716,7 +2992,7 @@ function renderGroupCreateForm(){
   } else if(groupDraftBooks.length <= 14){
     summaryHtml = `
       <div class="book-chip-list">
-        ${groupDraftBooks.map(name=>`<span class="book-chip">${escapeHtml(name)}<button type="button" class="chip-remove" data-remove-draft-book="${escapeHtml(name)}" aria-label="Remove ${escapeHtml(name)}">&times;</button></span>`).join('')}
+        ${groupDraftBooks.map(name=>`<span class="book-chip">${escapeHtml(name)}<button type="button" class="chip-remove" data-remove-draft-book="${escapeHtml(name)}" aria-label="Remove ${escapeHtml(name)}">${icon('close',12)}</button></span>`).join('')}
       </div>
       <div class="reading-summary-line">${total} chapters total</div>`;
   } else {
@@ -2724,8 +3000,11 @@ function renderGroupCreateForm(){
   }
 
   return `
-    <div class="settings-box">
-      <h3>Create a group</h3>
+    <div class="sheet-body">
+      <div class="sheet-header">
+        <h3>Create a group</h3>
+        <button type="button" class="sheet-close-btn" id="cancelGroupCreateBtn" aria-label="Close">${icon('close',18)}</button>
+      </div>
       ${groupCreateError ? `<div class="auth-error">${escapeHtml(groupCreateError)}</div>` : ''}
       <div class="auth-field">
         <label for="groupName">Group name</label>
@@ -2777,14 +3056,13 @@ function renderGroupCreateForm(){
         </details>
       </div>
       <div style="display:flex; gap:8px; margin-top:10px;">
-        <button class="btn primary" id="submitGroupCreateBtn" ${groupCreateBusy?'disabled':''}>${groupCreateBusy?'Creating…':'Create group'}</button>
-        <button class="btn" id="cancelGroupCreateBtn">Cancel</button>
+        <button class="btn primary" id="submitGroupCreateBtn" ${groupCreateBusy?'disabled':''} style="flex:1;">${groupCreateBusy?'Creating…':'Create group'}</button>
       </div>
     </div>`;
 }
 
 function renderGroupDetail(){
-  if(!activeGroupData) return `<div class="empty-note">Loading group…</div>`;
+  if(!activeGroupData) return `<div class="settings-box">${skeletonProfileHtml()}</div>`;
   const g = activeGroupData;
   const myRole = myRoleInActiveGroup();
   const isOwnerOrAdmin = myRole === 'owner' || myRole === 'admin';
@@ -2806,7 +3084,7 @@ function renderGroupDetail(){
 
   return `
     <div class="settings-box">
-      <button class="btn small" id="backToGroupsBtn" style="margin-bottom:12px;">&larr; All groups</button>
+      <button class="btn small back-btn" id="backToGroupsBtn" style="margin-bottom:12px;">${icon('back',16)} All groups</button>
       <div class="group-detail-head">
         <div>
           <h3 style="margin-bottom:2px;">${escapeHtml(g.name)}</h3>
@@ -3188,6 +3466,12 @@ function attachEvents(){
   document.querySelectorAll('[data-set-theme]').forEach(btn=>{
     btn.addEventListener('click', ()=> cycleThemeMode());
   });
+  const dialogConfirmBtn = document.getElementById('dialogConfirmBtn');
+  if(dialogConfirmBtn) dialogConfirmBtn.addEventListener('click', ()=>{ hapticTap('Medium'); closeDialog(true); });
+  const dialogCancelBtn = document.getElementById('dialogCancelBtn');
+  if(dialogCancelBtn) dialogCancelBtn.addEventListener('click', ()=> closeDialog(false));
+  const dialogBackdrop = document.getElementById('dialogBackdrop');
+  if(dialogBackdrop) dialogBackdrop.addEventListener('click', ()=> closeDialog(false));
   document.querySelectorAll('[data-read-book]').forEach(btn=>{
     btn.addEventListener('click', ()=>{
       const url = buildReadingLink(state.readingApp, btn.dataset.readBook, Number(btn.dataset.readChapter));
@@ -3198,7 +3482,7 @@ function attachEvents(){
     btn.addEventListener('click', ()=>{
       const catId = btn.dataset.cat;
       const action = btn.dataset.action;
-      if(action==='complete') completeReading(catId, selectedDate);
+      if(action==='complete'){ hapticTap('Medium'); completeReading(catId, selectedDate); }
       else if(action==='skip') skipReading(catId, selectedDate);
       else if(action==='undo') undoLast(catId);
     });
@@ -3233,7 +3517,7 @@ function attachEvents(){
       const date = (dateEl && dateEl.value) || todayStr();
       const content = contentEl ? contentEl.value : '';
       const title = titleEl ? titleEl.value : '';
-      if(!content.trim() && !title.trim()){ alert('Add a title or some content before saving.'); return; }
+      if(!content.trim() && !title.trim()){ customAlert('Add a title or some content before saving.'); return; }
       const reference = (refBookEl && refBookEl.value) ? { book: refBookEl.value, chapter: refChapterEl.value ? Number(refChapterEl.value) : null, verse: refVerseEl.value ? Number(refVerseEl.value) : null } : null;
       addJournalEntry(date, journalDraftTag, content, title, reference);
     });
@@ -3243,7 +3527,9 @@ function attachEvents(){
   });
   document.querySelectorAll('[data-delete-journal]').forEach(btn=>{
     btn.addEventListener('click', ()=>{
-      if(confirm('Delete this journal entry?')) deleteJournalEntry(btn.dataset.deleteJournal);
+      customConfirm('Delete this journal entry?', { confirmLabel:'Delete', danger:true }).then(ok=>{
+        if(ok) deleteJournalEntry(btn.dataset.deleteJournal);
+      });
     });
   });
 
@@ -3268,25 +3554,27 @@ function attachEvents(){
       if(!file) return;
       const reader = new FileReader();
       reader.onload = (e)=>{
+        let parsed;
         try{
-          const parsed = JSON.parse(e.target.result);
+          parsed = JSON.parse(e.target.result);
           if(!parsed.cursors || !parsed.cycles || !Array.isArray(parsed.log)) throw new Error('bad file');
-          if(confirm('Import this backup and replace your current progress?')){
-            state = {
-              cursors: parsed.cursors || {},
-              cycles: parsed.cycles || {},
-              log: parsed.log,
-              plan: parsed.plan || null,
-              journal: Array.isArray(parsed.journal) ? parsed.journal : [],
-              readingApp: READING_APPS[parsed.readingApp] ? parsed.readingApp : 'biblegateway',
-              memorization: Array.isArray(parsed.memorization) ? parsed.memorization : [],
-              extraLog: Array.isArray(parsed.extraLog) ? parsed.extraLog : [],
-              checkins: Array.isArray(parsed.checkins) ? parsed.checkins : [],
-              profile: sanitizeProfile(parsed.profile)
-            };
-            saveState(); render();
-          }
-        }catch(err){ alert('Could not read that file as a valid backup.'); }
+        }catch(err){ customAlert('Could not read that file as a valid backup.'); return; }
+        customConfirm('Import this backup and replace your current progress?', { confirmLabel:'Import', danger:true }).then(ok=>{
+          if(!ok) return;
+          state = {
+            cursors: parsed.cursors || {},
+            cycles: parsed.cycles || {},
+            log: parsed.log,
+            plan: parsed.plan || null,
+            journal: Array.isArray(parsed.journal) ? parsed.journal : [],
+            readingApp: READING_APPS[parsed.readingApp] ? parsed.readingApp : 'biblegateway',
+            memorization: Array.isArray(parsed.memorization) ? parsed.memorization : [],
+            extraLog: Array.isArray(parsed.extraLog) ? parsed.extraLog : [],
+            checkins: Array.isArray(parsed.checkins) ? parsed.checkins : [],
+            profile: sanitizeProfile(parsed.profile)
+          };
+          saveState(); render();
+        });
       };
       reader.readAsText(file);
       importFile.value = '';
@@ -3295,7 +3583,9 @@ function attachEvents(){
   const logoutBtn = document.getElementById('logoutBtn');
   if(logoutBtn){
     logoutBtn.addEventListener('click', ()=>{
-      if(confirm('Log out? Your data stays safely in your account.')) doLogOut();
+      customConfirm('Log out? Your data stays safely in your account.', { confirmLabel:'Log out' }).then(ok=>{
+        if(ok) doLogOut();
+      });
     });
   }
   const upgradeBtn = document.getElementById('upgradeAccountBtn');
@@ -3318,7 +3608,7 @@ function attachEvents(){
       const msgEl = document.getElementById('feedbackMessage');
       const emailEl = document.getElementById('feedbackEmail');
       const message = msgEl ? msgEl.value : '';
-      if(!message.trim()){ alert('Add a message before sending.'); return; }
+      if(!message.trim()){ customAlert('Add a message before sending.'); return; }
       submitFeedback(feedbackType, message, emailEl ? emailEl.value : '');
     });
   }
@@ -3331,13 +3621,15 @@ function attachEvents(){
     addMemBtn.addEventListener('click', ()=>{
       const refEl = document.getElementById('memRef');
       const textEl = document.getElementById('memText');
-      if(!refEl.value.trim()){ alert('Add a reference first.'); return; }
+      if(!refEl.value.trim()){ customAlert('Add a reference first.'); return; }
       addMemoryVerse(refEl.value, textEl ? textEl.value : '');
     });
   }
   document.querySelectorAll('[data-mem-review]').forEach(btn=> btn.addEventListener('click', ()=> reviewMemoryVerse(btn.dataset.memReview)));
   document.querySelectorAll('[data-mem-toggle]').forEach(btn=> btn.addEventListener('click', ()=> toggleMemoryMastered(btn.dataset.memToggle)));
-  document.querySelectorAll('[data-mem-delete]').forEach(btn=> btn.addEventListener('click', ()=>{ if(confirm('Remove this verse?')) deleteMemoryVerse(btn.dataset.memDelete); }));
+  document.querySelectorAll('[data-mem-delete]').forEach(btn=> btn.addEventListener('click', ()=>{
+    customConfirm('Remove this verse?', { confirmLabel:'Remove', danger:true }).then(ok=>{ if(ok) deleteMemoryVerse(btn.dataset.memDelete); });
+  }));
 
   // Extra / outside-plan reading
   const addExtraBtn = document.getElementById('addExtraBtn');
@@ -3353,6 +3645,7 @@ function attachEvents(){
   // Spiritual temperature check-in
   document.querySelectorAll('[data-checkin-value]').forEach(btn=>{
     btn.addEventListener('click', ()=>{
+      hapticTap('Light');
       checkinEditing = false; // collapse back down to the one-line acknowledgement after answering
       setCheckin(selectedDate, Number(btn.dataset.checkinValue), '');
     });
@@ -3476,7 +3769,9 @@ function attachEvents(){
   document.querySelectorAll('[data-friend-send-uid]').forEach(btn=> btn.addEventListener('click', ()=> sendFriendRequestToUid(btn.dataset.friendSendUid)));
   document.querySelectorAll('[data-friend-cancel]').forEach(btn=> btn.addEventListener('click', ()=> declineFriendRequest(btn.dataset.friendCancel)));
   document.querySelectorAll('[data-friend-accept]').forEach(btn=> btn.addEventListener('click', ()=> acceptFriendRequest(btn.dataset.friendAccept)));
-  document.querySelectorAll('[data-friend-decline]').forEach(btn=> btn.addEventListener('click', ()=>{ if(confirm('Remove this connection?')) declineFriendRequest(btn.dataset.friendDecline); }));
+  document.querySelectorAll('[data-friend-decline]').forEach(btn=> btn.addEventListener('click', ()=>{
+    customConfirm('Remove this connection?', { confirmLabel:'Remove', danger:true }).then(ok=>{ if(ok) declineFriendRequest(btn.dataset.friendDecline); });
+  }));
   document.querySelectorAll('[data-view-profile]').forEach(btn=> btn.addEventListener('click', ()=> viewProfile(btn.dataset.viewProfile)));
   const closeViewedProfileBtn = document.getElementById('closeViewedProfileBtn');
   if(closeViewedProfileBtn) closeViewedProfileBtn.addEventListener('click', closeViewedProfile);
@@ -3514,6 +3809,8 @@ function attachEvents(){
   if(openGroupCreateBtn) openGroupCreateBtn.addEventListener('click', ()=>{ groupCreateOpen = true; groupDraftBooks = []; groupCreateError=''; bookPickerOpen = false; bookFilterQuery = ''; render(); });
   const cancelGroupCreateBtn = document.getElementById('cancelGroupCreateBtn');
   if(cancelGroupCreateBtn) cancelGroupCreateBtn.addEventListener('click', ()=>{ groupCreateOpen = false; render(); });
+  const groupSheetBackdrop = document.getElementById('groupSheetBackdrop');
+  if(groupSheetBackdrop) groupSheetBackdrop.addEventListener('click', ()=>{ groupCreateOpen = false; render(); });
   document.querySelectorAll('[data-group-dir-tab]').forEach(btn=> btn.addEventListener('click', ()=>{ groupDirTab = btn.dataset.groupDirTab; render(); }));
 
   document.querySelectorAll('input[name="groupPlanMode"]').forEach(radio=>{
@@ -3579,7 +3876,9 @@ function attachEvents(){
   if(leaveGroupBtn){
     leaveGroupBtn.addEventListener('click', ()=>{
       if(!activeGroupData) return;
-      if(confirm('Leave this group?')){ leaveGroup(activeGroupData.id); loadGroupsDirectory(true); render(); }
+      customConfirm('Leave this group?', { confirmLabel:'Leave', danger:true }).then(ok=>{
+        if(ok){ leaveGroup(activeGroupData.id); loadGroupsDirectory(true); render(); }
+      });
     });
   }
   const sendGroupMessageBtn = document.getElementById('sendGroupMessageBtn');
@@ -3601,7 +3900,10 @@ function attachEvents(){
   });
   document.querySelectorAll('[data-remove-member]').forEach(btn=>{
     btn.addEventListener('click', ()=>{
-      if(activeGroupData && confirm('Remove this member from the group?')) removeGroupMember(activeGroupData.id, btn.dataset.removeMember);
+      if(!activeGroupData) return;
+      customConfirm('Remove this member from the group?', { confirmLabel:'Remove', danger:true }).then(ok=>{
+        if(ok) removeGroupMember(activeGroupData.id, btn.dataset.removeMember);
+      });
     });
   });
   document.querySelectorAll('[data-approve-request]').forEach(btn=>{
@@ -3632,6 +3934,10 @@ let pendingGroupInvite = null;
 refreshNotifStatus();
 render();
 initFirebase();
+// The native splash screen (see capacitor.config.json: launchAutoHide is off) stays up until this
+// fires, so the very first thing a person sees on iOS is a finished screen, not a half-built one —
+// a no-op on GitHub Pages/any regular browser since capacitorPlugin() finds nothing there.
+hideCapacitorSplash();
 
 /* ---------------- Service worker registration (installable + offline) ---------------- */
 if('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')){
