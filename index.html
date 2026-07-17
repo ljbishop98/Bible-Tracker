@@ -158,6 +158,21 @@
   .group-row:last-child{border-bottom:none;}
   .group-row .name{font-weight:700;}
   .group-row .meta{font-size:0.8rem; color:var(--ink-soft); margin-top:2px;}
+  .group-dir-header{display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:14px;}
+  .group-dir-header h3{margin:0;}
+  .group-search-row{margin-bottom:14px;}
+  .group-search-row input{width:100%; padding:9px 10px; border:1px solid var(--line); border-radius:8px; font-size:0.9rem; font-family:inherit;}
+  .group-card-list{display:flex; flex-direction:column; gap:10px;}
+  .group-card{
+    display:flex; align-items:center; gap:12px; padding:12px 14px; border:1px solid var(--line);
+    border-radius:12px; background:var(--bg);
+  }
+  .group-card .group-icon{flex-shrink:0;}
+  .group-card .group-info{flex:1; min-width:0;}
+  .group-card .group-info .name{font-weight:700; font-size:0.95rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .group-card .group-info .meta{font-size:0.78rem; color:var(--ink-soft); margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .group-card .group-action{flex-shrink:0;}
+  .group-card .pending-note{font-size:0.78rem; color:var(--ink-soft); white-space:nowrap;}
   .group-detail-head{display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap; margin-bottom:6px;}
   .group-detail-actions{display:flex; gap:8px; flex-wrap:wrap; margin-top:12px;}
   .group-message{padding:10px 0; border-bottom:1px solid var(--line);}
@@ -247,6 +262,14 @@ function chaptersFor(bookName){ const b = BOOK_LIBRARY.find(x=>x.name===bookName
 function bookObj(bookName){ return {name: bookName, chapters: chaptersFor(bookName)}; }
 
 const COLOR_PALETTE = ['#7a4b2e','#8a5a2b','#2f6b4f','#3d6b8a','#4a5f8a','#8a3d5c','#a34b3e','#6b4f8a','#b8860b','#5c5248','#4b6b3a','#6b3a5c'];
+// Deterministic color for things that don't have a saved profile color of their own (e.g. group
+// icons) — same name always maps to the same palette entry, so a group's card color stays stable.
+function colorForName(str){
+  str = str || '';
+  let h = 0;
+  for(let i=0;i<str.length;i++){ h = (h*31 + str.charCodeAt(i)) >>> 0; }
+  return COLOR_PALETTE[h % COLOR_PALETTE.length];
+}
 
 // Now that other people's text (group discussion messages, viewed profiles) renders on YOUR
 // screen — not just your own private journal — anything sourced from another user must be
@@ -1392,6 +1415,7 @@ let groupsDirectory = [];
 let groupsDirectoryLoaded = false;
 let groupsDirectoryLoading = false;
 let groupSearchQuery = '';
+let groupDirTab = 'discover'; // 'mine' | 'discover' — flips to 'mine' automatically the first time myGroupIds is non-empty
 function loadGroupsDirectory(force){
   if(!fbDb || !currentUser) return Promise.resolve();
   if(groupsDirectoryLoaded && !force) return Promise.resolve();
@@ -1419,9 +1443,11 @@ function subscribeMyGroups(){
   if(myGroupsUnsub) myGroupsUnsub();
   myGroupsUnsub = fbDb.collectionGroup('members').where('uid','==',currentUser.uid).onSnapshot(snap=>{
     myGroupIds = snap.docs.map(d=> d.ref.parent.parent.id);
+    if(!groupDirTabAutoSet && myGroupIds.length){ groupDirTab = 'mine'; groupDirTabAutoSet = true; }
     render();
   }, ()=>{});
 }
+let groupDirTabAutoSet = false; // flips the directory to "My Groups" the first time membership loads, once only
 
 // ---- Active (open) group ----
 let activeGroupId = null;
@@ -2353,55 +2379,55 @@ function renderGroups(){
 }
 
 function renderGroupsDirectory(){
-  const q = groupSearchQuery.trim().toLowerCase();
-  const all = groupsDirectory.filter(g=> !q || g.name.toLowerCase().includes(q));
-  const mine = all.filter(g=> myGroupIds.includes(g.id));
-  const discover = all.filter(g=> !myGroupIds.includes(g.id));
+  if(groupCreateOpen) return renderGroupCreateForm();
 
-  const groupRow = g => {
+  const q = groupSearchQuery.trim().toLowerCase();
+  // The search box only appears on the Discover tab, so it only filters Discover — My Groups
+  // always shows everything you've joined, regardless of whatever was last typed in that box.
+  const mine = groupsDirectory.filter(g=> myGroupIds.includes(g.id));
+  const discover = groupsDirectory.filter(g=> !myGroupIds.includes(g.id) && (!q || g.name.toLowerCase().includes(q)));
+
+  const groupCard = g => {
     const isMember = myGroupIds.includes(g.id);
     const requested = requestedGroupIds.has(g.id);
     let actionHtml;
     if(isMember) actionHtml = `<button class="btn small primary" data-open-group="${g.id}">Open</button>`;
-    else if(requested) actionHtml = `<span style="font-size:0.8rem; color:var(--ink-soft);">Requested</span>`;
-    else actionHtml = `<button class="btn small" data-request-join="${g.id}">Request to join</button>`;
+    else if(requested) actionHtml = `<span class="pending-note">Requested</span>`;
+    else actionHtml = `<button class="btn small" data-request-join="${g.id}">Join</button>`;
     return `
-      <div class="group-row">
-        <div>
+      <div class="group-card">
+        <div class="group-icon">${renderAvatarHtml({displayName:g.name, color:colorForName(g.name)}, 44)}</div>
+        <div class="group-info">
           <div class="name">${escapeHtml(g.name)}</div>
-          <div class="meta">${g.memberCount||1} member${g.memberCount===1?'':'s'} &middot; ${g.planMode==='paced' ? 'Paced schedule' : 'Free pace'}${g.description ? ' &middot; ' + escapeHtml(g.description) : ''}</div>
+          <div class="meta">${g.memberCount||1} member${g.memberCount===1?'':'s'} &middot; ${g.planMode==='paced' ? 'Paced' : 'Free pace'}${g.description ? ' &middot; ' + escapeHtml(g.description) : ''}</div>
         </div>
-        ${actionHtml}
+        <div class="group-action">${actionHtml}</div>
       </div>`;
   };
 
-  const createFormHtml = groupCreateOpen ? renderGroupCreateForm() : `
+  let listHtml;
+  if(groupDirTab === 'mine'){
+    listHtml = mine.length ? `<div class="group-card-list">${mine.map(groupCard).join('')}</div>`
+      : `<div class="empty-note">${q ? 'No groups match that search.' : "You haven't joined a group yet — switch to Discover to browse or search."}</div>`;
+  } else {
+    listHtml = groupsDirectoryLoading ? `<div style="font-size:0.82rem; color:var(--ink-soft);">Loading groups…</div>`
+      : (discover.length ? `<div class="group-card-list">${discover.map(groupCard).join('')}</div>`
+        : `<div class="empty-note">${q ? 'No groups match that search.' : 'No groups yet — be the first to create one.'}</div>`);
+  }
+
+  return `
     <div class="settings-box">
-      <h3>Groups</h3>
-      <p style="font-size:0.85rem; color:var(--ink-soft);">Bible studies, tables, or devotion groups — centered around a shared reading plan, with a discussion space. Browse and request to join, or use an invite link to join directly.</p>
-      <button class="btn primary" id="openGroupCreateBtn">Create a group</button>
+      <div class="group-dir-header">
+        <h3>Groups</h3>
+        <button class="btn primary small" id="openGroupCreateBtn">+ Create a group</button>
+      </div>
+      <div class="group-tabs">
+        <button class="${groupDirTab==='mine'?'active':''}" data-group-dir-tab="mine">My Groups${mine.length ? ' ('+mine.length+')' : ''}</button>
+        <button class="${groupDirTab==='discover'?'active':''}" data-group-dir-tab="discover">Discover</button>
+      </div>
+      ${groupDirTab==='discover' ? `<div class="group-search-row"><input type="text" id="groupSearchInput" placeholder="Search groups by name…" value="${escapeHtml(groupSearchQuery)}"></div>` : ''}
+      ${listHtml}
     </div>`;
-
-  const searchHtml = `
-    <div class="settings-box">
-      <input type="text" id="groupSearchInput" placeholder="Search groups by name…" value="${escapeHtml(groupSearchQuery)}" style="width:100%; padding:9px 10px; border:1px solid var(--line); border-radius:8px; font-size:0.9rem; font-family:inherit;">
-    </div>`;
-
-  const mineHtml = mine.length ? `
-    <div class="settings-box">
-      <h3>My groups (${mine.length})</h3>
-      ${mine.map(groupRow).join('')}
-    </div>` : '';
-
-  const discoverHtml = `
-    <div class="settings-box">
-      <h3>Discover</h3>
-      ${groupsDirectoryLoading ? `<div style="font-size:0.82rem; color:var(--ink-soft);">Loading groups…</div>` : ''}
-      ${!groupsDirectoryLoading && !discover.length ? `<div class="empty-note">${q ? 'No groups match that search.' : 'No groups yet — be the first to create one.'}</div>` : ''}
-      ${discover.map(groupRow).join('')}
-    </div>`;
-
-  return createFormHtml + searchHtml + mineHtml + discoverHtml;
 }
 
 function renderGroupCreateForm(){
@@ -3169,6 +3195,7 @@ function attachEvents(){
   if(openGroupCreateBtn) openGroupCreateBtn.addEventListener('click', ()=>{ groupCreateOpen = true; groupDraftBooks = []; groupCreateError=''; render(); });
   const cancelGroupCreateBtn = document.getElementById('cancelGroupCreateBtn');
   if(cancelGroupCreateBtn) cancelGroupCreateBtn.addEventListener('click', ()=>{ groupCreateOpen = false; render(); });
+  document.querySelectorAll('[data-group-dir-tab]').forEach(btn=> btn.addEventListener('click', ()=>{ groupDirTab = btn.dataset.groupDirTab; render(); }));
 
   document.querySelectorAll('input[name="groupPlanMode"]').forEach(radio=>{
     radio.addEventListener('change', ()=>{
