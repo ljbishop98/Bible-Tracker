@@ -961,12 +961,14 @@ function syncPublicActivity(){
 // falls back to a colored initial until/unless the request is accepted).
 let friendNameCache = {}; // uid -> displayName, for pending links
 let friendsSubRetryCount = 0;
+let friendsListenerError = ''; // surfaced in the Friends tab's troubleshooting panel, not just the console
 function subscribeFriends(){
   if(!fbDb || !currentUser) return;
   if(friendsUnsub) friendsUnsub();
   friendsUnsub = fbDb.collection('friendLinks').where('userIds','array-contains',currentUser.uid)
     .onSnapshot(snap=>{
       friendsSubRetryCount = 0; // a good snapshot means the connection is healthy again
+      friendsListenerError = '';
       friendLinksData = snap.docs.map(d=>({ id:d.id, ...d.data() }));
       const acceptedUids = friendLinksData.filter(l=>l.status==='accepted').map(l=> l.userIds.find(u=>u!==currentUser.uid));
       const pendingUids = friendLinksData.filter(l=>l.status==='pending').map(l=> l.userIds.find(u=>u!==currentUser.uid));
@@ -989,6 +991,8 @@ function subscribeFriends(){
       render();
     }, err=>{
       console.warn('friends listener error', err);
+      friendsListenerError = (err && err.code) ? `${err.code}: ${err.message||''}` : String(err);
+      render();
       // Without this, a single transient error (a permission hiccup, a brief network drop, the
       // kind of thing that can happen mid-way through changing Firestore data) kills this listener
       // PERMANENTLY for the rest of the session — Firestore does not auto-retry a failed onSnapshot,
@@ -1850,7 +1854,25 @@ function renderFriends(){
       }).join('')}
     </div>` : `<div class="empty-note">No connections yet — search for a friend or family member above. This is meant to feel like company, not a leaderboard: no percentages, no comparisons, just knowing someone else is walking with you.</div>`;
 
-  return addFormHtml + incomingHtml + outgoingHtml + acceptedHtml;
+  // A plain, on-screen troubleshooting panel — so if requests aren't showing up, what's actually
+  // happening can be checked right here instead of needing to open browser dev tools. Shows exactly
+  // what this account's live connection to Firestore currently sees.
+  const troubleshootingHtml = `
+    <details class="settings-box" style="font-size:0.82rem;">
+      <summary style="cursor:pointer; font-weight:600;">Troubleshooting</summary>
+      <div style="margin-top:10px; color:var(--ink-soft); line-height:1.6;">
+        <div>Signed in as: <strong>${currentUser.email}</strong></div>
+        <div>Your account ID: <code>${myUid}</code></div>
+        <div>Friend-link documents this account can currently see: <strong>${friendLinksData.length}</strong></div>
+        ${friendsListenerError ? `<div style="color:var(--bad); margin-top:6px;">Listener error: ${friendsListenerError}</div>` : `<div style="color:var(--good); margin-top:6px;">No listener errors.</div>`}
+        ${friendLinksData.length ? `
+          <div style="margin-top:8px; font-family:monospace; font-size:0.78rem; white-space:pre-wrap; background:var(--bg-soft, #f5f2ec); padding:8px; border-radius:6px;">${friendLinksData.map(l=>`${l.id} — status:${l.status} requestedBy:${l.requestedBy}`).join('\n')}</div>
+        ` : ''}
+        <div style="margin-top:8px;">If you just sent a request and its document isn't listed above at all, the write itself didn't happen — check the Send request button for an error message. If it IS listed above but isn't showing in the right section, that's a display bug, not a data problem — let me know the exact line shown here.</div>
+      </div>
+    </details>`;
+
+  return addFormHtml + incomingHtml + outgoingHtml + acceptedHtml + troubleshootingHtml;
 }
 
 function renderYearInReview(){
