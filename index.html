@@ -1104,15 +1104,40 @@ function saveCustomPlan(){
 function render(){
   ensurePlanReady();
   const app = document.getElementById('app');
+
+  // This whole app rebuilds the page's HTML from scratch on every render() call — simple, but
+  // it means any input element gets destroyed and recreated each time, which normally kills focus
+  // and drops whatever was mid-typed. Most fields never hit this (they're only read at submit time),
+  // but live features like friend search call render() WHILE the user is typing. So: snapshot
+  // whichever element is currently focused before rebuilding, then restore focus, cursor position,
+  // and the literal value the user had typed right after — regardless of which branch below runs.
+  const active = document.activeElement;
+  let focusRestore = null;
+  if(active && active.id && app.contains(active) && typeof active.value === 'string'){
+    focusRestore = { id: active.id, value: active.value, start: active.selectionStart, end: active.selectionEnd };
+  }
+  function restoreFocus(){
+    if(!focusRestore) return;
+    const el = document.getElementById(focusRestore.id);
+    if(!el) return;
+    el.value = focusRestore.value;
+    el.focus();
+    if(typeof focusRestore.start === 'number' && el.setSelectionRange){
+      try{ el.setSelectionRange(focusRestore.start, focusRestore.end); }catch(e){}
+    }
+  }
+
   if(shouldShowGate()){
     app.innerHTML = renderAuthGate();
     attachAuthGateEvents();
+    restoreFocus();
     return;
   }
   const forced = needsPlanOnboarding();
   if(forced || planChooserOpen){
     app.innerHTML = `<div class="onboard-wrap">${onboardingStep==='custom' ? renderCustomBuilder(!forced) : renderPlanChoose(!forced)}</div>`;
     attachPlanChooserEvents();
+    restoreFocus();
     return;
   }
   app.innerHTML = `
@@ -1131,6 +1156,7 @@ function render(){
     <input type="file" id="importFile" accept="application/json">
   `;
   attachEvents();
+  restoreFocus();
 }
 
 function renderCheckinBanner(){
