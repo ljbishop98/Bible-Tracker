@@ -5,7 +5,7 @@
 // to bump it on any meaningful release even if this list doesn't change — browsers only notice
 // a service worker update when the sw.js file's bytes change, so changing this string is what
 // makes browsers pick up new files at all.
-const CACHE_NAME = 'cultivate-v25';
+const CACHE_NAME = 'cultivate-v26';
 const APP_SHELL = [
   './',
   './index.html',
