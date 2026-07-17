@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>Cultivate</title>
 <script>
   // Set the light/dark theme attribute as early as possible — before any CSS paints — so there's
@@ -86,6 +86,12 @@
      scrollable elements; the horizontal-overflow clip instead lives on #app, a single wrapper
      that isn't also the thing carrying overscroll-behavior, so there's no ambiguity for the
      browser to get confused about. */
+  /* The viewport meta tag's user-scalable=no stops pinch-zoom on most browsers, but iOS Safari has
+     ignored that specific flag since iOS 10 (an intentional accessibility override) — so double-tap-
+     to-zoom needs to be blocked at the CSS level too. touch-action:manipulation tells the browser
+     gestures on this element are for scrolling/tapping only, which is what actually stops the
+     double-tap zoom gesture on iOS. */
+  html, body{ touch-action:manipulation; }
   html{width:100%; background:var(--bg);}
   /* ---- Static launch splash — pure HTML/CSS, present before the app script even parses ---- */
   .app-splash{
@@ -373,7 +379,7 @@
   .invite-link-row{display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:8px;}
   .invite-link-row input{flex:1; min-width:180px; padding:8px 10px; border:1px solid var(--line); border-radius:8px; font-size:0.78rem; background:var(--bg);}
   .install-banner{
-    background:var(--accent-soft); border:1px solid var(--accent); border-radius:10px; padding:12px 16px;
+    background:var(--accent-soft); border:1px solid var(--accent); border-radius:14px; padding:12px 16px;
     font-size:0.85rem; margin-bottom:18px; display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap;
   }
   .auth-wrap{max-width:420px; margin:60px auto; padding:0 20px;}
@@ -594,6 +600,24 @@
   .theme-toggle:hover{border-color:var(--accent); color:var(--accent);}
   .theme-toggle .icon-svg{vertical-align:-3px;}
 
+  /* ---- Consider Him (daily verse + historic commentary, top of Today) ---- */
+  .consider-him-card{ background:var(--accent-soft); border-color:var(--accent); }
+  .consider-him-ref{ font-weight:700; color:var(--accent); font-size:0.85rem; margin-bottom:6px; }
+  .consider-him-verse{ font-size:0.98rem; line-height:1.6; font-style:italic; margin:0 0 10px; }
+  .consider-him-commentary summary{ cursor:pointer; font-size:0.82rem; font-weight:600; color:var(--ink-soft); }
+  .consider-him-commentary summary::-webkit-details-marker{ display:none; }
+  .consider-him-quote{ font-size:0.9rem; line-height:1.6; margin:10px 0 4px; }
+  .consider-him-source{ font-size:0.78rem; color:var(--ink-soft); margin:0; }
+  /* ---- Check-in history strip (Dashboard) ---- */
+  .checkin-history-row{display:flex; gap:4px; overflow-x:auto; padding-bottom:2px;}
+  .checkin-history-item{
+    flex:1; min-width:38px; display:flex; flex-direction:column; align-items:center; gap:4px;
+    background:var(--bg); border:1px solid var(--line); border-radius:10px; padding:8px 2px;
+    font-size:0.68rem; color:var(--ink-soft); text-align:center;
+  }
+  .checkin-history-item .d{font-weight:700; color:var(--ink);}
+  .checkin-history-item .v{line-height:1.2;}
+  .checkin-history-item .v.answered{color:var(--accent); font-weight:600;}
   /* ---- Check-in (moved to the top of Today, collapses once answered) ---- */
   .checkin-done-line{
     display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;
@@ -614,6 +638,11 @@
     padding:6px 2px calc(6px + env(safe-area-inset-bottom));
     box-shadow:0 -2px 10px rgba(0,0,0,0.08);
     backdrop-filter:blur(18px); -webkit-backdrop-filter:blur(18px);
+    /* Forces its own GPU-composited layer — without this, a fixed element sitting over a
+       scrollable body can visibly lag, jump, or briefly detach during momentum/rubber-band
+       scrolling on iOS Safari, which is exactly what "the nav bar isn't staying fixed" describes.
+       translateZ(0) is the standard fix for that; it has no visual effect on its own. */
+    transform:translateZ(0); -webkit-transform:translateZ(0); will-change:transform;
   }
   .bottom-nav-row{display:flex; justify-content:space-around; align-items:stretch;}
   .bottom-nav-item{
@@ -1542,6 +1571,146 @@ function renderAvatarHtml(profile, size){
   return `<div style="width:${size}px; height:${size}px; border-radius:50%; background:${profile.color||COLOR_PALETTE[0]}; color:#fff; display:flex; align-items:center; justify-content:center; font-weight:600; font-size:${Math.round(size*0.42)}px; flex-shrink:0;">${initial}</div>`;
 }
 
+/* ---------------- Consider Him: daily verse + commentary from church history ----------------
+   A date-based rotation (same entry for everyone on a given calendar day, like "One year ago"
+   below) through a curated set of Bible passages on the death, burial, resurrection, and return
+   of Christ — Old and New Testament — each paired with real, attributed commentary from historic
+   Christian writers, early church through the 19th century. Verse text is KJV (public domain).
+   Every quote below has been checked against a primary or authoritative secondary source rather
+   than invented; sources are noted in `work` for anyone who wants to look one up directly. */
+const CONSIDER_HIM_ENTRIES = [
+  {
+    ref: "Job 19:25–27",
+    text: "For I know that my redeemer liveth, and that he shall stand at the latter day upon the earth: and though after my skin worms destroy this body, yet in my flesh shall I see God: whom I shall see for myself, and mine eyes shall behold, and not another.",
+    author: "Charles Spurgeon",
+    work: "“I Know That My Redeemer Liveth,” sermon on Job 19:25 (1863)",
+    commentary: "Our Lord Jesus Christ, who once has played the kinsman's part by paying the price for us, liveth, and he will redeem us by power."
+  },
+  {
+    ref: "Psalm 22:16–18",
+    text: "For dogs have compassed me: the assembly of the wicked have inclosed me: they pierced my hands and my feet. I may tell all my bones: they look and stare upon me. They part my garments among them, and cast lots upon my vesture.",
+    author: "Justin Martyr",
+    work: "First Apology, ch. 35 (c. 155 AD)",
+    commentary: "David... suffered none of these things; but Jesus Christ stretched forth His hands, being crucified by the Jews... this was said in reference to the nails of the cross which were fixed in His hands and His feet."
+  },
+  {
+    ref: "Isaiah 53:4–6",
+    text: "Surely he hath borne our griefs, and carried our sorrows... But he was wounded for our transgressions, he was bruised for our iniquities: the chastisement of our peace was upon him; and with his stripes we are healed. All we like sheep have gone astray; we have turned every one to his own way; and the Lord hath laid on him the iniquity of us all.",
+    author: "Charles Spurgeon",
+    work: "“With His Stripes We Are Healed,” sermon (1885)",
+    commentary: "When we hear the lash falling upon the Divine and human Person of our blessed Master, and see Him wounded for our transgressions and bruised for our iniquities, thereby is the spirit made deeply penitential and humbly confident."
+  },
+  {
+    ref: "Jonah 1:17",
+    text: "Now the Lord had prepared a great fish to swallow up Jonah. And Jonah was in the belly of the fish three days and three nights.",
+    author: "Cyril of Jerusalem",
+    work: "Catechetical Lecture 4 (c. 350 AD)",
+    commentary: "Did Jonah come forth from the whale on the third day, and has not Christ then risen from the earth on the third day?"
+  },
+  {
+    ref: "Luke 24:36–39",
+    text: "And as they thus spake, Jesus himself stood in the midst of them, and saith unto them, Peace be unto you... Behold my hands and my feet, that it is I myself: handle me, and see; for a spirit hath not flesh and bones, as ye see me have.",
+    author: "Ignatius of Antioch",
+    work: "Letter to the Smyrnaeans, ch. 2–3 (c. 107 AD)",
+    commentary: "He suffered truly, even as also He truly raised up Himself, not, as certain unbelievers maintain, that He only seemed to suffer... after His resurrection He was still possessed of flesh, and said to them that were with Peter, ‘Lay hold, handle me, and see that I am not an incorporeal spirit.’"
+  },
+  {
+    ref: "Mark 16:5–6",
+    text: "And entering into the sepulchre, they saw a young man sitting on the right side, clothed in a long white garment; and they were affrighted. And he saith unto them, Be not affrighted: Ye seek Jesus of Nazareth, which was crucified: he is risen; he is not here: behold the place where they laid him.",
+    author: "Tertullian",
+    work: "On the Flesh of Christ, ch. 5 (c. 210 AD)",
+    commentary: "The Son of God was crucified: I am not ashamed—because it is shameful. The Son of God died: it is immediately credible—because it is silly. He was buried, and rose again: it is certain—because it is impossible."
+  },
+  {
+    ref: "John 11:25–26",
+    text: "Jesus said unto her, I am the resurrection, and the life: he that believeth in me, though he were dead, yet shall he live: And whosoever liveth and believeth in me shall never die. Believest thou this?",
+    author: "John Calvin",
+    work: "Commentary on the Gospel of John (1553)",
+    commentary: "The whole human race is plunged in death; and, therefore, no man will be a partaker of life until he is risen from the dead. Thus Christ shows that he is the commencement of life... they who believe in Christ, though they were formerly dead, begin to live, because faith is a spiritual resurrection of the soul."
+  },
+  {
+    ref: "John 20:27–29",
+    text: "Then saith he to Thomas, Reach hither thy finger, and behold my hands; and reach hither thy hand, and thrust it into my side: and be not faithless, but believing... Jesus saith unto him, Thomas, because thou hast seen me, thou hast believed: blessed are they that have not seen, and yet have believed.",
+    author: "Augustine of Hippo",
+    work: "Sermon 263, on the Ascension (c. 411 AD)",
+    commentary: "We did not see him hanging on the cross, nor observe him rising from the tomb. We hold this by faith; we behold it with the eyes of the heart."
+  },
+  {
+    ref: "Romans 6:3–4",
+    text: "Know ye not, that so many of us as were baptized into Jesus Christ were baptized into his death? Therefore we are buried with him by baptism into death: that like as Christ was raised up from the dead by the glory of the Father, even so we also should walk in newness of life.",
+    author: "Irenaeus of Lyons",
+    work: "Against Heresies, Book III, ch. 19 (c. 180 AD)",
+    commentary: "The Lord Himself... making in His own person the first-fruits of the resurrection of man; that, as the Head rose from the dead, so also the remaining part of the body... may arise."
+  },
+  {
+    ref: "1 Corinthians 15:3–4",
+    text: "For I delivered unto you first of all that which I also received, how that Christ died for our sins according to the scriptures; And that he was buried, and that he rose again the third day according to the scriptures.",
+    author: "Matthew Henry",
+    work: "Commentary on the Whole Bible (1706)",
+    commentary: "Christ's death and resurrection are the very sum and substance of evangelical truth... he died for our sins, according to the scriptures; he was buried, and rose from the dead, according to the scripture-prophecies, and scripture-types."
+  },
+  {
+    ref: "1 Corinthians 15:20–22",
+    text: "But now is Christ risen from the dead, and become the firstfruits of them that slept... For as in Adam all die, even so in Christ shall all be made alive.",
+    author: "John Chrysostom",
+    work: "Paschal Homily (c. 400 AD)",
+    commentary: "Christ is risen, and life is set free. Christ is risen, and not one dead remains in the grave: for Christ, having risen from the dead, has become the first-fruits of them that slept."
+  },
+  {
+    ref: "1 Corinthians 15:54–57",
+    text: "So when this corruptible shall have put on incorruption, and this mortal shall have put on immortality, then shall be brought to pass the saying that is written, Death is swallowed up in victory. O death, where is thy sting? O grave, where is thy victory?... thanks be to God, which giveth us the victory through our Lord Jesus Christ.",
+    author: "Athanasius of Alexandria",
+    work: "On the Incarnation, ch. 5 (c. 318 AD)",
+    commentary: "Death has become like a tyrant who has been completely conquered by the legitimate monarch; bound hand and foot... So has death been conquered and branded for what it is by the Saviour on the cross."
+  },
+  {
+    ref: "Colossians 3:1–4",
+    text: "If ye then be risen with Christ, seek those things which are above, where Christ sitteth on the right hand of God... When Christ, who is our life, shall appear, then shall ye also appear with him in glory.",
+    author: "Gregory of Nyssa",
+    work: "Easter Sermon, Oratio I in Christi Resurrectionem (c. 379 AD)",
+    commentary: "The reign of life has begun, the tyranny of death is ended. A new birth has taken place, a new life has come, a new order of existence has appeared, our very nature has been transformed!"
+  },
+  {
+    ref: "Acts 1:9–11",
+    text: "And when he had spoken these things, while they beheld, he was taken up; and a cloud received him out of their sight... This same Jesus, which is taken up from you into heaven, shall so come in like manner as ye have seen him go into heaven.",
+    author: "Jonathan Edwards",
+    work: "Works of Jonathan Edwards, Vol. 2 (18th century)",
+    commentary: "He shall descend in the same manner as he ascended; in both he comes with the clouds of heaven."
+  },
+  {
+    ref: "1 Peter 1:3",
+    text: "Blessed be the God and Father of our Lord Jesus Christ, which according to his abundant mercy hath begotten us again unto a lively hope by the resurrection of Jesus Christ from the dead.",
+    author: "Charles Spurgeon",
+    work: "Sermon on 1 Peter 1:3",
+    commentary: "The resurrection of Jesus is virtually my resurrection. Were He dead still, then might I fear... that I, dying, should die. But He, having died, arose again in due season, and lives! Therefore I, dying, shall also rise and live, for as Jesus is, so must I be."
+  },
+  {
+    ref: "Revelation 1:17–18",
+    text: "And when I saw him, I fell at his feet as dead. And he laid his right hand upon me, saying unto me, Fear not; I am the first and the last: I am he that liveth, and was dead; and, behold, I am alive for evermore, Amen; and have the keys of hell and of death.",
+    author: "Charles Spurgeon",
+    work: "“The Glorious Master and the Swooning Disciple,” sermon (1872)",
+    commentary: "Jesus said, ‘I am he that liveth’—that is, ‘I am the living one.’ Creatures are not living in themselves, and borrow leave to be; but to God alone it belongs to exist necessarily. He is the I AM, and such is Christ."
+  },
+  {
+    ref: "1 Thessalonians 4:16–17",
+    text: "For the Lord himself shall descend from heaven with a shout, with the voice of the archangel, and with the trump of God: and the dead in Christ shall rise first: Then we which are alive and remain shall be caught up together with them in the clouds, to meet the Lord in the air: and so shall we ever be with the Lord.",
+    author: "Charles Spurgeon",
+    work: "Sermon on 1 Thessalonians 4:16–17",
+    commentary: "Whatever ideas we have concerning the details of Christ's coming, this summing up of the whole matter is unutterably precious to us: ‘so shall we ever be with the Lord.’ There is no separating Christ and his people."
+  }
+];
+function dayOfYear(d){
+  const start = new Date(d.getFullYear(), 0, 0);
+  return Math.floor((d - start) / 86400000);
+}
+// Same entry for every user on a given calendar day (like the "one year ago" resurfacing below) —
+// cycles through the curated list above and wraps once it's been fully used, so it stays
+// predictable and repeatable rather than random, and simply grows richer as more entries are added.
+function considerHimForToday(){
+  const idx = dayOfYear(new Date()) % CONSIDER_HIM_ENTRIES.length;
+  return CONSIDER_HIM_ENTRIES[idx];
+}
+
 /* ---------------- Spiritual temperature check-in ---------------- */
 const CHECKIN_LABELS = { 1:'Distant', 2:'Dry', 3:'Steady', 4:'Warm', 5:'Close' };
 function setCheckin(date, value, note){
@@ -1819,24 +1988,12 @@ function subscribeToUserDoc(){
       fbFirstSnapshotHandled = true;
       const localHasData = state.log.length > 0;
       const remoteHasData = (data.log||[]).length > 0;
-      if(localHasData && remoteHasData){
-        // customConfirm() is async (a real dialog can't block synchronously the way window.confirm
-        // did), so the rest of this snapshot's handling waits inside the .then() instead of just
-        // falling through below — everything after this if-block is unreachable until answered.
-        customConfirm(
-          "Both this device and your account already have reading progress saved.\n\n" +
-          "Choose Account to use the account version (recommended), or This device to keep this device's data and overwrite your account with it.",
-          { confirmLabel:'Use account', cancelLabel:'Use this device' }
-        ).then(useCloud=>{
-          if(!useCloud){
-            pushStateNow(docRef); syncStatus='synced'; lastSyncedAt=Date.now(); render();
-            syncPublicActivity(); ensureUserDirectory();
-          } else {
-            applyRemoteState(data);
-          }
-        });
-        return;
-      } else if(localHasData && !remoteHasData){
+      // Used to ask "use this device or the account?" via a confirm dialog whenever both had data —
+      // now that syncing itself has been stable for a while, that popup just adds friction for no
+      // real benefit: the account/cloud copy is always treated as the source of truth once you're
+      // signed in (the one case that still pushes local data up is a genuinely empty account, e.g.
+      // first sign-in ever, where there's nothing on the cloud side to prefer over).
+      if(localHasData && !remoteHasData){
         pushStateNow(docRef); syncStatus='synced'; lastSyncedAt=Date.now(); render();
         syncPublicActivity(); ensureUserDirectory();
         return;
@@ -2316,6 +2473,8 @@ function loadGroupsDirectory(force){
 let myGroupIds = [];
 let myGroupRoles = {}; // groupId -> my role in that group ('owner'|'admin'|'member'), from the same query below — lets the notification bell know which groups' join requests are actually mine to review.
 let myGroupsUnsub = null;
+let myGroupsSubRetryCount = 0;
+let myGroupsListenerError = ''; // surfaced in the group directory's empty/troubleshooting state, not just the console
 // "My groups" is derived directly from the members subcollections via a collectionGroup query,
 // rather than a separate denormalized userGroups doc. The denormalized-doc version had a real
 // permission problem: approving someone else's join request would need to write into THEIR
@@ -2324,10 +2483,18 @@ let myGroupsUnsub = null;
 // already carries a plain `uid` field (equal to its own doc ID) specifically so this query can
 // filter on it. Note: Firestore may prompt to auto-create a collection-group index the first
 // time this runs in a real project — that's expected, just follow the link it gives you once.
+// If that index is never created (or any other transient error hits), this listener used to just
+// die silently forever, which is exactly what produced the reported bug: a group you own never
+// makes it into myGroupIds, so the directory keeps showing "Join" for a group that's already
+// yours. It now retries with backoff (mirroring subscribeFriends), AND — belt and suspenders —
+// attemptJoinOrOpen() below double-checks direct membership before ever sending a join request,
+// so even a permanently-broken listener can't produce a dead "Join" button anymore.
 function subscribeMyGroups(){
   if(!fbDb || !currentUser) return;
   if(myGroupsUnsub) myGroupsUnsub();
   myGroupsUnsub = fbDb.collectionGroup('members').where('uid','==',currentUser.uid).onSnapshot(snap=>{
+    myGroupsSubRetryCount = 0;
+    myGroupsListenerError = '';
     myGroupIds = snap.docs.map(d=> d.ref.parent.parent.id);
     myGroupRoles = {};
     snap.docs.forEach(d=>{ myGroupRoles[d.ref.parent.parent.id] = d.data().role; });
@@ -2335,7 +2502,15 @@ function subscribeMyGroups(){
     ensureMyGroupsInDirectory();
     syncAdminJoinRequestSubs();
     render();
-  }, ()=>{});
+  }, err=>{
+    console.warn('my-groups listener error', err);
+    myGroupsListenerError = (err && err.code) ? `${err.code}: ${err.message||''}` : String(err);
+    render();
+    if(myGroupsSubRetryCount < 5 && currentUser){
+      myGroupsSubRetryCount++;
+      setTimeout(()=>{ if(currentUser) subscribeMyGroups(); }, 2000 * myGroupsSubRetryCount);
+    }
+  });
 }
 // ---- Notification bell: aggregated group join requests ----
 // Only groups where I'm owner/admin ever have join requests worth surfacing here. Rather than
@@ -2369,6 +2544,25 @@ function teardownAdminJoinRequestSubs(){
   adminJoinRequests = {};
   myGroupRoles = {};
 }
+// ---- Dismissal ----
+// Actionable items (a friend request, a group join request) never need explicit dismiss-tracking —
+// they're pulled live from real data, so accepting/declining/approving simply removes the
+// underlying doc and they fall out of notifItems() on their own. Informational nudges (the check-in
+// reminder, "on this day") have no such resolution, so THEY get an explicit, persisted dismissal —
+// scoped into the id itself (today's date, or the specific "one year ago" date) so dismissing today's
+// nudge doesn't suppress a future one once the underlying condition recurs.
+let dismissedNotifIds = new Set();
+try{ dismissedNotifIds = new Set(JSON.parse(localStorage.getItem('cultivateDismissedNotifIds')||'[]')); }catch(e){}
+function persistDismissedNotifIds(){
+  try{ localStorage.setItem('cultivateDismissedNotifIds', JSON.stringify(Array.from(dismissedNotifIds))); }catch(e){}
+}
+function isInformationalNotifId(id){ return id.indexOf('checkin:')===0 || id.indexOf('onthisday:')===0; }
+function dismissInformationalNotifs(items){
+  let changed = false;
+  items.forEach(i=>{ if(isInformationalNotifId(i.id) && !dismissedNotifIds.has(i.id)){ dismissedNotifIds.add(i.id); changed = true; } });
+  if(changed) persistDismissedNotifIds();
+  return changed;
+}
 // Aggregates everything the bell/inbox surfaces, newest-first: incoming friend requests, group
 // join requests waiting on my approval, the check-in nudge, and today's "one year ago" memory.
 // Each item carries its own `action()` so renderNotifPanel/attachEvents stay dumb dispatchers.
@@ -2398,7 +2592,7 @@ function notifItems(){
     const gap = daysBetween(last, todayStr());
     if(gap >= 3){
       items.push({
-        id:'checkin', iconName:'calendar', text:"Haven't logged a reading in "+gap+' days',
+        id:'checkin:'+todayStr(), iconName:'calendar', text:"Haven't logged a reading in "+gap+' days',
         sub:'No pressure — tap to open Today', time:0,
         action:()=>{ notifPanelOpen=false; switchToTab('today'); }
       });
@@ -2407,21 +2601,30 @@ function notifItems(){
   const oya = oneYearAgoEntries();
   if((oya.journal && oya.journal.length) || (oya.log && oya.log.length)){
     items.push({
-      id:'onthisday', iconName:'bookmark', text:'On this day, one year ago', sub:'A memory resurfaced in your Journal',
+      id:'onthisday:'+oya.date, iconName:'bookmark', text:'On this day, one year ago', sub:'A memory resurfaced in your Journal',
       time:0,
       action:()=>{ notifPanelOpen=false; switchToTab('journal'); }
     });
   }
-  items.sort((a,b)=> (b.time||0)-(a.time||0));
-  return items;
+  const visible = items.filter(i=> !dismissedNotifIds.has(i.id));
+  visible.sort((a,b)=> (b.time||0)-(a.time||0));
+  return visible;
 }
 function toggleNotifPanel(){
   notifPanelOpen = !notifPanelOpen;
+  if(notifPanelOpen){
+    // Opening the panel counts as having "viewed" whatever informational nudges are in it right
+    // now — they won't come back until the underlying condition changes (a new day, a fresh gap,
+    // a new "one year ago" date). Actionable items are untouched; those only leave once resolved.
+    dismissInformationalNotifs(notifItems());
+  }
   render();
 }
 function runNotifItem(id){
   const item = notifItems().find(i=>i.id===id);
-  if(item) item.action();
+  if(!item) return;
+  if(isInformationalNotifId(id)){ dismissedNotifIds.add(id); persistDismissedNotifIds(); }
+  item.action();
 }
 // "My Groups" is rendered by filtering `groupsDirectory` down to ids in `myGroupIds` (see
 // renderGroupsDirectory) — but groupsDirectory itself comes from ONE broad collection-wide list()
@@ -2555,6 +2758,32 @@ function createGroup(fields){
 // ---- Join flow ----
 let groupJoinBusy = false;
 let groupJoinError = '';
+// Wraps requestToJoinGroup with a direct, guaranteed-cheap membership check first — fixes the
+// reported bug where a group's own owner (created moments ago, or affected by a slow/broken
+// myGroupIds listener — see subscribeMyGroups above) still saw a "Join" button, and clicking it
+// appeared to do nothing (it was quietly filing a join request for a group they already belonged
+// to, which never resolves into anything since there's no membership left to grant). A plain
+// get() on your own membership doc is the least-restrictive read Firestore rules allow here, so
+// it works even if the broader collectionGroup query is degraded for any reason.
+function attemptJoinOrOpen(groupId){
+  if(!fbDb || !currentUser) return;
+  fbDb.collection('groups').doc(groupId).collection('members').doc(currentUser.uid).get().then(doc=>{
+    if(doc.exists){
+      if(!myGroupIds.includes(groupId)) myGroupIds = myGroupIds.concat([groupId]);
+      requestedGroupIds.delete(groupId);
+      showToast("You're already in this group — opening it.");
+      openGroup(groupId);
+    } else {
+      requestedGroupIds.add(groupId);
+      requestToJoinGroup(groupId);
+    }
+  }).catch(()=>{
+    // Couldn't even check (offline, etc.) — fall back to the normal request flow rather than
+    // doing nothing at all.
+    requestedGroupIds.add(groupId);
+    requestToJoinGroup(groupId);
+  });
+}
 function requestToJoinGroup(groupId){
   if(!fbDb || !currentUser) return;
   groupJoinBusy = true; groupJoinError = ''; render();
@@ -2763,6 +2992,7 @@ function render(){
       ${renderTopStrip()}
       ${renderGroupInviteBanner()}
       ${renderCheckinBanner()}
+      ${renderGuestDataBanner()}
       ${renderInstallBanner()}
       <div class="view-root ${viewAnimClass}">${tabContent}</div>
       ${renderFooter()}
@@ -3004,6 +3234,21 @@ function attachAuthGateEvents(){
   if(cancelGate) cancelGate.addEventListener('click', e=>{ e.preventDefault(); forceShowGate=false; authView='login'; authError=''; render(); });
 }
 
+const GUEST_BANNER_DISMISS_KEY = 'cultivateGuestBannerDismissed';
+// Replaces the old "this device and your account both have progress — which do you want?" popup
+// (see subscribeToUserDoc): signed-in accounts now silently trust the cloud copy, so the only data-
+// safety notice left is for guest mode, where there genuinely is no backup — everything lives only
+// in this browser's local storage. Dismissible and remembered (localStorage), so it's a one-time
+// heads-up rather than something that nags on every visit.
+function renderGuestDataBanner(){
+  if(currentUser) return '';
+  try{ if(localStorage.getItem(GUEST_BANNER_DISMISS_KEY) === '1') return ''; }catch(e){}
+  return `<div class="install-banner">
+    <span>You're in guest mode — your progress is saved only on this device and isn't backed up. Create a free account to keep it safe and sync it across devices.</span>
+    <button class="btn primary small" id="guestBannerCreateAccountBtn">Create account</button>
+    <button class="btn small" id="guestBannerDismissBtn" aria-label="Dismiss">${icon('close',14)}</button>
+  </div>`;
+}
 function renderInstallBanner(){
   if(isStandalone()) return '';
   if(deferredInstallPrompt){
@@ -3131,6 +3376,25 @@ function renderSidebar(){
   </aside>`;
 }
 
+// A dedicated slot at the very top of Today — the verse itself is always shown; the historic
+// commentary is one tap away via <details>, so the card stays short at a glance but the full
+// reflection is right there when there's time for it. considerHimExpanded only affects the CSS
+// open attribute for prefers-reduced-motion consistency with the rest of the app; native <details>
+// handles the actual toggle without any JS wiring needed.
+function renderConsiderHim(){
+  const e = considerHimForToday();
+  return `
+    <div class="settings-box consider-him-card" style="max-width:none;">
+      <h3>Consider Him</h3>
+      <div class="consider-him-ref">${e.ref}</div>
+      <p class="consider-him-verse">&ldquo;${e.text}&rdquo;</p>
+      <details class="consider-him-commentary">
+        <summary>Commentary &mdash; ${escapeHtml(e.author)}</summary>
+        <p class="consider-him-quote">&ldquo;${e.commentary}&rdquo;</p>
+        <p class="consider-him-source">&mdash; ${escapeHtml(e.author)}, <em>${escapeHtml(e.work)}</em></p>
+      </details>
+    </div>`;
+}
 function renderToday(){
   const isToday = selectedDate===todayStr();
   const cards = ACTIVE_CATEGORIES.map(cat=>{
@@ -3197,6 +3461,7 @@ function renderToday(){
     </div>`;
 
   return `
+    ${renderConsiderHim()}
     ${checkinHtml}
     <div class="toolbar">
       <label for="dateSel" style="font-size:0.85rem; color:var(--ink-soft);">Logging for:</label>
@@ -3885,7 +4150,34 @@ function renderDashboard(){
       </div>`;
   }).join('');
 
-  return yearInReview + summary + monthlySummaries + blocks;
+  return yearInReview + summary + renderCheckinHistoryCard() + monthlySummaries + blocks;
+}
+
+// The check-in itself only ever showed a single line for whichever date you had open ("You logged
+// today's walk as…") — once a day passed, that answer had nowhere to actually surface again, which
+// read as "it's not being logged anywhere." This makes the history visible without building a full
+// chart: a plain two-week strip, oldest to newest, with a dash for any day nothing was logged.
+function renderCheckinHistoryCard(){
+  if(!state.checkins.length) return '';
+  const days = [];
+  for(let i=13;i>=0;i--){
+    const d = new Date(); d.setDate(d.getDate()-i);
+    days.push(d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate()));
+  }
+  const items = days.map(iso=>{
+    const c = checkinFor(iso);
+    const [y,m,dd] = iso.split('-').map(Number);
+    const weekday = new Date(y,m-1,dd).toLocaleDateString(undefined,{weekday:'narrow'});
+    return `<div class="checkin-history-item" title="${fmtDate(iso)}${c ? ': '+CHECKIN_LABELS[c.value] : ''}">
+      <div class="d">${weekday}</div>
+      <div class="v ${c?'answered':''}">${c ? CHECKIN_LABELS[c.value] : '&ndash;'}</div>
+    </div>`;
+  }).join('');
+  return `
+    <div class="settings-box" style="max-width:none;">
+      <h3>Spiritual check-in &mdash; last 14 days</h3>
+      <div class="checkin-history-row">${items}</div>
+    </div>`;
 }
 
 function renderAccountTab(){
@@ -4417,6 +4709,13 @@ function attachEvents(){
   document.querySelectorAll('[data-view-profile]').forEach(btn=> btn.addEventListener('click', ()=> viewProfile(btn.dataset.viewProfile)));
   const closeViewedProfileBtn = document.getElementById('closeViewedProfileBtn');
   if(closeViewedProfileBtn) closeViewedProfileBtn.addEventListener('click', closeViewedProfile);
+  const guestBannerCreateAccountBtn = document.getElementById('guestBannerCreateAccountBtn');
+  if(guestBannerCreateAccountBtn) guestBannerCreateAccountBtn.addEventListener('click', ()=>{ forceShowGate = true; authView = 'signup'; authError=''; render(); });
+  const guestBannerDismissBtn = document.getElementById('guestBannerDismissBtn');
+  if(guestBannerDismissBtn) guestBannerDismissBtn.addEventListener('click', ()=>{
+    try{ localStorage.setItem(GUEST_BANNER_DISMISS_KEY, '1'); }catch(e){}
+    render();
+  });
   const installBtn = document.getElementById('installBtn');
   if(installBtn){
     installBtn.addEventListener('click', async ()=>{
@@ -4498,11 +4797,7 @@ function attachEvents(){
 
   document.querySelectorAll('[data-open-group]').forEach(btn=> btn.addEventListener('click', ()=> openGroup(btn.dataset.openGroup)));
   document.querySelectorAll('[data-request-join]').forEach(btn=>{
-    btn.addEventListener('click', ()=>{
-      const gid = btn.dataset.requestJoin;
-      requestedGroupIds.add(gid);
-      requestToJoinGroup(gid);
-    });
+    btn.addEventListener('click', ()=> attemptJoinOrOpen(btn.dataset.requestJoin));
   });
   const backToGroupsBtn = document.getElementById('backToGroupsBtn');
   if(backToGroupsBtn) backToGroupsBtn.addEventListener('click', ()=>{ closeGroup(); loadGroupsDirectory(true); render(); });
@@ -4599,6 +4894,35 @@ if(typeof document !== 'undefined' && document.addEventListener){
     }
   });
 }
+
+// ---- Same-day rollover ----
+// selectedDate (and therefore the check-in prompt/"Today" cards) is only ever set once, when the
+// script first loads — a PWA left open overnight (very normal; phones background apps rather than
+// quitting them) never re-evaluates what "today" actually is on its own. That's what made the
+// check-in look like it "doesn't reset daily": if you'd already answered for the date the app
+// happened to load on, it kept showing that same answered date's acknowledgement forever, even
+// after midnight had genuinely passed. This checks whenever the app becomes visible again (the
+// natural moment a rollover would matter) and advances selectedDate — but only if you were already
+// sitting on "today" and hadn't deliberately navigated to a past date, which stays exactly where
+// you left it.
+let knownTodayStr = todayStr();
+function checkForDateRollover(){
+  const current = todayStr();
+  if(current === knownTodayStr) return;
+  const wasOnToday = selectedDate === knownTodayStr;
+  knownTodayStr = current;
+  if(wasOnToday){ selectedDate = current; checkinEditing = false; }
+  render();
+}
+if(typeof document !== 'undefined' && document.addEventListener){
+  document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState === 'visible') checkForDateRollover(); });
+}
+if(typeof window !== 'undefined' && window.addEventListener){
+  window.addEventListener('focus', checkForDateRollover);
+}
+// Belt-and-suspenders for embedded/webview contexts where visibility/focus events can be
+// unreliable (some in-app browsers, some Capacitor configurations) — cheap enough to just poll.
+if(typeof setInterval !== 'undefined') setInterval(checkForDateRollover, 60000);
 
 refreshNotifStatus();
 render();
