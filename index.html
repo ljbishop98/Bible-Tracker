@@ -572,6 +572,7 @@ function updateProfile(displayName, bio, color){
   state.profile = sanitizeProfile({ displayName, bio, color });
   saveState(); render();
   syncPublicActivity();
+  ensureUserDirectory();
 }
 function displayNameOr(fallback){
   return (state.profile && state.profile.displayName) ? state.profile.displayName : fallback;
@@ -785,6 +786,7 @@ function initFirebase(){
         fbFirstSnapshotHandled = false;
         subscribeToUserDoc();
         ensureEmailIndex();
+        ensureUserDirectory();
         subscribeFriends();
       } else if(fbUnsub){
         fbUnsub(); fbUnsub = null;
@@ -895,6 +897,16 @@ function ensureEmailIndex(){
   const key = sanitizeEmailKey(currentUser.email);
   fbDb.collection('emailIndex').doc(key).set({ uid: currentUser.uid }, { merge:true }).catch(()=>{});
 }
+// A deliberately minimal, broadly-readable directory — name only, never activity/plan/journal data —
+// so people can be found by name when adding a friend. The fuller (still non-sensitive) publicActivity
+// doc stays friend-gated as before.
+function ensureUserDirectory(){
+  if(!fbDb || !currentUser) return;
+  const name = displayNameOr(currentUser.email ? currentUser.email.split('@')[0] : 'Friend');
+  fbDb.collection('userDirectory').doc(currentUser.uid).set({
+    displayName: name, displayNameLower: name.toLowerCase()
+  }, { merge:true }).catch(()=>{});
+}
 function syncPublicActivity(){
   if(!fbDb || !currentUser) return;
   const last30 = new Date(); last30.setDate(last30.getDate()-30);
@@ -927,6 +939,19 @@ function subscribeFriends(){
       render();
     }, err=>{ console.warn('friends listener error', err); });
 }
+// Shared core: create the pending link doc once we already know the target uid.
+function createFriendLink(targetUid){
+  if(targetUid === currentUser.uid) return Promise.reject({ message: "That's your own account." });
+  const linkId = friendLinkId(currentUser.uid, targetUid);
+  const ref = fbDb.collection('friendLinks').doc(linkId);
+  return ref.get().then(existing=>{
+    if(existing.exists) throw { message: 'You already have a connection (or pending request) with this person.' };
+    return ref.set({
+      userIds: [currentUser.uid, targetUid].sort(),
+      status:'pending', requestedBy: currentUser.uid, createdAt: Date.now()
+    });
+  });
+}
 function sendFriendRequest(email){
   friendRequestError = ''; friendRequestSent = false; friendRequestBusy = true; render();
   const key = sanitizeEmailKey(email);
@@ -935,17 +960,7 @@ function sendFriendRequest(email){
   // .catch() at the bottom instead of leaving the button stuck on "Sending…" forever.
   fbDb.collection('emailIndex').doc(key).get().then(doc=>{
     if(!doc.exists) throw { message: 'No Cultivate account found with that email. Have they opened Cultivate and signed in at least once?' };
-    const targetUid = doc.data().uid;
-    if(targetUid === currentUser.uid) throw { message: "That's your own email." };
-    const linkId = friendLinkId(currentUser.uid, targetUid);
-    const ref = fbDb.collection('friendLinks').doc(linkId);
-    return ref.get().then(existing=>{
-      if(existing.exists) throw { message: 'You already have a connection (or pending request) with this person.' };
-      return ref.set({
-        userIds: [currentUser.uid, targetUid].sort(),
-        status:'pending', requestedBy: currentUser.uid, createdAt: Date.now()
-      });
-    });
+    return createFriendLink(doc.data().uid);
   }).then(()=>{
     friendRequestBusy = false; friendRequestEmail = ''; friendRequestSent = true; render();
   }).catch(err=>{
@@ -953,11 +968,72 @@ function sendFriendRequest(email){
     friendRequestBusy = false; render();
   });
 }
+function sendFriendRequestToUid(targetUid){
+  friendRequestError = ''; friendRequestSent = false; render();
+  createFriendLink(targetUid).then(()=>{
+    friendRequestSent = true; render();
+  }).catch(err=>{
+    friendRequestError = (err && err.message) || 'Something went wrong sending that request.';
+    render();
+  });
+}
 function acceptFriendRequest(linkId){
   fbDb.collection('friendLinks').doc(linkId).set({ status:'accepted' }, { merge:true }).catch(()=>{});
 }
 function declineFriendRequest(linkId){
   fbDb.collection('friendLinks').doc(linkId).delete().catch(()=>{});
+}
+function friendStatusWith(uid){
+  const linkId = friendLinkId(currentUser.uid, uid);
+  const link = friendLinksData.find(l=>l.id===linkId);
+  if(!link) return { status:'none', linkId };
+  if(link.status==='accepted') return { status:'friends', linkId };
+  return { status: link.requestedBy===currentUser.uid ? 'outgoing' : 'incoming', linkId };
+}
+
+/* ---------------- Friend search (search-as-you-type, by name or exact email) ---------------- */
+let friendSearchQuery = '';
+let friendSearchResults = [];
+let friendSearchBusy = false;
+let friendSearchToken = 0;
+let friendSearchDebounce = null;
+function searchFriends(queryText){
+  friendSearchQuery = queryText;
+  const q = queryText.trim();
+  if(!q){ friendSearchResults = []; friendSearchBusy = false; render(); return; }
+  const myToken = ++friendSearchToken;
+  friendSearchBusy = true; render();
+  const tasks = [];
+  if(q.includes('@')){
+    const key = sanitizeEmailKey(q);
+    tasks.push(
+      fbDb.collection('emailIndex').doc(key).get().then(doc=>{
+        if(!doc.exists) return null;
+        const uid = doc.data().uid;
+        return fbDb.collection('userDirectory').doc(uid).get().then(dirDoc=>({
+          uid, displayName: dirDoc.exists ? dirDoc.data().displayName : q
+        }));
+      }).catch(()=>null)
+    );
+  }
+  const qLower = q.toLowerCase();
+  tasks.push(
+    fbDb.collection('userDirectory')
+      .where('displayNameLower','>=',qLower).where('displayNameLower','<=',qLower+'')
+      .limit(15).get()
+      .then(snap=> snap.docs.map(d=>({ uid:d.id, displayName:d.data().displayName })))
+      .catch(()=>[])
+  );
+  Promise.all(tasks).then(resultsArrays=>{
+    if(myToken !== friendSearchToken) return; // a newer keystroke already superseded this search
+    const seen = new Set(); const merged = [];
+    resultsArrays.flat().filter(Boolean).forEach(r=>{
+      if(r.uid !== currentUser.uid && !seen.has(r.uid)){ seen.add(r.uid); merged.push(r); }
+    });
+    friendSearchResults = merged;
+    friendSearchBusy = false;
+    render();
+  });
 }
 
 /* ---------------- Check-in reminders (push notifications) ---------------- */
@@ -1570,39 +1646,63 @@ function renderFriends(){
   const incoming = friendLinksData.filter(l=>l.status==='pending' && l.requestedBy!==myUid);
   const outgoing = friendLinksData.filter(l=>l.status==='pending' && l.requestedBy===myUid);
 
+  const searchResultRow = r => {
+    const st = friendStatusWith(r.uid);
+    let actionHtml;
+    if(st.status==='friends') actionHtml = `<span class="status-pill complete">Friends</span>`;
+    else if(st.status==='outgoing') actionHtml = `<button class="btn small" data-friend-cancel="${st.linkId}">Requested — cancel</button>`;
+    else if(st.status==='incoming') actionHtml = `<span style="font-size:0.8rem; color:var(--ink-soft);">Check requests below</span>`;
+    else actionHtml = `<button class="btn small primary" data-friend-send-uid="${r.uid}">Send request</button>`;
+    return `
+      <div style="display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid var(--line);">
+        <span style="font-size:0.9rem;">${r.displayName}</span>
+        ${actionHtml}
+      </div>`;
+  };
+
   const addFormHtml = `
     <div class="settings-box">
-      <h3>Add a friend</h3>
-      <p style="font-size:0.85rem; color:var(--ink-soft);">Enter the email they use for their Cultivate account. We only ever share your name, last-active date, and current plan &mdash; never your journal or reading log.</p>
+      <h3>Add a friend &mdash; ${accepted.length} connection${accepted.length===1?'':'s'}</h3>
+      <p style="font-size:0.85rem; color:var(--ink-soft);">Search by name or their exact email. We only ever share your name, last-active date, and current plan &mdash; never your journal or reading log.</p>
       ${friendRequestError ? `<div class="auth-error">${friendRequestError}</div>` : ''}
-      ${friendRequestSent ? `<p style="font-size:0.85rem; color:var(--good);">&#10003; Request sent — it'll show up for them under "Requests waiting on you."</p>` : ''}
-      <div style="display:flex; gap:8px; flex-wrap:wrap;">
-        <input type="email" id="friendEmailInput" placeholder="friend@example.com" value="${friendRequestEmail}" style="flex:1; min-width:220px; padding:9px 10px; border:1px solid var(--line); border-radius:8px; font-size:0.9rem; font-family:inherit;">
-        <button class="btn primary" id="sendFriendReqBtn" ${friendRequestBusy?'disabled':''}>${friendRequestBusy?'Sending…':'Send request'}</button>
+      ${friendRequestSent ? `<p style="font-size:0.85rem; color:var(--good);">&#10003; Request sent.</p>` : ''}
+      <input type="text" id="friendSearchInput" placeholder="Search by name or email…" value="${friendSearchQuery}" style="width:100%; padding:9px 10px; border:1px solid var(--line); border-radius:8px; font-size:0.9rem; font-family:inherit;">
+      <div style="margin-top:10px;">
+        ${friendSearchBusy ? `<div style="font-size:0.82rem; color:var(--ink-soft);">Searching…</div>` : ''}
+        ${!friendSearchBusy && friendSearchQuery.trim() && !friendSearchResults.length ? `<div style="font-size:0.82rem; color:var(--ink-soft);">No one found. If you searched their email, they need to have opened Cultivate at least once first.</div>` : ''}
+        ${friendSearchResults.map(searchResultRow).join('')}
       </div>
     </div>`;
 
-  const incomingHtml = incoming.length ? `
+  const incomingHtml = `
     <div class="settings-box">
-      <h3>Requests waiting on you</h3>
-      ${incoming.map(l=>`
+      <h3>Requests received (${incoming.length})</h3>
+      ${incoming.length ? incoming.map(l=>`
         <div style="display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid var(--line);">
           <span style="font-size:0.9rem;">${friendActivityCache[l.requestedBy] ? friendActivityCache[l.requestedBy].displayName : 'Someone'} wants to connect</span>
           <span style="display:flex; gap:6px;">
             <button class="btn small primary" data-friend-accept="${l.id}">Accept</button>
             <button class="btn small danger" data-friend-decline="${l.id}">Decline</button>
           </span>
-        </div>`).join('')}
-    </div>` : '';
+        </div>`).join('') : `<div style="font-size:0.82rem; color:var(--ink-soft);">Nothing waiting on you right now.</div>`}
+    </div>`;
 
-  const outgoingHtml = outgoing.length ? `
+  const outgoingHtml = `
     <div class="settings-box">
-      <p style="font-size:0.85rem; color:var(--ink-soft);">Waiting on: ${outgoing.length} pending request${outgoing.length===1?'':'s'} you sent.</p>
-    </div>` : '';
+      <h3>Requests sent (${outgoing.length})</h3>
+      ${outgoing.length ? outgoing.map(l=>{
+        const otherUid = l.userIds.find(u=>u!==myUid);
+        return `
+        <div style="display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid var(--line);">
+          <span style="font-size:0.9rem;">${friendActivityCache[otherUid] ? friendActivityCache[otherUid].displayName : 'Waiting on a response'}</span>
+          <button class="btn small danger" data-friend-cancel="${l.id}">Unsend</button>
+        </div>`;
+      }).join('') : `<div style="font-size:0.82rem; color:var(--ink-soft);">Nothing pending.</div>`}
+    </div>`;
 
   const acceptedHtml = accepted.length ? `
     <div class="settings-box">
-      <h3>Connected</h3>
+      <h3>Connected (${accepted.length})</h3>
       ${accepted.map(l=>{
         const otherUid = l.userIds.find(u=>u!==myUid);
         const act = friendActivityCache[otherUid];
@@ -1613,7 +1713,7 @@ function renderFriends(){
           <button class="btn small danger" data-friend-decline="${l.id}" style="margin-top:6px;">Remove</button>
         </div>`;
       }).join('')}
-    </div>` : `<div class="empty-note">No connections yet — add a friend or family member above. This is meant to feel like company, not a leaderboard: no percentages, no comparisons, just knowing someone else is walking with you.</div>`;
+    </div>` : `<div class="empty-note">No connections yet — search for a friend or family member above. This is meant to feel like company, not a leaderboard: no percentages, no comparisons, just knowing someone else is walking with you.</div>`;
 
   return addFormHtml + incomingHtml + outgoingHtml + acceptedHtml;
 }
@@ -2008,16 +2108,16 @@ function attachEvents(){
   }
 
   // Friends & Family
-  const sendFriendReqBtn = document.getElementById('sendFriendReqBtn');
-  if(sendFriendReqBtn){
-    sendFriendReqBtn.addEventListener('click', ()=>{
-      const emailEl = document.getElementById('friendEmailInput');
-      const email = emailEl ? emailEl.value.trim() : '';
-      if(!email){ friendRequestError = 'Enter an email address.'; render(); return; }
-      friendRequestEmail = email;
-      sendFriendRequest(email);
+  const friendSearchInput = document.getElementById('friendSearchInput');
+  if(friendSearchInput){
+    friendSearchInput.addEventListener('input', ()=>{
+      clearTimeout(friendSearchDebounce);
+      const val = friendSearchInput.value;
+      friendSearchDebounce = setTimeout(()=> searchFriends(val), 300);
     });
   }
+  document.querySelectorAll('[data-friend-send-uid]').forEach(btn=> btn.addEventListener('click', ()=> sendFriendRequestToUid(btn.dataset.friendSendUid)));
+  document.querySelectorAll('[data-friend-cancel]').forEach(btn=> btn.addEventListener('click', ()=> declineFriendRequest(btn.dataset.friendCancel)));
   document.querySelectorAll('[data-friend-accept]').forEach(btn=> btn.addEventListener('click', ()=> acceptFriendRequest(btn.dataset.friendAccept)));
   document.querySelectorAll('[data-friend-decline]').forEach(btn=> btn.addEventListener('click', ()=>{ if(confirm('Remove this connection?')) declineFriendRequest(btn.dataset.friendDecline); }));
   const installBtn = document.getElementById('installBtn');
