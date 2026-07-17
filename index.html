@@ -134,6 +134,44 @@
   .settings-box ol{padding-left:20px; font-size:0.88rem; color:var(--ink-soft);}
   .settings-box ol li{margin-bottom:6px;}
   .settings-box code{background:var(--accent-soft); padding:1px 5px; border-radius:4px;}
+
+  /* ---- Groups ---- */
+  .group-tabs{display:flex; gap:4px; margin-bottom:16px; background:var(--accent-soft); border-radius:10px; padding:4px; max-width:640px; flex-wrap:wrap;}
+  .group-tabs button{
+    flex:1; min-width:fit-content; background:none; border:none; padding:8px 14px; border-radius:8px;
+    font-size:0.85rem; font-weight:600; color:var(--ink-soft); cursor:pointer;
+  }
+  .group-tabs button.active{background:var(--card); color:var(--accent); box-shadow:var(--shadow);}
+  .role-badge{
+    display:inline-flex; align-items:center; padding:2px 9px; border-radius:999px;
+    font-size:0.7rem; font-weight:700; text-transform:uppercase; letter-spacing:0.02em;
+  }
+  .role-badge.owner{background:var(--accent-soft); color:var(--accent);}
+  .role-badge.admin{background:var(--skip-soft); color:var(--skip);}
+  .role-badge.member{background:#efe8db; color:var(--ink-soft);}
+  .book-picker{
+    display:grid; grid-template-columns:repeat(auto-fill, minmax(160px,1fr)); gap:2px 12px;
+    max-height:220px; overflow-y:auto; border:1px solid var(--line); border-radius:8px; padding:10px 12px;
+  }
+  .book-picker label{display:flex; align-items:center; gap:6px; font-size:0.82rem; padding:3px 0;}
+  .group-row{display:flex; justify-content:space-between; align-items:center; gap:10px; padding:11px 0; border-bottom:1px solid var(--line);}
+  .group-row:last-child{border-bottom:none;}
+  .group-row .name{font-weight:700;}
+  .group-row .meta{font-size:0.8rem; color:var(--ink-soft); margin-top:2px;}
+  .group-detail-head{display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap; margin-bottom:6px;}
+  .group-detail-actions{display:flex; gap:8px; flex-wrap:wrap; margin-top:12px;}
+  .group-message{padding:10px 0; border-bottom:1px solid var(--line);}
+  .group-message:last-child{border-bottom:none;}
+  .group-message .who{font-size:0.78rem; color:var(--ink-soft); margin-bottom:3px;}
+  .group-message .who strong{color:var(--ink);}
+  .group-message .body{font-size:0.92rem; line-height:1.5;}
+  .group-member-row{display:flex; align-items:center; gap:10px; padding:9px 0; border-bottom:1px solid var(--line);}
+  .group-member-row:last-child{border-bottom:none;}
+  .group-member-row .name{flex:1; cursor:pointer;}
+  .group-week-card{background:var(--accent-soft); border:1px solid var(--accent); border-radius:10px; padding:14px 16px; margin-bottom:16px;}
+  .group-week-card .week-label{font-weight:700; margin-bottom:4px;}
+  .invite-link-row{display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:8px;}
+  .invite-link-row input{flex:1; min-width:180px; padding:8px 10px; border:1px solid var(--line); border-radius:8px; font-size:0.78rem; background:var(--bg);}
   .install-banner{
     background:var(--accent-soft); border:1px solid var(--accent); border-radius:10px; padding:12px 16px;
     font-size:0.85rem; margin-bottom:18px; display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap;
@@ -871,6 +909,7 @@ function subscribeToUserDoc(){
     if(!snap.exists){
       pushStateNow(docRef);
       syncStatus='synced'; lastSyncedAt=Date.now(); fbFirstSnapshotHandled=true; render();
+      syncPublicActivity(); ensureUserDirectory();
       return;
     }
     const data = snap.data();
@@ -893,9 +932,15 @@ function subscribeToUserDoc(){
           'Press OK to use the ACCOUNT version (recommended).\n' +
           'Press Cancel to keep THIS DEVICE\'S data and overwrite your account with it.'
         );
-        if(!useCloud){ pushStateNow(docRef); syncStatus='synced'; lastSyncedAt=Date.now(); render(); return; }
+        if(!useCloud){
+          pushStateNow(docRef); syncStatus='synced'; lastSyncedAt=Date.now(); render();
+          syncPublicActivity(); ensureUserDirectory();
+          return;
+        }
       } else if(localHasData && !remoteHasData){
-        pushStateNow(docRef); syncStatus='synced'; lastSyncedAt=Date.now(); render(); return;
+        pushStateNow(docRef); syncStatus='synced'; lastSyncedAt=Date.now(); render();
+        syncPublicActivity(); ensureUserDirectory();
+        return;
       }
     }
     state = {
@@ -913,6 +958,11 @@ function subscribeToUserDoc(){
     saveState({skipSync:true});
     syncStatus='synced'; lastSyncedAt=Date.now();
     render();
+    // Keeps the friend-visible activity summary and searchable directory entry fresh on every
+    // real sync — not just when someone happens to open their Profile and hit Save. Without this,
+    // anyone who never touched their profile settings would have no publicActivity document at
+    // all, and friends would see "Unknown" for them forever.
+    syncPublicActivity(); ensureUserDirectory();
   }, err=>{
     syncStatus='error'; syncMessage=err.message; render();
   });
@@ -1018,8 +1068,12 @@ function subscribeFriends(){
       acceptedUids.forEach(uid=>{
         if(!friendActivityCache[uid]){
           fbDb.collection('publicActivity').doc(uid).get().then(doc=>{
-            friendActivityCache[uid] = doc.exists ? doc.data() : { displayName:'(unknown)' };
-            render();
+            if(doc.exists){ friendActivityCache[uid] = doc.data(); render(); return; }
+            // Deliberately NOT cached as a permanent "unknown" placeholder — that document tends
+            // to simply not exist yet for someone who hasn't synced since this feature shipped.
+            // Leaving the cache empty means this retries the next time the friends list refreshes
+            // (reconnect, a new/removed connection, etc.) instead of showing "Unknown" forever
+            // for the rest of the session.
           }).catch(()=>{});
         }
       });
@@ -2309,13 +2363,13 @@ function renderGroupsDirectory(){
     const requested = requestedGroupIds.has(g.id);
     let actionHtml;
     if(isMember) actionHtml = `<button class="btn small primary" data-open-group="${g.id}">Open</button>`;
-    else if(requested) actionHtml = `<span style="font-size:0.8rem; color:var(--ink-soft);">Requested — pending approval</span>`;
+    else if(requested) actionHtml = `<span style="font-size:0.8rem; color:var(--ink-soft);">Requested</span>`;
     else actionHtml = `<button class="btn small" data-request-join="${g.id}">Request to join</button>`;
     return `
-      <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; padding:10px 0; border-bottom:1px solid var(--line);">
+      <div class="group-row">
         <div>
-          <div style="font-weight:700;">${escapeHtml(g.name)}</div>
-          <div style="font-size:0.8rem; color:var(--ink-soft);">${g.memberCount||1} member${g.memberCount===1?'':'s'} &middot; ${g.planMode==='paced' ? 'Paced schedule' : 'Free pace'}${g.description ? ' &middot; ' + escapeHtml(g.description) : ''}</div>
+          <div class="name">${escapeHtml(g.name)}</div>
+          <div class="meta">${g.memberCount||1} member${g.memberCount===1?'':'s'} &middot; ${g.planMode==='paced' ? 'Paced schedule' : 'Free pace'}${g.description ? ' &middot; ' + escapeHtml(g.description) : ''}</div>
         </div>
         ${actionHtml}
       </div>`;
@@ -2324,7 +2378,7 @@ function renderGroupsDirectory(){
   const createFormHtml = groupCreateOpen ? renderGroupCreateForm() : `
     <div class="settings-box">
       <h3>Groups</h3>
-      <p style="font-size:0.85rem; color:var(--ink-soft);">Bible studies, tables, or devotion groups — centered around a shared reading plan, with a discussion space. Anyone can browse and request to join, or use an invite link to join directly.</p>
+      <p style="font-size:0.85rem; color:var(--ink-soft);">Bible studies, tables, or devotion groups — centered around a shared reading plan, with a discussion space. Browse and request to join, or use an invite link to join directly.</p>
       <button class="btn primary" id="openGroupCreateBtn">Create a group</button>
     </div>`;
 
@@ -2352,9 +2406,7 @@ function renderGroupsDirectory(){
 
 function renderGroupCreateForm(){
   const bookCheckbox = name => `
-    <label style="display:flex; align-items:center; gap:6px; font-size:0.82rem; padding:3px 0;">
-      <input type="checkbox" data-group-draft-book="${escapeHtml(name)}" ${groupDraftBooks.includes(name)?'checked':''}> ${name}
-    </label>`;
+    <label><input type="checkbox" data-group-draft-book="${escapeHtml(name)}" ${groupDraftBooks.includes(name)?'checked':''}> ${name}</label>`;
   return `
     <div class="settings-box">
       <h3>Create a group</h3>
@@ -2385,17 +2437,17 @@ function renderGroupCreateForm(){
         <input type="number" id="groupChaptersPerWeek" value="5" min="1" style="width:100px;">
       </div>
       <div class="auth-field">
-        <label>What will the group read? (pick one or more books)</label>
-        <div style="display:flex; gap:8px; margin:6px 0;">
+        <label>What will the group read?</label>
+        <div style="display:flex; gap:8px; margin:6px 0; flex-wrap:wrap;">
           <button type="button" class="btn small" id="pickWholeBible">Whole Bible</button>
           <button type="button" class="btn small" id="pickOT">Old Testament</button>
           <button type="button" class="btn small" id="pickNT">New Testament</button>
           <button type="button" class="btn small" id="pickNone">Clear</button>
         </div>
-        <div style="max-height:220px; overflow-y:auto; border:1px solid var(--line); border-radius:8px; padding:8px 12px; columns:2;">
+        <div class="book-picker">
           ${BOOK_LIBRARY.map(b=>bookCheckbox(b.name)).join('')}
         </div>
-        <div style="font-size:0.78rem; color:var(--ink-soft); margin-top:4px;">${groupDraftBooks.length} book${groupDraftBooks.length===1?'':'s'} selected &middot; ${outlineTotalChapters(groupDraftBooks.map(b=>({book:b,chapters:chaptersFor(b)})))} chapters total</div>
+        <div style="font-size:0.78rem; color:var(--ink-soft); margin-top:6px;">${groupDraftBooks.length} book${groupDraftBooks.length===1?'':'s'} selected &middot; ${outlineTotalChapters(groupDraftBooks.map(b=>({book:b,chapters:chaptersFor(b)})))} chapters total</div>
       </div>
       <div style="display:flex; gap:8px; margin-top:10px;">
         <button class="btn primary" id="submitGroupCreateBtn" ${groupCreateBusy?'disabled':''}>${groupCreateBusy?'Creating…':'Create group'}</button>
@@ -2412,11 +2464,11 @@ function renderGroupDetail(){
   const inviteUrl = `${window.location.origin}${window.location.pathname}?joinGroup=${g.id}&code=${g.inviteCode}`;
 
   const tabsHtml = `
-    <div style="display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap;">
-      <button class="btn ${activeGroupTab==='discussion'?'primary':''} small" data-group-tab="discussion">Discussion</button>
-      <button class="btn ${activeGroupTab==='plan'?'primary':''} small" data-group-tab="plan">Plan</button>
-      <button class="btn ${activeGroupTab==='members'?'primary':''} small" data-group-tab="members">Members (${activeGroupMembers.length})</button>
-      ${isOwnerOrAdmin ? `<button class="btn ${activeGroupTab==='requests'?'primary':''} small" data-group-tab="requests">Requests${activeGroupJoinRequests.length ? ' ('+activeGroupJoinRequests.length+')' : ''}</button>` : ''}
+    <div class="group-tabs">
+      <button class="${activeGroupTab==='discussion'?'active':''}" data-group-tab="discussion">Discussion</button>
+      <button class="${activeGroupTab==='plan'?'active':''}" data-group-tab="plan">Plan</button>
+      <button class="${activeGroupTab==='members'?'active':''}" data-group-tab="members">Members (${activeGroupMembers.length})</button>
+      ${isOwnerOrAdmin ? `<button class="${activeGroupTab==='requests'?'active':''}" data-group-tab="requests">Requests${activeGroupJoinRequests.length ? ' ('+activeGroupJoinRequests.length+')' : ''}</button>` : ''}
     </div>`;
 
   let body = '';
@@ -2427,18 +2479,24 @@ function renderGroupDetail(){
 
   return `
     <div class="settings-box">
-      <button class="btn small" id="backToGroupsBtn" style="margin-bottom:10px;">&larr; All groups</button>
-      <h3>${escapeHtml(g.name)}</h3>
-      ${g.description ? `<p style="font-size:0.85rem; color:var(--ink-soft);">${escapeHtml(g.description)}</p>` : ''}
-      <div style="font-size:0.8rem; color:var(--ink-soft); margin-bottom:10px;">${g.memberCount||1} member${g.memberCount===1?'':'s'} &middot; ${g.planMode==='paced' ? 'Paced schedule' : 'Free pace'}</div>
-      <details style="margin-bottom:10px;">
-        <summary style="cursor:pointer; font-size:0.85rem;">Invite link</summary>
-        <div style="margin-top:8px; display:flex; gap:8px; flex-wrap:wrap;">
-          <input type="text" readonly value="${inviteUrl}" style="flex:1; min-width:200px; padding:8px; border:1px solid var(--line); border-radius:8px; font-size:0.78rem;" onclick="this.select()">
+      <button class="btn small" id="backToGroupsBtn" style="margin-bottom:12px;">&larr; All groups</button>
+      <div class="group-detail-head">
+        <div>
+          <h3 style="margin-bottom:2px;">${escapeHtml(g.name)}</h3>
+          ${g.description ? `<p style="font-size:0.85rem; color:var(--ink-soft); margin:0 0 4px;">${escapeHtml(g.description)}</p>` : ''}
+          <div style="font-size:0.8rem; color:var(--ink-soft);">${g.memberCount||1} member${g.memberCount===1?'':'s'} &middot; ${g.planMode==='paced' ? 'Paced schedule' : 'Free pace'}</div>
+        </div>
+      </div>
+      <details>
+        <summary style="cursor:pointer; font-size:0.85rem; font-weight:600;">Invite link</summary>
+        <div class="invite-link-row">
+          <input type="text" readonly value="${inviteUrl}" onclick="this.select()">
           <button class="btn small" id="copyGroupInviteBtn">Copy link</button>
         </div>
       </details>
-      ${myRole ? `<button class="btn small danger" id="leaveGroupBtn" style="margin-bottom:14px;">Leave group</button>` : ''}
+      <div class="group-detail-actions">
+        ${myRole ? `<button class="btn small danger" id="leaveGroupBtn">Leave group</button>` : ''}
+      </div>
     </div>
     ${tabsHtml}
     ${body}`;
@@ -2449,9 +2507,9 @@ function renderGroupDiscussion(){
     const { html } = parseMentions(m.text, activeGroupMembers);
     const mine = currentUser && m.authorUid === currentUser.uid;
     return `
-      <div style="padding:8px 0; border-bottom:1px solid var(--line);">
-        <div style="font-size:0.8rem; color:var(--ink-soft); margin-bottom:2px;"><strong style="color:var(--ink);">${escapeHtml(m.authorName||'Someone')}</strong>${mine ? ' (you)' : ''} &middot; ${m.createdAt ? new Date(m.createdAt).toLocaleString(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}) : ''}</div>
-        <div style="font-size:0.92rem; line-height:1.5;">${html.replace(/\n/g,'<br>')}</div>
+      <div class="group-message">
+        <div class="who"><strong>${escapeHtml(m.authorName||'Someone')}</strong>${mine ? ' (you)' : ''} &middot; ${m.createdAt ? new Date(m.createdAt).toLocaleString(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}) : ''}</div>
+        <div class="body">${html.replace(/\n/g,'<br>')}</div>
       </div>`;
   }).join('');
   return `
@@ -2474,8 +2532,8 @@ function renderGroupPlan(){
     const weekIndex = currentGroupWeekIndex(g.startDate);
     const thisWeek = chaptersForWeek(g.outline, g.chaptersPerWeek, weekIndex);
     paceHtml = `
-      <div style="background:var(--accent-soft); border:1px solid var(--accent); border-radius:10px; padding:12px 14px; margin-bottom:14px;">
-        <div style="font-weight:700; margin-bottom:4px;">Week ${weekIndex+1}</div>
+      <div class="group-week-card">
+        <div class="week-label">Week ${weekIndex+1}</div>
         <div style="font-size:0.9rem;">${thisWeek.length ? formatChapterRange(thisWeek) : "You've reached the end of the outline — nicely done."}</div>
         <div style="font-size:0.78rem; color:var(--ink-soft); margin-top:4px;">${g.chaptersPerWeek} chapter${g.chaptersPerWeek===1?'':'s'} per week, started ${fmtDate(g.startDate)}</div>
       </div>`;
@@ -2486,7 +2544,7 @@ function renderGroupPlan(){
       <h3>Outline</h3>
       <p style="font-size:0.85rem; color:var(--ink-soft);">${total} chapters across ${(g.outline||[]).length} book${(g.outline||[]).length===1?'':'s'}.</p>
       <div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:8px;">
-        ${(g.outline||[]).map(o=>`<span class="status-pill complete">${escapeHtml(o.book)} (${o.chapters})</span>`).join('')}
+        ${(g.outline||[]).map(o=>`<span class="role-badge member">${escapeHtml(o.book)} (${o.chapters})</span>`).join('')}
       </div>
     </div>`;
 }
@@ -2501,12 +2559,9 @@ function renderGroupMembers(){
     const canManage = myRole === 'owner' && m.role !== 'owner' && (!currentUser || m.uid !== currentUser.uid);
     const canRemove = (myRole==='owner' || myRole==='admin') && m.role !== 'owner' && (!currentUser || m.uid !== currentUser.uid);
     return `
-      <div style="display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid var(--line);">
-        ${renderAvatarHtml(m, 32)}
-        <div style="flex:1;">
-          <span style="cursor:pointer;" data-view-profile="${m.uid}">${escapeHtml(m.displayName||'Member')}</span>
-          <span class="status-pill ${m.role==='owner'?'complete':m.role==='admin'?'skip':''}" style="margin-left:6px; font-size:0.7rem;">${m.role}</span>
-        </div>
+      <div class="group-member-row">
+        ${renderAvatarHtml(m, 34)}
+        <span class="name" data-view-profile="${m.uid}">${escapeHtml(m.displayName||'Member')} <span class="role-badge ${m.role}">${m.role}</span></span>
         ${canManage ? `<button class="btn small" data-set-role="${m.uid}|${m.role==='admin'?'member':'admin'}">${m.role==='admin' ? 'Remove admin' : 'Make admin'}</button>` : ''}
         ${canRemove ? `<button class="btn small danger" data-remove-member="${m.uid}">Remove</button>` : ''}
       </div>`;
@@ -2517,7 +2572,7 @@ function renderGroupMembers(){
 function renderGroupRequests(){
   if(!activeGroupJoinRequests.length) return `<div class="empty-note">No pending requests right now.</div>`;
   const rows = activeGroupJoinRequests.map(r=>`
-    <div style="display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid var(--line);">
+    <div class="group-row">
       <span>${escapeHtml(r.displayName||'Someone')}</span>
       <span style="display:flex; gap:6px;">
         <button class="btn small primary" data-approve-request="${r.uid}|${escapeHtml(r.displayName||'Member').replace(/"/g,'&quot;')}">Approve</button>
