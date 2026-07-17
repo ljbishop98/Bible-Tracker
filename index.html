@@ -656,17 +656,20 @@
   /* ---- Native-style dialog (replaces window.confirm/alert) ---- */
   @keyframes dialogPop{ from{opacity:0; transform:translate(-50%,-50%) scale(0.94);} to{opacity:1; transform:translate(-50%,-50%) scale(1);} }
   @keyframes dialogBackdropIn{ from{opacity:0;} to{opacity:1;} }
+  /* Entrance animations for overlays live on .overlay-animate, applied by their renderers ONLY on
+     the render where the overlay actually opens — never on the constant background re-renders
+     that rebuild an already-open overlay (the systemic replay bug). */
   .dialog-backdrop{
     position:fixed; inset:0; background:rgba(20,15,8,0.45); z-index:80;
-    animation:dialogBackdropIn .15s ease-out;
   }
+  .dialog-backdrop.overlay-animate{ animation:dialogBackdropIn .15s ease-out; }
   .dialog-card{
     position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); z-index:81;
     width:min(340px, calc(100vw - 48px)); background:var(--card-glass); border-radius:16px;
     padding:22px 20px 16px; box-shadow:0 12px 40px rgba(0,0,0,0.25);
     backdrop-filter:blur(22px); -webkit-backdrop-filter:blur(22px);
-    animation:dialogPop .18s cubic-bezier(.25,.8,.4,1);
   }
+  .dialog-card.overlay-animate{ animation:dialogPop .18s cubic-bezier(.25,.8,.4,1); }
   .dialog-message{margin:0 0 18px; font-size:0.92rem; line-height:1.5; text-align:center; color:var(--ink);}
   .dialog-actions{display:flex; gap:10px; justify-content:center;}
   .dialog-actions .btn{flex:1;}
@@ -679,8 +682,10 @@
   }
   .intro-card{
     max-width:440px; width:100%; text-align:center; display:flex; flex-direction:column;
-    align-items:center; animation:viewFadeIn .4s var(--ease-out);
+    align-items:center;
   }
+  .intro-card-animate{ animation:viewFadeIn .4s var(--ease-out); }
+  @media (prefers-reduced-motion: reduce){ .intro-card-animate{ animation:none; } }
   .intro-art{
     width:84px; height:84px; border-radius:50%; background:var(--accent-soft); color:var(--accent);
     display:flex; align-items:center; justify-content:center; margin-bottom:18px;
@@ -878,16 +883,16 @@
   }
   .notif-backdrop{
     position:fixed; inset:0; background:rgba(20,15,8,0.35); z-index:74;
-    animation:dialogBackdropIn .15s ease-out;
   }
+  .notif-backdrop.overlay-animate{ animation:dialogBackdropIn .15s ease-out; }
   .notif-panel{
     position:fixed; top:0; right:0; left:0; z-index:75; background:var(--card-glass);
     border-radius:0 0 18px 18px; box-shadow:0 12px 40px rgba(0,0,0,0.25);
     max-height:70vh; overflow-y:auto; -webkit-overflow-scrolling:touch;
     backdrop-filter:blur(22px); -webkit-backdrop-filter:blur(22px);
     padding:calc(14px + env(safe-area-inset-top)) 4px 10px;
-    animation:notifPanelIn .2s cubic-bezier(.25,.8,.4,1);
   }
+  .notif-panel.overlay-animate{ animation:notifPanelIn .2s cubic-bezier(.25,.8,.4,1); }
   @keyframes notifPanelIn{ from{opacity:0; transform:translateY(-10px);} to{opacity:1; transform:translateY(0);} }
   .notif-panel-header{display:flex; align-items:center; justify-content:space-between; padding:0 16px 10px;}
   .notif-panel-header h3{margin:0; font-size:1rem;}
@@ -1140,8 +1145,8 @@
     width:min(480px, calc(100vw - 48px)); background:var(--card-glass); border-radius:16px;
     backdrop-filter:blur(22px); -webkit-backdrop-filter:blur(22px);
     box-shadow:0 20px 60px rgba(0,0,0,0.3); overflow:hidden;
-    animation:dialogPop .18s cubic-bezier(.25,.8,.4,1);
   }
+  .command-palette.overlay-animate{ animation:dialogPop .18s cubic-bezier(.25,.8,.4,1); }
   .command-palette input{
     width:100%; border:none; border-bottom:1px solid var(--line); padding:16px 18px; font-size:1rem;
     font-family:inherit; background:transparent; color:var(--ink); outline:none;
@@ -1610,12 +1615,17 @@ function closeDialog(result){
   render();
   if(resolve) resolve(result);
 }
+let lastRenderedDialogRef = null;
 function renderDialogOverlay(){
-  if(!activeDialog) return '';
+  if(!activeDialog){ lastRenderedDialogRef = null; return ''; }
   const d = activeDialog;
+  // Animate the pop-in only the first time THIS dialog renders — background re-renders while
+  // it's open rebuild it without replaying (systemic replay-bug fix).
+  const dialogIsNew = d !== lastRenderedDialogRef;
+  lastRenderedDialogRef = d;
   return `
-  <div id="dialogBackdrop" class="dialog-backdrop"></div>
-  <div class="dialog-card" role="alertdialog" aria-modal="true">
+  <div id="dialogBackdrop" class="dialog-backdrop ${dialogIsNew?'overlay-animate':''}"></div>
+  <div class="dialog-card ${dialogIsNew?'overlay-animate':''}" role="alertdialog" aria-modal="true">
     <p class="dialog-message">${escapeHtml(d.message).replace(/\n/g,'<br>')}</p>
     <div class="dialog-actions">
       ${d.mode==='confirm' ? `<button class="btn" id="dialogCancelBtn">${escapeHtml(d.cancelLabel)}</button>` : ''}
@@ -1657,11 +1667,15 @@ function runCommand(cmdId){
   if(cmd) cmd.run();
 }
 function renderCommandPalette(){
-  if(!commandPaletteOpen) return '';
+  if(!commandPaletteOpen){ lastRenderedPaletteOpen = false; return ''; }
   const results = filteredCommands();
+  // Pop in only on open — NOT on every keystroke typed into the palette's own filter input
+  // (each of those re-renders; the palette used to replay its entrance on every letter).
+  const paletteIsNew = !lastRenderedPaletteOpen;
+  lastRenderedPaletteOpen = true;
   return `
-  <div id="commandPaletteBackdrop" class="dialog-backdrop"></div>
-  <div class="command-palette" role="dialog" aria-modal="true" aria-label="Quick jump">
+  <div id="commandPaletteBackdrop" class="dialog-backdrop ${paletteIsNew?'overlay-animate':''}"></div>
+  <div class="command-palette ${paletteIsNew?'overlay-animate':''}" role="dialog" aria-modal="true" aria-label="Quick jump">
     <input type="text" id="commandPaletteInput" placeholder="Jump to a tab or run a command…" value="${escapeHtml(commandPaletteQuery)}" autocomplete="off">
     <div class="command-palette-list">
       ${results.length ? results.map(c=>`
@@ -1683,7 +1697,7 @@ let toastCounter = 0;
 function showToast(message, opts){
   opts = opts || {};
   const id = ++toastCounter;
-  toasts.push({ id, message, tone: opts.tone || 'default' });
+  toasts.push({ id, message, tone: opts.tone || 'default', createdAt: Date.now() });
   render();
   setTimeout(()=> dismissToast(id), opts.duration || 2800);
 }
@@ -1694,9 +1708,15 @@ function dismissToast(id){
 }
 function renderToastStack(){
   if(!toasts.length) return '';
-  return `<div class="toast-stack">${toasts.map(t=>`
-    <div class="toast toast-${t.tone}" data-toast-id="${t.id}">${escapeHtml(t.message)}</div>
-  `).join('')}</div>`;
+  // Each toast's entrance/exit animations are pinned to its own creation time via NEGATIVE
+  // animation-delays, so when a background render rebuilds the stack mid-life, the rebuilt toast
+  // resumes exactly where it was on its timeline instead of replaying its pop-in from zero (the
+  // systemic "everything replays on re-render" bug, toast edition).
+  return `<div class="toast-stack">${toasts.map(t=>{
+    const elapsed = Math.min((Date.now() - (t.createdAt||Date.now())) / 1000, 2.79);
+    return `
+    <div class="toast toast-${t.tone}" data-toast-id="${t.id}" style="animation-delay:${(-elapsed).toFixed(3)}s, ${(2.5 - elapsed).toFixed(3)}s">${escapeHtml(t.message)}</div>`;
+  }).join('')}</div>`;
 }
 
 /* ---------------- Micro-interaction: animated row removal ----------------
@@ -4211,7 +4231,7 @@ function renderCustomBuilder(allowCancel){
     return `
       <div class="builder-cat">
         <div class="builder-cat-head">
-          <input type="text" data-name-for="${cat.id}" value="${cat.name.replace(/"/g,'&quot;')}">
+          <input type="text" id="catName-${cat.id}" data-name-for="${cat.id}" value="${cat.name.replace(/"/g,'&quot;')}">
           <div class="color-swatch-row">
             ${COLOR_PALETTE.map(c=>`<button type="button" data-color-for="${cat.id}" data-color="${c}" style="background:${c}" class="${cat.color===c?'selected':''}"></button>`).join('')}
           </div>
@@ -4459,13 +4479,20 @@ function closeIntro(){
   try{ localStorage.setItem(INTRO_SEEN_KEY, '1'); }catch(e){}
   render();
 }
+// Animate the slide entrance ONLY when the step actually changes — the same lesson as the group
+// wizard's "refresh glitch": render() rebuilds the DOM constantly (sync snapshots, listeners,
+// timers), and an unconditional CSS animation replays on every one of those rebuilds, which read
+// as the intro "constantly refreshing and bouncing."
+let lastRenderedIntroStep = null;
 function renderIntroOverlay(){
-  if(!introOpen) return '';
+  if(!introOpen){ lastRenderedIntroStep = null; return ''; }
+  const stepChanged = introStep !== lastRenderedIntroStep;
+  lastRenderedIntroStep = introStep;
   const s = INTRO_SLIDES[Math.min(introStep, INTRO_SLIDES.length-1)];
   const last = introStep >= INTRO_SLIDES.length-1;
   return `
     <div class="intro-overlay">
-      <div class="intro-card">
+      <div class="intro-card ${stepChanged?'intro-card-animate':''}">
         <div class="intro-art">${icon(s.icon, 40)}</div>
         <h2>${s.title}</h2>
         <p class="intro-body">${s.body}</p>
@@ -4514,8 +4541,13 @@ function renderNotifBellButton(){
   </button>`;
 }
 
+let lastRenderedNotifPanelOpen = false;
+let lastRenderedPaletteOpen = false;
+let lastRenderedExtraSheetOpen = false;
 function renderNotifPanel(){
-  if(!notifPanelOpen) return '';
+  if(!notifPanelOpen){ lastRenderedNotifPanelOpen = false; return ''; }
+  const panelIsNew = !lastRenderedNotifPanelOpen;
+  lastRenderedNotifPanelOpen = true;
   const items = notifItems();
   const list = items.length
     ? items.map(i=>`
@@ -4528,8 +4560,8 @@ function renderNotifPanel(){
       </button>`).join('')
     : emptyState('bell', "You're all caught up — nothing waiting on you right now.");
   return `
-    <div class="notif-backdrop" id="notifBackdrop"></div>
-    <div class="notif-panel">
+    <div class="notif-backdrop ${panelIsNew?'overlay-animate':''}" id="notifBackdrop"></div>
+    <div class="notif-panel ${panelIsNew?'overlay-animate':''}">
       <div class="notif-panel-header">
         <h3>Notifications</h3>
         <button type="button" class="sheet-close-btn" id="notifCloseBtn" aria-label="Close">${icon('close', 16)}</button>
@@ -4608,11 +4640,19 @@ function renderSidebar(){
 // morning/noon/night period as the whole app theme (effectivePeriod()), so the card's corner
 // carries a rising sun before noon, a full sun at midday, and a moon with stars after dark.
 // Pure decoration: aria-hidden, pointer-events:none, sits behind the text (see CSS).
+// Ambient loops (glow pulse, twinkle, cloud drift) get NEGATIVE animation-delays derived from
+// the wall clock, so when render() rebuilds the SVG mid-cycle the animation resumes at exactly
+// the phase it was at — no visible restart-jump on background re-renders (systemic replay fix;
+// same trick as the toast timeline).
+function scenePhase(durSeconds, offsetSeconds){
+  const t = ((Date.now()/1000) + (offsetSeconds||0)) % durSeconds;
+  return `animation-delay:-${t.toFixed(2)}s;`;
+}
 function considerHimSceneSvg(){
   const period = effectivePeriod();
   if(period === 'morning'){
     return `<svg class="scene-svg" width="110" height="72" viewBox="0 0 110 72" xmlns="http://www.w3.org/2000/svg" fill="none">
-      <circle class="scene-glow" cx="78" cy="54" r="22" fill="rgba(255,176,80,0.35)"/>
+      <circle class="scene-glow" style="${scenePhase(5)}" cx="78" cy="54" r="22" fill="rgba(255,176,80,0.35)"/>
       <circle cx="78" cy="54" r="13" fill="rgba(255,150,50,0.75)"/>
       <g stroke="rgba(255,150,50,0.65)" stroke-width="2.5" stroke-linecap="round">
         <line x1="78" y1="30" x2="78" y2="22"/>
@@ -4622,12 +4662,12 @@ function considerHimSceneSvg(){
         <line x1="103" y1="54" x2="111" y2="54"/>
       </g>
       <rect x="0" y="66" width="110" height="6" rx="3" fill="rgba(255,150,50,0.25)"/>
-      <ellipse class="scene-cloud" cx="34" cy="26" rx="16" ry="6" fill="rgba(255,255,255,0.55)"/>
+      <ellipse class="scene-cloud" style="${scenePhase(9)}" cx="34" cy="26" rx="16" ry="6" fill="rgba(255,255,255,0.55)"/>
     </svg>`;
   }
   if(period === 'noon'){
     return `<svg class="scene-svg" width="110" height="72" viewBox="0 0 110 72" xmlns="http://www.w3.org/2000/svg" fill="none">
-      <circle class="scene-glow" cx="76" cy="30" r="24" fill="rgba(255,205,60,0.30)"/>
+      <circle class="scene-glow" style="${scenePhase(5)}" cx="76" cy="30" r="24" fill="rgba(255,205,60,0.30)"/>
       <circle cx="76" cy="30" r="14" fill="rgba(255,190,40,0.8)"/>
       <g stroke="rgba(255,190,40,0.7)" stroke-width="2.5" stroke-linecap="round">
         <line x1="76" y1="6" x2="76" y2="12"/>
@@ -4639,15 +4679,15 @@ function considerHimSceneSvg(){
         <line x1="93" y1="13" x2="89" y2="17"/>
         <line x1="59" y1="47" x2="63" y2="43"/>
       </g>
-      <ellipse class="scene-cloud" cx="26" cy="52" rx="17" ry="6" fill="rgba(255,255,255,0.6)"/>
+      <ellipse class="scene-cloud" style="${scenePhase(9)}" cx="26" cy="52" rx="17" ry="6" fill="rgba(255,255,255,0.6)"/>
     </svg>`;
   }
   return `<svg class="scene-svg" width="110" height="72" viewBox="0 0 110 72" xmlns="http://www.w3.org/2000/svg" fill="none">
-    <circle class="scene-glow" cx="76" cy="34" r="20" fill="rgba(140,140,255,0.18)"/>
+    <circle class="scene-glow" style="${scenePhase(5)}" cx="76" cy="34" r="20" fill="rgba(140,140,255,0.18)"/>
     <path d="M84 20 a15 15 0 1 0 6 27 a12 12 0 1 1 -6 -27 Z" fill="rgba(200,205,255,0.85)"/>
-    <circle class="scene-star" cx="40" cy="18" r="1.8" fill="rgba(220,225,255,0.9)"/>
-    <circle class="scene-star" cx="26" cy="40" r="1.4" fill="rgba(220,225,255,0.9)"/>
-    <circle class="scene-star" cx="52" cy="54" r="1.6" fill="rgba(220,225,255,0.9)"/>
+    <circle class="scene-star" style="${scenePhase(3.2)}" cx="40" cy="18" r="1.8" fill="rgba(220,225,255,0.9)"/>
+    <circle class="scene-star" style="${scenePhase(3.2, 1.1)}" cx="26" cy="40" r="1.4" fill="rgba(220,225,255,0.9)"/>
+    <circle class="scene-star" style="${scenePhase(3.2, 2.2)}" cx="52" cy="54" r="1.6" fill="rgba(220,225,255,0.9)"/>
   </svg>`;
 }
 function renderConsiderHim(){
@@ -4665,6 +4705,9 @@ function renderConsiderHim(){
       </details>
     </div>`;
 }
+// The checkmark pop plays exactly once per completion — a background re-render inside the 700ms
+// window justCompletedCat stays set must NOT replay it (systemic replay-bug fix).
+let pillPopRenderedFor = null;
 function renderToday(){
   const isToday = selectedDate===todayStr();
   const cards = ACTIVE_CATEGORIES.map(cat=>{
@@ -4674,7 +4717,10 @@ function renderToday(){
     let statusHtml = '';
     if(lastEntry){
       if(lastEntry.status==='complete'){
-        statusHtml = `<span class="status-pill complete ${cat.id===justCompletedCat?'pill-pop':''}">&#10003; Completed today</span>`;
+        const shouldPop = cat.id === justCompletedCat && pillPopRenderedFor !== cat.id;
+        if(shouldPop) pillPopRenderedFor = cat.id;
+        if(justCompletedCat === null && pillPopRenderedFor === cat.id) pillPopRenderedFor = null;
+        statusHtml = `<span class="status-pill complete ${shouldPop?'pill-pop':''}">&#10003; Completed today</span>`;
       } else {
         statusHtml = `<span class="status-pill skipped">&#8631; Skipped &mdash; pushed to next time</span>`;
       }
@@ -4768,11 +4814,13 @@ function renderMemorizeReminder(){
 // language as the app's dialogs), per feedback that the bottom-sheet version felt buried.
 let extraReadingSheetOpen = false;
 function renderExtraReadingSheet(){
-  if(!extraReadingSheetOpen) return '';
+  if(!extraReadingSheetOpen){ lastRenderedExtraSheetOpen = false; return ''; }
+  const sheetIsNew = !lastRenderedExtraSheetOpen;
+  lastRenderedExtraSheetOpen = true;
   const bookOptions = BOOK_LIBRARY.map(b=>`<option value="${b.name}">${b.name}</option>`).join('');
   return `
-    <div id="extraSheetBackdrop" class="dialog-backdrop"></div>
-    <div class="dialog-card" role="dialog" aria-modal="true" style="width:min(400px, calc(100vw - 48px)); text-align:left;">
+    <div id="extraSheetBackdrop" class="dialog-backdrop ${sheetIsNew?'overlay-animate':''}"></div>
+    <div class="dialog-card ${sheetIsNew?'overlay-animate':''}" role="dialog" aria-modal="true" style="width:min(400px, calc(100vw - 48px)); text-align:left;">
       <div class="sheet-header" style="margin-bottom:10px;">
         <h3 style="margin:0;">${icon('bookmark',16)} Reading outside your plan</h3>
         <button type="button" class="sheet-close-btn" id="closeExtraSheetBtn" aria-label="Close">${icon('close',18)}</button>
@@ -5394,12 +5442,12 @@ function renderGroupWizardSessionsBody(){
     <div class="wizard-session-row">
       <div class="wizard-session-head">
         <span class="session-num">${i+1}</span>
-        <input type="text" data-session-field="title" data-session-index="${i}" placeholder="Session ${i+1} — title (optional)" value="${escapeHtml(s.title||'')}">
+        <input type="text" id="sessionField-title-${i}" data-session-field="title" data-session-index="${i}" placeholder="Session ${i+1} — title (optional)" value="${escapeHtml(s.title||'')}">
         ${groupDraftSessions.length > 1 ? `<button type="button" class="msg-action-btn" data-remove-session="${i}" aria-label="Remove session">${icon('trash',14)}</button>` : ''}
       </div>
-      <input type="text" data-session-field="reading" data-session-index="${i}" placeholder='Reading — e.g. "Philippians 1–2" or "Sit, Walk, Stand ch. 1"' value="${escapeHtml(s.reading||'')}">
+      <input type="text" id="sessionField-reading-${i}" data-session-field="reading" data-session-index="${i}" placeholder='Reading — e.g. "Philippians 1–2" or "Sit, Walk, Stand ch. 1"' value="${escapeHtml(s.reading||'')}">
       ${passage ? `<div class="session-passage-hint">&#10003; Links to ${escapeHtml(passage.book)} ${passage.chapter} in your Bible app</div>` : ''}
-      <input type="text" data-session-field="note" data-session-index="${i}" placeholder="Focus or discussion question (optional)" value="${escapeHtml(s.note||'')}">
+      <input type="text" id="sessionField-note-${i}" data-session-field="note" data-session-index="${i}" placeholder="Focus or discussion question (optional)" value="${escapeHtml(s.note||'')}">
     </div>`;
   }).join('');
   return `
