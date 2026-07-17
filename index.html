@@ -216,6 +216,10 @@
   body{
     margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
     background:var(--bg); color:var(--ink); line-height:1.4;
+    /* Theme/period changes (auto morning->noon->night shifts, or tapping the toggle) crossfade
+       gently instead of snapping — the palette drifting with the day is a feature; make the
+       drift itself feel like light changing, not a page reload. */
+    transition:background-color .8s ease, color .8s ease;
     padding-top:env(safe-area-inset-top); padding-bottom:env(safe-area-inset-bottom);
     width:100%; min-height:100%;
     /* A short tab (little content) vs. a tall one (lots of content) used to leave the page at very
@@ -278,10 +282,20 @@
   .toolbar input[type=date]{
     padding:7px 10px; border:1px solid var(--line); border-radius:8px; font-size:0.9rem; background:var(--card);
   }
+  /* ---- Motion tokens ----
+     One shared vocabulary of curves/durations so every surface moves the same way — the single
+     biggest thing separating "app" motion from "webpage" motion is consistency. --ease-out is a
+     fast-start glide (quintic), --ease-spring overshoots slightly and settles. */
+  :root{
+    --ease-out: cubic-bezier(.22,1,.36,1);
+    --ease-spring: cubic-bezier(.34,1.56,.64,1);
+    --dur-fast: .18s;
+    --dur-med: .34s;
+  }
   .btn{
     padding:7px 14px; border-radius:10px; border:1px solid var(--line); background:var(--card);
     cursor:pointer; font-size:0.85rem; font-weight:600; color:var(--ink);
-    transition:transform .18s cubic-bezier(.34,1.56,.64,1), background .12s ease, box-shadow .12s ease;
+    transition:transform .3s var(--ease-spring), background .2s ease, opacity .2s ease, border-color .2s ease;
   }
   .btn:hover{background:var(--accent-soft);}
   .btn.primary{background:var(--accent); color:#fff; border-color:var(--accent);}
@@ -299,12 +313,43 @@
     background:var(--card-glass); border:1px solid var(--line); border-radius:16px; padding:16px;
     box-shadow:var(--shadow); border-left:5px solid var(--cat-color, var(--accent));
     backdrop-filter:blur(16px); -webkit-backdrop-filter:blur(16px);
-    transition:transform .15s ease, box-shadow .15s ease;
+  }
+  /* ---- Unified, jitter-free hover lift ----
+     The old hover animated box-shadow directly, which repaints the shadow every single frame — on
+     top of backdrop-filter glass that read as visible stutter. Fix: the "lifted" shadow lives on a
+     ::after pseudo-element, pre-rendered once at opacity 0, and hover animates ONLY transform and
+     that opacity — both compositor-side properties, so the whole lift runs on the GPU as one
+     smooth glide. One rule set, one curve, one duration for every liftable surface. */
+  .card, .plan-card, .group-card, .settings-box, .dash-summary .stat, .journal-entry{
+    position:relative;
+    transition:transform var(--dur-med) var(--ease-out), border-color var(--dur-med) var(--ease-out),
+               background-color .5s ease;
+  }
+  .card::after, .plan-card::after, .group-card::after, .settings-box::after,
+  .dash-summary .stat::after, .journal-entry::after{
+    content:''; position:absolute; inset:0; border-radius:inherit; pointer-events:none;
+    box-shadow:0 14px 32px rgba(0,0,0,0.13); opacity:0; z-index:-1;
+    transition:opacity var(--dur-med) var(--ease-out);
+  }
+  :root[data-theme="dark"] .card::after, :root[data-theme="dark"] .plan-card::after,
+  :root[data-theme="dark"] .group-card::after, :root[data-theme="dark"] .settings-box::after,
+  :root[data-theme="dark"] .dash-summary .stat::after, :root[data-theme="dark"] .journal-entry::after{
+    box-shadow:0 14px 32px rgba(0,0,0,0.5);
   }
   @media (hover:hover) and (pointer:fine){
-    .card:hover, .plan-card:hover, .group-card:hover, .settings-box:hover, .dash-summary .stat:hover{
-      transform:translateY(-2px); box-shadow:0 10px 26px rgba(0,0,0,0.12);
+    .card:hover, .plan-card:hover, .group-card:hover, .settings-box:hover,
+    .dash-summary .stat:hover, .journal-entry:hover{
+      transform:translate3d(0,-3px,0);
     }
+    .card:hover::after, .plan-card:hover::after, .group-card:hover::after, .settings-box:hover::after,
+    .dash-summary .stat:hover::after, .journal-entry:hover::after{
+      opacity:1;
+    }
+  }
+  @media (prefers-reduced-motion: reduce){
+    .card, .plan-card, .group-card, .settings-box, .dash-summary .stat, .journal-entry{ transition:none; }
+    .card::after, .plan-card::after, .group-card::after, .settings-box::after,
+    .dash-summary .stat::after, .journal-entry::after{ transition:none; }
   }
   .card .cat-name{font-weight:700; font-size:0.95rem; margin-bottom:4px;}
   .card .due{font-size:1.15rem; font-weight:700; margin:6px 0 2px;}
@@ -327,7 +372,11 @@
      See animateRemoval() in JS: the row is given this class and left on screen briefly before the
      underlying data actually changes and render() rebuilds everything, so deleting something reads
      as a piece of UI leaving the screen rather than an instant, jarring disappearance. */
-  .journal-entry, .extra-log-row{ transition:transform .2s ease, opacity .2s ease, box-shadow .2s ease; }
+  /* .journal-entry's transform transition comes from the unified hover-lift block above — only
+     opacity (for row-leaving) needs adding here. .extra-log-row isn't a lift surface, so it keeps
+     its own pair. */
+  .journal-entry{ transition:transform var(--dur-med) var(--ease-out), opacity .2s ease, background-color .5s ease; }
+  .extra-log-row{ transition:transform .2s ease, opacity .2s ease; }
   .row-leaving{ transform:translateX(24px); opacity:0; pointer-events:none; }
   @media (prefers-reduced-motion: reduce){ .journal-entry, .extra-log-row{ transition:none; } .row-leaving{ display:none; } }
   /* ---- Tactile press feedback ----
@@ -350,7 +399,7 @@
   }
   details.month-group summary::-webkit-details-marker{display:none;}
   .dash-summary{display:grid; grid-template-columns:repeat(auto-fill, minmax(min(220px,100%),1fr)); gap:12px; margin-bottom:26px;}
-  .dash-summary .stat{background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px; box-shadow:var(--shadow); transition:transform .15s ease, box-shadow .15s ease;}
+  .dash-summary .stat{background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px; box-shadow:var(--shadow);}
   .dash-summary .stat .num{font-size:1.6rem; font-weight:800; color:var(--accent);}
   .dash-summary .stat .label{font-size:0.78rem; color:var(--ink-soft); font-weight:600;}
   .cat-block{margin-bottom:26px;}
@@ -388,7 +437,6 @@
     background:var(--card-glass); border:1px solid var(--line); border-radius:16px; padding:20px;
     max-width:640px; box-shadow:var(--shadow); margin-bottom:20px;
     backdrop-filter:blur(16px); -webkit-backdrop-filter:blur(16px);
-    transition:transform .15s ease, box-shadow .15s ease;
   }
   .settings-box h3{margin-top:0;}
   .settings-box ol{padding-left:20px; font-size:0.88rem; color:var(--ink-soft);}
@@ -495,7 +543,7 @@
   .group-card-list{display:flex; flex-direction:column; gap:10px;}
   .group-card{
     display:flex; align-items:center; gap:12px; padding:12px 14px; border:1px solid var(--line);
-    border-radius:16px; background:var(--bg); transition:transform .15s ease, box-shadow .15s ease, border-color .15s ease;
+    border-radius:16px; background:var(--bg);
   }
   .group-card .group-icon{flex-shrink:0;}
   .group-card .group-info{flex:1; min-width:0;}
@@ -533,7 +581,7 @@
   .auth-links a.muted{color:var(--ink-soft);}
   .onboard-wrap{max-width:900px; margin:0 auto;}
   .plan-grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(min(260px,100%),1fr)); gap:16px; margin:20px 0;}
-  .plan-card{background:var(--card); border:1px solid var(--line); border-radius:18px; padding:18px; box-shadow:var(--shadow); display:flex; flex-direction:column; gap:10px; transition:transform .15s ease, box-shadow .15s ease;}
+  .plan-card{background:var(--card); border:1px solid var(--line); border-radius:18px; padding:18px; box-shadow:var(--shadow); display:flex; flex-direction:column; gap:10px;}
   .plan-card h4{margin:0; font-size:1.05rem;}
   .plan-card p{margin:0; font-size:0.82rem; color:var(--ink-soft); flex-grow:1;}
   .plan-card .swatches{display:flex; gap:4px; flex-wrap:wrap;}
@@ -565,9 +613,7 @@
     padding:14px 16px; margin-bottom:10px; box-shadow:var(--shadow);
   }
   .journal-entry:last-child{margin-bottom:0;}
-  @media (hover:hover) and (pointer:fine){
-    .journal-entry:hover{transform:translateY(-2px); box-shadow:0 10px 26px rgba(0,0,0,0.12);}
-  }
+  /* (journal-entry hover lift now comes from the unified hover-lift block near the top) */
   .journal-entry-head{display:flex; align-items:center; gap:10px; margin-bottom:6px;}
   .journal-date{font-size:0.8rem; color:var(--ink-soft); font-weight:600;}
   .journal-title{font-weight:700; margin-bottom:4px;}
@@ -771,12 +817,23 @@
      native navigation push. Both are entrance-only (the old content is already gone by the time
      these run, since app.innerHTML is rebuilt from scratch) but that's enough to read as
      navigating somewhere rather than a page reload. */
-  @keyframes viewFadeIn{ from{opacity:0;} to{opacity:1;} }
+  @keyframes viewFadeIn{ from{opacity:0; transform:translateY(6px);} to{opacity:1; transform:translateY(0);} }
   @keyframes viewSlideIn{ from{opacity:0; transform:translateX(28px);} to{opacity:1; transform:translateX(0);} }
-  .view-enter-fade{ animation:viewFadeIn .18s ease-out; }
-  .view-enter-slide{ animation:viewSlideIn .22s cubic-bezier(.25,.8,.4,1); }
+  .view-enter-fade{ animation:viewFadeIn .32s var(--ease-out); }
+  .view-enter-slide{ animation:viewSlideIn .34s var(--ease-out); }
+  /* Cards cascade in with a tiny per-card delay when a view enters — content settling into place
+     rather than snapping on all at once. `backwards` keeps late-starting cards invisible until
+     their turn. Capped after the 6th card so long lists never feel slow. */
+  @keyframes cardRise{ from{opacity:0; transform:translateY(12px);} to{opacity:1; transform:translateY(0);} }
+  .view-enter-fade .card, .view-enter-slide .card{ animation:cardRise .4s var(--ease-out) backwards; }
+  .view-enter-fade .card:nth-child(2), .view-enter-slide .card:nth-child(2){ animation-delay:.05s; }
+  .view-enter-fade .card:nth-child(3), .view-enter-slide .card:nth-child(3){ animation-delay:.1s; }
+  .view-enter-fade .card:nth-child(4), .view-enter-slide .card:nth-child(4){ animation-delay:.15s; }
+  .view-enter-fade .card:nth-child(5), .view-enter-slide .card:nth-child(5){ animation-delay:.2s; }
+  .view-enter-fade .card:nth-child(n+6), .view-enter-slide .card:nth-child(n+6){ animation-delay:.24s; }
   @media (prefers-reduced-motion: reduce){
     .view-enter-fade, .view-enter-slide{ animation:none; }
+    .view-enter-fade .card, .view-enter-slide .card{ animation:none; }
   }
 
   /* ---- Icon set ---- */
@@ -791,6 +848,7 @@
     border:1px solid var(--line); background:var(--card); color:var(--ink-soft); font-size:0.78rem;
     font-weight:700; cursor:pointer; margin-top:6px;
   }
+  .theme-toggle{ transition:border-color .25s ease, color .25s ease, background-color .5s ease; }
   .theme-toggle:hover{border-color:var(--accent); color:var(--accent);}
   .theme-toggle .icon-svg{vertical-align:-3px;}
 
@@ -808,7 +866,34 @@
     .mention-dropdown-item:hover{ background:var(--accent-soft); }
   }
   /* ---- Consider Him (daily verse + historic commentary, top of Today) ---- */
-  .consider-him-card{ background:var(--accent-soft); border-color:var(--accent); }
+  /* The card carries a living sky: a soft gradient wash + an SVG scene (sunrise / midday sun /
+     moon and stars) that follows the same morning/noon/night period as the app theme — Psalm
+     55:17's rhythm made visible right where the day's verse lives. The scene layer sits behind
+     the text (z-index) and is aria-hidden, pure decoration. */
+  .consider-him-card{ background:var(--accent-soft); border-color:var(--accent); position:relative; overflow:hidden; }
+  .consider-him-card > *:not(.consider-him-scene){ position:relative; z-index:1; }
+  .consider-him-scene{ position:absolute; inset:0; z-index:0; pointer-events:none; }
+  .consider-him-scene .scene-svg{ position:absolute; top:8px; right:10px; }
+  :root[data-period="morning"] .consider-him-card{
+    background:linear-gradient(160deg, rgba(255,196,120,0.30) 0%, rgba(255,232,196,0.18) 45%, transparent 75%), var(--accent-soft);
+  }
+  :root[data-period="noon"] .consider-him-card{
+    background:linear-gradient(160deg, rgba(255,214,90,0.26) 0%, rgba(170,214,255,0.20) 50%, transparent 80%), var(--accent-soft);
+  }
+  :root[data-period="night"] .consider-him-card{
+    background:linear-gradient(160deg, rgba(88,86,214,0.30) 0%, rgba(40,44,90,0.22) 50%, transparent 80%), var(--accent-soft);
+  }
+  @keyframes sceneGlow{ 0%,100%{ opacity:0.75; } 50%{ opacity:1; } }
+  @keyframes sceneTwinkle{ 0%,100%{ opacity:0.25; } 50%{ opacity:1; } }
+  @keyframes sceneDrift{ 0%,100%{ transform:translateX(0); } 50%{ transform:translateX(-6px); } }
+  .consider-him-scene .scene-glow{ animation:sceneGlow 5s ease-in-out infinite; }
+  .consider-him-scene .scene-star{ animation:sceneTwinkle 3.2s ease-in-out infinite; }
+  .consider-him-scene .scene-star:nth-of-type(2){ animation-delay:1.1s; }
+  .consider-him-scene .scene-star:nth-of-type(3){ animation-delay:2.2s; }
+  .consider-him-scene .scene-cloud{ animation:sceneDrift 9s ease-in-out infinite; }
+  @media (prefers-reduced-motion: reduce){
+    .consider-him-scene .scene-glow, .consider-him-scene .scene-star, .consider-him-scene .scene-cloud{ animation:none; }
+  }
   .consider-him-ref{ font-weight:700; color:var(--accent); font-size:0.85rem; margin-bottom:6px; }
   .consider-him-verse{ font-size:0.98rem; line-height:1.6; font-style:italic; margin:0 0 10px; }
   .consider-him-commentary summary{ cursor:pointer; font-size:0.82rem; font-weight:600; color:var(--ink-soft); }
@@ -884,7 +969,9 @@
     display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px;
     background:none; border:none; color:var(--ink-soft); font-size:0.62rem; font-weight:700;
     padding:5px 2px; cursor:pointer; flex:1; min-width:0;
+    transition:color .25s ease, transform .3s var(--ease-spring);
   }
+  .bottom-nav-item:active{ transform:scale(0.9); }
   .bottom-nav-item .icon{font-size:1.35rem; line-height:1;}
   .bottom-nav-item.active{color:var(--accent);}
   .bottom-nav-item span.label{overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:100%;}
@@ -969,16 +1056,10 @@
   .desktop-nav-item.active{background:var(--accent-soft); color:var(--accent);}
   @media (hover:hover) and (pointer:fine){
     .desktop-nav-item:not(.active):hover{background:var(--accent-soft); color:var(--ink);}
-    /* A card that lifts slightly and deepens its shadow under the cursor reads as something you
-       can act on, the way a real app's clickable surfaces do — gated to hover:hover/pointer:fine
-       so a phone/tablet tap never gets stuck showing a "hover" state after the finger lifts. */
-    .card:hover, .dash-summary .stat:hover, .plan-card:hover{
-      transform:translateY(-2px); box-shadow:0 6px 18px rgba(40,30,10,0.12);
-    }
-    .group-card:hover{ border-color:var(--accent); transform:translateY(-1px); }
-    :root[data-theme="dark"] .card:hover, :root[data-theme="dark"] .dash-summary .stat:hover, :root[data-theme="dark"] .plan-card:hover{
-      box-shadow:0 6px 18px rgba(0,0,0,0.4);
-    }
+    /* Lift transform + shadow live in the unified hover-lift block near the top of this
+       stylesheet (compositor-only, jitter-free). Only the group card's accent border tint —
+       a plain color change, cheap to animate — stays here. */
+    .group-card:hover{ border-color:var(--accent); }
   }
 
   /* ---- Phone-width layout: bottom nav + sidebar replace the desktop nav, everything tightens up ---- */
@@ -3011,36 +3092,85 @@ let myGroupsListenerError = ''; // surfaced in the group directory's empty/troub
 // rather than a separate denormalized userGroups doc. The denormalized-doc version had a real
 // permission problem: approving someone else's join request would need to write into THEIR
 // userGroups doc, which Firestore rules can't safely allow without a much bigger hole. Deriving
-// it from `members` instead needs no extra writes or extra rules at all — every member doc
-// already carries a plain `uid` field (equal to its own doc ID) specifically so this query can
-// filter on it. Note: Firestore may prompt to auto-create a collection-group index the first
-// time this runs in a real project — that's expected, just follow the link it gives you once.
-// If that index is never created (or any other transient error hits), this listener used to just
-// die silently forever, which is exactly what produced the reported bug: a group you own never
-// makes it into myGroupIds, so the directory keeps showing "Join" for a group that's already
-// yours. It now retries with backoff (mirroring subscribeFriends), AND — belt and suspenders —
-// attemptJoinOrOpen() below double-checks direct membership before ever sending a join request,
-// so even a permanently-broken listener can't produce a dead "Join" button anymore.
+// it from `members` instead — every member doc carries a plain `uid` field (equal to its own
+// doc ID) specifically so this query can filter on it. Note: Firestore may prompt to auto-create
+// a collection-group index the first time this runs in a real project — that's expected, just
+// follow the link it gives you once.
+// ROOT CAUSE of the "my groups never populate — I have to press Join every time" bug: a
+// collectionGroup('members') query does NOT match the path-specific rule
+// `match /groups/{groupId}/members/{uid}` — Firestore requires an explicit recursive-wildcard rule
+// (`match /{path=**}/members/{uid}`) for collection-group queries, which the rules never had. So
+// this listener was permission-denied on every attempt, gave up after 5 retries, and myGroupIds
+// stayed empty — while pressing Join "worked" because attemptJoinOrOpen() does a direct doc get()
+// (which the path-based rule DOES allow) and patched the list locally for that one session.
+// Fixed three ways at once:
+//   1. firestore_rules_v18 adds the collection-group rule, making this query actually legal.
+//   2. Known memberships are cached in localStorage (per uid) and rehydrated at subscribe time by
+//      direct per-doc gets — the one read shape that always worked — so My Groups populates
+//      instantly and correctly even if the collection-group query is ever degraded again
+//      (rules not yet deployed, missing index, transient outage).
+//   3. Retries no longer give up after 5 attempts — they back off up to 60s and keep trying.
+const MY_GROUPS_CACHE_KEY = 'cultivateMyGroupsCache';
+function persistMyGroupsCache(){
+  if(!currentUser) return;
+  try{
+    const all = JSON.parse(localStorage.getItem(MY_GROUPS_CACHE_KEY)||'{}');
+    all[currentUser.uid] = { ids: myGroupIds, roles: myGroupRoles };
+    localStorage.setItem(MY_GROUPS_CACHE_KEY, JSON.stringify(all));
+  }catch(e){}
+}
+function applyMyGroups(ids, roles){
+  myGroupIds = ids;
+  myGroupRoles = roles;
+  persistMyGroupsCache();
+  if(!groupDirTabAutoSet && myGroupIds.length){ groupDirTab = 'mine'; groupDirTabAutoSet = true; }
+  ensureMyGroupsInDirectory();
+  syncAdminJoinRequestSubs();
+  render();
+}
+// Rehydrate + verify cached memberships via direct doc gets. Verification matters both ways:
+// it drops groups you've since left (or that were deleted), and it re-confirms the ones you're
+// still in, so a stale cache can neither hide a group nor resurrect a dead one.
+function verifyCachedMyGroups(){
+  if(!fbDb || !currentUser) return;
+  let cached = null;
+  try{ cached = (JSON.parse(localStorage.getItem(MY_GROUPS_CACHE_KEY)||'{}'))[currentUser.uid] || null; }catch(e){}
+  if(!cached || !Array.isArray(cached.ids) || !cached.ids.length) return;
+  const uid = currentUser.uid;
+  Promise.all(cached.ids.map(gid =>
+    fbDb.collection('groups').doc(gid).collection('members').doc(uid).get()
+      .then(doc => doc.exists ? { gid, role: doc.data().role } : null)
+      .catch(()=> null)
+  )).then(results=>{
+    if(!currentUser || currentUser.uid !== uid) return;
+    const confirmed = results.filter(Boolean);
+    if(!confirmed.length) return;
+    // Merge (don't overwrite) — if the live listener already delivered a fuller answer, keep it.
+    const ids = Array.from(new Set(myGroupIds.concat(confirmed.map(r=>r.gid))));
+    const roles = Object.assign({}, myGroupRoles);
+    confirmed.forEach(r=>{ if(!(r.gid in roles)) roles[r.gid] = r.role; });
+    applyMyGroups(ids, roles);
+  });
+}
 function subscribeMyGroups(){
   if(!fbDb || !currentUser) return;
   if(myGroupsUnsub) myGroupsUnsub();
+  verifyCachedMyGroups();
   myGroupsUnsub = fbDb.collectionGroup('members').where('uid','==',currentUser.uid).onSnapshot(snap=>{
     myGroupsSubRetryCount = 0;
     myGroupsListenerError = '';
-    myGroupIds = snap.docs.map(d=> d.ref.parent.parent.id);
-    myGroupRoles = {};
-    snap.docs.forEach(d=>{ myGroupRoles[d.ref.parent.parent.id] = d.data().role; });
-    if(!groupDirTabAutoSet && myGroupIds.length){ groupDirTab = 'mine'; groupDirTabAutoSet = true; }
-    ensureMyGroupsInDirectory();
-    syncAdminJoinRequestSubs();
-    render();
+    const ids = snap.docs.map(d=> d.ref.parent.parent.id);
+    const roles = {};
+    snap.docs.forEach(d=>{ roles[d.ref.parent.parent.id] = d.data().role; });
+    applyMyGroups(ids, roles);
   }, err=>{
     console.warn('my-groups listener error', err);
     myGroupsListenerError = (err && err.code) ? `${err.code}: ${err.message||''}` : String(err);
     render();
-    if(myGroupsSubRetryCount < 5 && currentUser){
+    if(currentUser){
       myGroupsSubRetryCount++;
-      setTimeout(()=>{ if(currentUser) subscribeMyGroups(); }, 2000 * myGroupsSubRetryCount);
+      const delay = Math.min(2000 * myGroupsSubRetryCount, 60000);
+      setTimeout(()=>{ if(currentUser) subscribeMyGroups(); }, delay);
     }
   });
 }
@@ -3357,7 +3487,11 @@ function attemptJoinOrOpen(groupId){
   if(!fbDb || !currentUser) return;
   fbDb.collection('groups').doc(groupId).collection('members').doc(currentUser.uid).get().then(doc=>{
     if(doc.exists){
-      if(!myGroupIds.includes(groupId)) myGroupIds = myGroupIds.concat([groupId]);
+      if(!myGroupIds.includes(groupId)){
+        // Persist through applyMyGroups (localStorage cache + directory patch + admin subs),
+        // not a bare local concat — so this survives the next refresh instead of lasting one session.
+        applyMyGroups(myGroupIds.concat([groupId]), Object.assign({}, myGroupRoles, { [groupId]: doc.data().role }));
+      }
       requestedGroupIds.delete(groupId);
       showToast("You're already in this group — opening it.");
       openGroup(groupId);
@@ -4026,9 +4160,12 @@ function renderNotifPanel(){
 // Friends and Groups used to be two separate tabs; they're now one "Community" tab with a dual
 // sub-tab switcher at the top (see renderCommunity/communitySubTab) — so every tab list below has
 // a single 'community' entry instead of the old 'friends'+'groups' pair.
-const MAIN_TABS = [['today','Today','home'],['log','Log','calendar'],['dashboard','Dashboard','chart'],['community','Community','users'],['account','Account','person']];
-const MORE_TABS = [['journal','Journal','notebook'],['memorize','Memorize','bookmark']];
-const ALL_TABS = [['today','Today','home'],['log','Log','calendar'],['journal','Journal','notebook'],['memorize','Memorize','bookmark'],['dashboard','Dashboard','chart'],['community','Community','users'],['account','Account','person']];
+// Nav layout (reorganized per user request): Journal is promoted onto the main bottom nav, while
+// Log and Account move into the "More" sidebar — the main row now carries the four everyday
+// destinations (Today, Journal, Dashboard, Community) plus More.
+const MAIN_TABS = [['today','Today','home'],['journal','Journal','notebook'],['dashboard','Dashboard','chart'],['community','Community','users']];
+const MORE_TABS = [['log','Log','calendar'],['memorize','Memorize','bookmark'],['account','Account','person']];
+const ALL_TABS = [['today','Today','home'],['journal','Journal','notebook'],['dashboard','Dashboard','chart'],['community','Community','users'],['log','Log','calendar'],['memorize','Memorize','bookmark'],['account','Account','person']];
 
 // Desktop's persistent left nav — replaces the old flat top text-tab row. Fixed to the left edge
 // above the mobile breakpoint (see the .desktop-nav media queries), with #app shifted over to make
@@ -4079,10 +4216,57 @@ function renderSidebar(){
 // reflection is right there when there's time for it. considerHimExpanded only affects the CSS
 // open attribute for prefers-reduced-motion consistency with the rest of the app; native <details>
 // handles the actual toggle without any JS wiring needed.
+// The decorative sky scene for the Consider Him card — which one you get follows the same
+// morning/noon/night period as the whole app theme (effectivePeriod()), so the card's corner
+// carries a rising sun before noon, a full sun at midday, and a moon with stars after dark.
+// Pure decoration: aria-hidden, pointer-events:none, sits behind the text (see CSS).
+function considerHimSceneSvg(){
+  const period = effectivePeriod();
+  if(period === 'morning'){
+    return `<svg class="scene-svg" width="110" height="72" viewBox="0 0 110 72" xmlns="http://www.w3.org/2000/svg" fill="none">
+      <circle class="scene-glow" cx="78" cy="54" r="22" fill="rgba(255,176,80,0.35)"/>
+      <circle cx="78" cy="54" r="13" fill="rgba(255,150,50,0.75)"/>
+      <g stroke="rgba(255,150,50,0.65)" stroke-width="2.5" stroke-linecap="round">
+        <line x1="78" y1="30" x2="78" y2="22"/>
+        <line x1="60" y1="37" x2="54" y2="31"/>
+        <line x1="96" y1="37" x2="102" y2="31"/>
+        <line x1="53" y1="54" x2="45" y2="54"/>
+        <line x1="103" y1="54" x2="111" y2="54"/>
+      </g>
+      <rect x="0" y="66" width="110" height="6" rx="3" fill="rgba(255,150,50,0.25)"/>
+      <ellipse class="scene-cloud" cx="34" cy="26" rx="16" ry="6" fill="rgba(255,255,255,0.55)"/>
+    </svg>`;
+  }
+  if(period === 'noon'){
+    return `<svg class="scene-svg" width="110" height="72" viewBox="0 0 110 72" xmlns="http://www.w3.org/2000/svg" fill="none">
+      <circle class="scene-glow" cx="76" cy="30" r="24" fill="rgba(255,205,60,0.30)"/>
+      <circle cx="76" cy="30" r="14" fill="rgba(255,190,40,0.8)"/>
+      <g stroke="rgba(255,190,40,0.7)" stroke-width="2.5" stroke-linecap="round">
+        <line x1="76" y1="6" x2="76" y2="12"/>
+        <line x1="76" y1="48" x2="76" y2="54"/>
+        <line x1="52" y1="30" x2="58" y2="30"/>
+        <line x1="94" y1="30" x2="100" y2="30"/>
+        <line x1="59" y1="13" x2="63" y2="17"/>
+        <line x1="93" y1="47" x2="89" y2="43"/>
+        <line x1="93" y1="13" x2="89" y2="17"/>
+        <line x1="59" y1="47" x2="63" y2="43"/>
+      </g>
+      <ellipse class="scene-cloud" cx="26" cy="52" rx="17" ry="6" fill="rgba(255,255,255,0.6)"/>
+    </svg>`;
+  }
+  return `<svg class="scene-svg" width="110" height="72" viewBox="0 0 110 72" xmlns="http://www.w3.org/2000/svg" fill="none">
+    <circle class="scene-glow" cx="76" cy="34" r="20" fill="rgba(140,140,255,0.18)"/>
+    <path d="M84 20 a15 15 0 1 0 6 27 a12 12 0 1 1 -6 -27 Z" fill="rgba(200,205,255,0.85)"/>
+    <circle class="scene-star" cx="40" cy="18" r="1.8" fill="rgba(220,225,255,0.9)"/>
+    <circle class="scene-star" cx="26" cy="40" r="1.4" fill="rgba(220,225,255,0.9)"/>
+    <circle class="scene-star" cx="52" cy="54" r="1.6" fill="rgba(220,225,255,0.9)"/>
+  </svg>`;
+}
 function renderConsiderHim(){
   const e = considerHimForToday();
   return `
     <div class="settings-box consider-him-card" style="max-width:none;">
+      <div class="consider-him-scene" aria-hidden="true">${considerHimSceneSvg()}</div>
       <h3>${icon('bookmark',16)} Consider Him</h3>
       <div class="consider-him-ref">${e.ref}</div>
       <p class="consider-him-verse">&ldquo;${e.text}&rdquo;</p>
