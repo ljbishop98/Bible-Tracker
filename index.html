@@ -54,6 +54,20 @@
        sidebar) sitting over backdrop-filter: blur() — a native "material" look instead of a flat
        opaque bar, which is one of the bigger tells of a website versus an app shell. */
     --card-glass: rgba(255,255,255,0.72);
+    /* Secondary accent — a cool, muted teal that sits opposite the warm brand brown/amber on the
+       color wheel. Used anywhere a second hue reads as "variety" rather than "off-brand": tag
+       chips, secondary icon fills, highlight rules — never replacing --accent, just giving the UI
+       a second note to work with instead of every splash of color being the same brown. */
+    --accent2:#3d7068;
+    --accent2-soft:#e2efed;
+    /* A five-step color gradient for the spiritual check-in scale (Distant -> Close), reading as a
+       temperature climb from a cool, far-off blue-gray through an earthy middle to a warm rust —
+       reinforces the "distant/dry/steady/warm/close" language with color, not just icon shape. */
+    --mood1:#7f8fa3; --mood1-soft:#e9edf2;
+    --mood2:#ab9a5e; --mood2-soft:#f3eed9;
+    --mood3:#6f9b78; --mood3-soft:#e3f0e6;
+    --mood4:#d99a4a; --mood4-soft:#faecd8;
+    --mood5:#c1583f; --mood5-soft:#f8e2dc;
   }
   :root[data-theme="dark"]{
     --bg:#171310;
@@ -71,6 +85,13 @@
     --bad-soft:#3a1f1f;
     --shadow: 0 1px 3px rgba(0,0,0,0.45), 0 1px 2px rgba(0,0,0,0.35);
     --card-glass: rgba(36,31,25,0.72);
+    --accent2:#5fc2b8;
+    --accent2-soft:#1c3330;
+    --mood1:#9fb3c9; --mood1-soft:#26313d;
+    --mood2:#cdb877; --mood2-soft:#3a331d;
+    --mood3:#8fcf9b; --mood3-soft:#1f3324;
+    --mood4:#e8b164; --mood4-soft:#3a2c1a;
+    --mood5:#e2795e; --mood5-soft:#3a231d;
   }
   /* Book tiles (Groups create form) carry their own per-book color as an inline --tile-color/
      --tile-soft custom property, computed against the light palette — the soft tint reads fine
@@ -125,6 +146,15 @@
     background:var(--bg); color:var(--ink); line-height:1.4;
     padding-top:env(safe-area-inset-top); padding-bottom:env(safe-area-inset-bottom);
     width:100%; min-height:100%;
+    /* A short tab (little content) vs. a tall one (lots of content) used to leave the page at very
+       different heights — which meant the mobile browser's own address bar collapsed on one and
+       stayed expanded on the other, so the visual viewport height itself differed between tabs.
+       Since the bottom nav is position:fixed to that viewport, switching tabs made it visibly jump/
+       reflow. Forcing body to always span at least a full viewport (dvh, with vh as a fallback for
+       browsers that don't support it yet) keeps every tab's scroll behavior consistent, so the
+       browser chrome — and the nav bar's position — stays put across every tab switch. */
+    min-height:100vh;
+    min-height:100dvh;
     transition:background .15s ease, color .15s ease;
     /* Native apps don't let a bounce/rubber-band scroll reveal a mismatched white flash behind
        the content — matching html's background to the theme (above) covers the overscroll area
@@ -190,8 +220,13 @@
   .btn.small{padding:4px 10px; font-size:0.78rem;}
   .grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(min(300px,100%),1fr)); gap:14px;}
   .card{
-    background:var(--card); border:1px solid var(--line); border-radius:16px; padding:16px;
+    /* Frosted-glass surface rather than a flat opaque card — same --card-glass material as the nav
+       bar/sidebar, extended onto regular content cards per the "more liquid glass, everywhere it
+       makes sense" pass. backdrop-filter needs something visible behind it to actually read as
+       glass, which every .card has (the page background and whatever scrolls underneath it). */
+    background:var(--card-glass); border:1px solid var(--line); border-radius:16px; padding:16px;
     box-shadow:var(--shadow); border-left:5px solid var(--cat-color, var(--accent));
+    backdrop-filter:blur(16px); -webkit-backdrop-filter:blur(16px);
     transition:transform .15s ease, box-shadow .15s ease;
   }
   @media (hover:hover) and (pointer:fine){
@@ -278,8 +313,9 @@
   .empty-state-message{margin:0; font-size:0.88rem; max-width:340px; line-height:1.5;}
   input[type=file]{display:none;}
   .settings-box{
-    background:var(--card); border:1px solid var(--line); border-radius:16px; padding:20px;
+    background:var(--card-glass); border:1px solid var(--line); border-radius:16px; padding:20px;
     max-width:640px; box-shadow:var(--shadow); margin-bottom:20px;
+    backdrop-filter:blur(16px); -webkit-backdrop-filter:blur(16px);
     transition:transform .15s ease, box-shadow .15s ease;
   }
   .settings-box h3{margin-top:0;}
@@ -294,13 +330,44 @@
     font-size:0.85rem; font-weight:600; color:var(--ink-soft); cursor:pointer;
   }
   .group-tabs button.active{background:var(--card); color:var(--accent); box-shadow:var(--shadow);}
+  .community-subtabs{max-width:640px;}
+  .community-subtabs button{display:flex; align-items:center; justify-content:center; gap:6px;}
+
+  /* ---- Community feed (simple status updates, Friends sub-tab) ---- */
+  .community-feed{display:flex; flex-direction:column; gap:10px; margin-top:6px;}
+  .community-post-card{padding:14px;}
+  .community-post-head{display:flex; align-items:center; gap:10px; margin-bottom:8px;}
+  .community-post-meta{flex:1; min-width:0;}
+  .community-post-name{font-weight:700; font-size:0.9rem;}
+  .community-post-time{font-size:0.76rem; color:var(--ink-soft);}
+  .community-post-delete{
+    background:none; border:none; color:var(--ink-soft); cursor:pointer; padding:6px; border-radius:50%;
+    display:flex; align-items:center; justify-content:center; flex-shrink:0;
+  }
+  .community-post-delete:hover{ color:var(--bad); }
+  .community-post-text{font-size:0.9rem; line-height:1.5; white-space:pre-wrap;}
+  .community-post-photo{max-width:100%; border-radius:10px; margin-top:8px; display:block;}
+  /* Floating "+" button, bottom-right, only shown on Community's Friends sub-tab — opens the
+     one-field post composer (see renderPostComposerSheet). */
+  .fab-add-post{
+    position:fixed; right:20px; bottom:calc(84px + env(safe-area-inset-bottom)); z-index:35;
+    width:56px; height:56px; border-radius:50%; background:var(--accent); color:#fff; border:none;
+    display:flex; align-items:center; justify-content:center; cursor:pointer;
+    box-shadow:0 6px 20px rgba(0,0,0,0.25); transition:transform .12s ease;
+  }
+  .fab-add-post:active{ transform:scale(0.92); }
+  @media (min-width:761px){ .fab-add-post{ bottom:24px; } }
   .role-badge{
     display:inline-flex; align-items:center; padding:2px 9px; border-radius:999px;
     font-size:0.7rem; font-weight:700; text-transform:uppercase; letter-spacing:0.02em;
   }
   .role-badge.owner{background:var(--accent-soft); color:var(--accent);}
   .role-badge.admin{background:var(--skip-soft); color:var(--skip);}
-  .role-badge.member{background:#efe8db; color:var(--ink-soft);}
+  /* Uses the secondary (teal) accent rather than a flat gray — this same class also labels the
+     plain reading-outline chips (book + chapter count), so this one change adds a visible second
+     hue to both the member-role badge and every group's outline view. */
+  .role-badge.member{background:var(--accent2-soft); color:var(--accent2);}
+  h3 .icon-svg{ vertical-align:-3px; margin-right:5px; opacity:0.82; }
   .book-picker{
     display:grid; grid-template-columns:repeat(auto-fill, minmax(min(148px,100%),1fr)); gap:7px;
     max-height:200px; overflow-y:auto; border:1px solid var(--line); border-radius:10px;
@@ -444,9 +511,10 @@
   }
   .sheet-backdrop.open{ opacity:1; pointer-events:auto; }
   .sheet-panel{
-    position:fixed; left:0; right:0; bottom:0; z-index:71; background:var(--card);
+    position:fixed; left:0; right:0; bottom:0; z-index:71; background:var(--card-glass);
     border-radius:20px 20px 0 0; box-shadow:0 -8px 30px rgba(0,0,0,0.22);
     max-height:88vh; overflow-y:auto; -webkit-overflow-scrolling:touch;
+    backdrop-filter:blur(22px); -webkit-backdrop-filter:blur(22px);
     transform:translateY(100%); transition:transform .28s cubic-bezier(.25,.8,.4,1);
     padding:10px 20px calc(20px + env(safe-area-inset-bottom));
     max-width:640px; margin:0 auto;
@@ -473,14 +541,66 @@
   }
   .dialog-card{
     position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); z-index:81;
-    width:min(340px, calc(100vw - 48px)); background:var(--card); border-radius:16px;
+    width:min(340px, calc(100vw - 48px)); background:var(--card-glass); border-radius:16px;
     padding:22px 20px 16px; box-shadow:0 12px 40px rgba(0,0,0,0.25);
+    backdrop-filter:blur(22px); -webkit-backdrop-filter:blur(22px);
     animation:dialogPop .18s cubic-bezier(.25,.8,.4,1);
   }
   .dialog-message{margin:0 0 18px; font-size:0.92rem; line-height:1.5; text-align:center; color:var(--ink);}
   .dialog-actions{display:flex; gap:10px; justify-content:center;}
   .dialog-actions .btn{flex:1;}
   @media (prefers-reduced-motion: reduce){ .dialog-card, .dialog-backdrop{ animation:none; } }
+
+  /* ---- Full-screen, one-question-per-step wizard (Create Group; also reused, in spirit, by the
+     signup wizard below) — modeled on modern dating-app onboarding: one full-screen "card" per
+     step, a slim progress bar, Back/Next, and a review page before anything is actually created. */
+  .wizard-overlay{
+    position:fixed; inset:0; z-index:95; background:var(--bg);
+    display:flex; align-items:stretch; justify-content:center;
+    opacity:0; pointer-events:none; transition:opacity .2s ease;
+  }
+  .wizard-overlay.open{ opacity:1; pointer-events:auto; }
+  .wizard-card{
+    width:100%; max-width:640px; margin:0 auto; display:flex; flex-direction:column; height:100%;
+    padding:calc(16px + env(safe-area-inset-top)) 20px calc(16px + env(safe-area-inset-bottom));
+  }
+  .wizard-topbar{ display:flex; align-items:center; gap:10px; margin-bottom:22px; flex-shrink:0; }
+  .wizard-close-btn{
+    background:var(--card-glass); border:1px solid var(--line); width:34px; height:34px; border-radius:50%;
+    display:flex; align-items:center; justify-content:center; color:var(--ink-soft); cursor:pointer; flex-shrink:0;
+    backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px);
+  }
+  .wizard-progress{ flex:1; height:6px; border-radius:999px; background:var(--line); overflow:hidden; }
+  .wizard-progress-fill{ height:100%; background:var(--accent); border-radius:999px; transition:width .25s cubic-bezier(.25,.8,.4,1); }
+  .wizard-step-count{ font-size:0.78rem; color:var(--ink-soft); font-weight:700; flex-shrink:0; }
+  .wizard-body{ flex:1; overflow-y:auto; -webkit-overflow-scrolling:touch; }
+  .wizard-step{ max-width:480px; margin:0 auto; animation:wizardStepIn .28s cubic-bezier(.25,.8,.4,1); }
+  @keyframes wizardStepIn{ from{opacity:0; transform:translateX(24px);} to{opacity:1; transform:translateX(0);} }
+  @media (prefers-reduced-motion: reduce){ .wizard-step{ animation:none; } }
+  .wizard-step-icon{
+    width:56px; height:56px; border-radius:50%; background:var(--accent-soft); color:var(--accent);
+    display:flex; align-items:center; justify-content:center; margin-bottom:16px;
+  }
+  .wizard-step h2{ font-size:1.35rem; margin:0 0 6px; }
+  .wizard-step-sub{ color:var(--ink-soft); font-size:0.9rem; margin:0 0 20px; }
+  .wizard-choice-list{ display:flex; flex-direction:column; gap:10px; }
+  .wizard-choice{
+    display:flex; align-items:flex-start; gap:10px; padding:14px; border:1.5px solid var(--line);
+    border-radius:14px; cursor:pointer; transition:border-color .15s ease, background .15s ease;
+  }
+  .wizard-choice input{ margin-top:3px; }
+  .wizard-choice-sub{ color:var(--ink-soft); font-size:0.82rem; }
+  .wizard-choice.selected{ border-color:var(--accent); background:var(--accent-soft); }
+  .wizard-review-card{
+    background:var(--card-glass); border:1px solid var(--line); border-radius:14px; padding:16px;
+    backdrop-filter:blur(16px); -webkit-backdrop-filter:blur(16px);
+  }
+  .wizard-review-row{ display:flex; justify-content:space-between; gap:10px; padding:8px 0; border-bottom:1px solid var(--line); font-size:0.88rem; }
+  .wizard-review-row:last-child{ border-bottom:none; }
+  .wizard-review-row span{ color:var(--ink-soft); }
+  .wizard-nav{ display:flex; gap:10px; justify-content:space-between; padding-top:16px; flex-shrink:0; }
+  .wizard-nav .btn{ min-width:100px; }
+  @media (max-width:480px){ .wizard-nav .btn{ flex:1; } }
 
   /* ---- Toasts (transient feedback) ----
      Bottom-center, stacked above the bottom nav on phone; top-right corner on desktop, next to
@@ -515,7 +635,8 @@
   }
   .notif-bell{
     position:relative; display:inline-flex; align-items:center; justify-content:center;
-    width:38px; height:38px; border-radius:50%; border:1px solid var(--line); background:var(--card);
+    width:38px; height:38px; border-radius:50%; border:1px solid var(--line); background:var(--card-glass);
+    backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px);
     color:var(--ink-soft); cursor:pointer; padding:0; transition:transform .08s ease, border-color .12s ease, color .12s ease;
   }
   .notif-bell:active{transform:scale(0.94);}
@@ -532,9 +653,10 @@
     animation:dialogBackdropIn .15s ease-out;
   }
   .notif-panel{
-    position:fixed; top:0; right:0; left:0; z-index:75; background:var(--card);
+    position:fixed; top:0; right:0; left:0; z-index:75; background:var(--card-glass);
     border-radius:0 0 18px 18px; box-shadow:0 12px 40px rgba(0,0,0,0.25);
     max-height:70vh; overflow-y:auto; -webkit-overflow-scrolling:touch;
+    backdrop-filter:blur(22px); -webkit-backdrop-filter:blur(22px);
     padding:calc(14px + env(safe-area-inset-top)) 4px 10px;
     animation:notifPanelIn .2s cubic-bezier(.25,.8,.4,1);
   }
@@ -600,6 +722,19 @@
   .theme-toggle:hover{border-color:var(--accent); color:var(--accent);}
   .theme-toggle .icon-svg{vertical-align:-3px;}
 
+  /* ---- @mention autocomplete dropdown (group discussion) ---- */
+  .mention-dropdown{
+    position:absolute; bottom:100%; left:0; right:0; margin-bottom:6px;
+    background:var(--card); border:1px solid var(--line); border-radius:12px;
+    box-shadow:0 8px 24px rgba(0,0,0,0.18); max-height:220px; overflow-y:auto; z-index:15;
+  }
+  .mention-dropdown-item{
+    display:flex; align-items:center; gap:8px; width:100%; text-align:left;
+    background:none; border:none; padding:8px 12px; cursor:pointer; font-size:0.88rem; color:var(--ink);
+  }
+  @media (hover:hover) and (pointer:fine){
+    .mention-dropdown-item:hover{ background:var(--accent-soft); }
+  }
   /* ---- Consider Him (daily verse + historic commentary, top of Today) ---- */
   .consider-him-card{ background:var(--accent-soft); border-color:var(--accent); }
   .consider-him-ref{ font-weight:700; color:var(--accent); font-size:0.85rem; margin-bottom:6px; }
@@ -625,6 +760,34 @@
     font-size:0.85rem; margin-bottom:16px; font-weight:600;
   }
   .checkin-done-line button{background:none; border:none; color:inherit; font-weight:700; text-decoration:underline; cursor:pointer; font-size:0.82rem; padding:0;}
+
+  /* ---- Check-in mood icons: five tappable pills, each carrying its own step of the
+     Distant->Close color gradient (--mood1..--mood5, defined in :root above) so the temperature
+     language shows up visually, not just in the label text underneath. */
+  .checkin-icon-row{ display:flex; gap:8px; flex-wrap:wrap; }
+  .checkin-icon-btn{
+    display:flex; flex-direction:column; align-items:center; gap:5px;
+    background:none; border:none; cursor:pointer; padding:4px; border-radius:12px;
+    font-family:inherit; color:var(--ink-soft);
+    transition:transform .15s cubic-bezier(.34,1.56,.64,1);
+  }
+  .checkin-icon-btn:active{ transform:scale(0.94); }
+  .checkin-icon-circle{
+    width:44px; height:44px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+    background:var(--bg); border:1.5px solid var(--line); color:var(--ink-soft);
+    transition:background .15s ease, border-color .15s ease, color .15s ease;
+  }
+  .checkin-icon-btn[data-checkin-value="1"] .checkin-icon-circle{ --mood:var(--mood1); --mood-soft:var(--mood1-soft); }
+  .checkin-icon-btn[data-checkin-value="2"] .checkin-icon-circle{ --mood:var(--mood2); --mood-soft:var(--mood2-soft); }
+  .checkin-icon-btn[data-checkin-value="3"] .checkin-icon-circle{ --mood:var(--mood3); --mood-soft:var(--mood3-soft); }
+  .checkin-icon-btn[data-checkin-value="4"] .checkin-icon-circle{ --mood:var(--mood4); --mood-soft:var(--mood4-soft); }
+  .checkin-icon-btn[data-checkin-value="5"] .checkin-icon-circle{ --mood:var(--mood5); --mood-soft:var(--mood5-soft); }
+  @media (hover:hover){
+    .checkin-icon-btn:hover .checkin-icon-circle{ background:var(--mood-soft); border-color:var(--mood); color:var(--mood); }
+  }
+  .checkin-icon-btn.selected .checkin-icon-circle{ background:var(--mood); border-color:var(--mood); color:#fff; }
+  .checkin-icon-btn.selected .checkin-icon-label{ color:var(--ink); font-weight:700; }
+  .checkin-icon-label{ font-size:0.72rem; }
 
   /* ---- Viewed profile page (was a modal overlay — now a real in-place page, back button and all) ---- */
   .profile-page{max-width:640px; margin:0 auto;}
@@ -705,7 +868,8 @@
   /* ---- Command palette (Cmd/Ctrl+K quick jump) ---- */
   .command-palette{
     position:fixed; top:15%; left:50%; transform:translateX(-50%); z-index:85;
-    width:min(480px, calc(100vw - 48px)); background:var(--card); border-radius:16px;
+    width:min(480px, calc(100vw - 48px)); background:var(--card-glass); border-radius:16px;
+    backdrop-filter:blur(22px); -webkit-backdrop-filter:blur(22px);
     box-shadow:0 20px 60px rgba(0,0,0,0.3); overflow:hidden;
     animation:dialogPop .18s cubic-bezier(.25,.8,.4,1);
   }
@@ -883,6 +1047,16 @@ function icon(name, size){
     check: '<path d="M5 12.5l4.5 4.5L19 7"/>',
     plus: '<path d="M12 5v14M5 12h14"/>',
     bell: '<path d="M12 3.5c-3 0-5 2.3-5 5.4v2.6c0 1-.4 2-1.1 2.7L5 15h14l-.9-.8a3.7 3.7 0 0 1-1.1-2.7V8.9c0-3.1-2-5.4-5-5.4z"/><path d="M9.8 18.5a2.3 2.3 0 0 0 4.4 0"/>',
+    trash: '<path d="M5 7h14"/><path d="M9 7V4.8a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1V7"/><path d="M7 7l1 12.2a1.8 1.8 0 0 0 1.8 1.8h4.4A1.8 1.8 0 0 0 16 19.2L17 7"/><path d="M10.3 11v6M13.7 11v6"/>',
+    // Spiritual check-in mood gradient (Distant -> Dry -> Steady -> Warm -> Close), same hand-rolled
+    // stroke style as the rest of the icon set, chosen so the five read as a visible progression
+    // rather than five arbitrary pictures: a cloud drifting off, a cracked/thirsty drop, a steady
+    // anchor, a sunrise warming up, and finally a close-held heart.
+    checkinDistant: '<path d="M7 17.2h10a3.4 3.4 0 0 0 .4-6.8 5 5 0 0 0-9.6-1.6A4 4 0 0 0 7 17.2z"/>',
+    checkinDry: '<path d="M12 3.8s5.3 6.2 5.3 9.9a5.3 5.3 0 1 1-10.6 0c0-3.7 5.3-9.9 5.3-9.9z"/><path d="M10.4 10.3l1.4 2-1.6 1.8 1.7 2"/>',
+    checkinSteady: '<circle cx="12" cy="5.3" r="1.5"/><path d="M12 6.8v10.7"/><path d="M6.8 11.5H5a7 7 0 0 0 14 0h-1.8"/><path d="M8.2 9.2h7.6"/>',
+    checkinWarm: '<path d="M4.5 16.2h15"/><path d="M6 16.2a6 6 0 0 1 12 0"/><path d="M12 5.5v3.2M6.9 9l1.7 1.7M17.1 9l-1.7 1.7"/>',
+    checkinClose: '<path d="M12 20s-7-4.4-9.3-8.9A4.9 4.9 0 0 1 12 6a4.9 4.9 0 0 1 9.3 5.1C19 15.6 12 20 12 20z"/>',
   };
   const d = paths[name] || '';
   return `<svg class="icon-svg" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
@@ -1406,6 +1580,20 @@ function fmtDate(iso){
   const dt = new Date(y, m-1, d);
   return dt.toLocaleDateString(undefined, {weekday:'short', month:'short', day:'numeric', year:'numeric'});
 }
+// A short relative-time label ("3h ago", "just now") for the community feed — falls back to a
+// plain date once something's more than a week old, since "23 days ago" reads worse than a date.
+function timeAgo(ms){
+  if(!ms) return '';
+  const diff = Date.now() - ms;
+  if(diff < 60000) return 'just now';
+  const mins = Math.floor(diff/60000);
+  if(mins < 60) return mins + 'm ago';
+  const hours = Math.floor(mins/60);
+  if(hours < 24) return hours + 'h ago';
+  const days = Math.floor(hours/24);
+  if(days < 7) return days + 'd ago';
+  return new Date(ms).toLocaleDateString(undefined, {month:'short', day:'numeric'});
+}
 
 /* ---------------- Core actions ---------------- */
 function getDue(catId){
@@ -1713,6 +1901,7 @@ function considerHimForToday(){
 
 /* ---------------- Spiritual temperature check-in ---------------- */
 const CHECKIN_LABELS = { 1:'Distant', 2:'Dry', 3:'Steady', 4:'Warm', 5:'Close' };
+const CHECKIN_ICON_NAMES = { 1:'checkinDistant', 2:'checkinDry', 3:'checkinSteady', 4:'checkinWarm', 5:'checkinClose' };
 function setCheckin(date, value, note){
   const existing = state.checkins.find(c=>c.date===date);
   if(existing){ existing.value = value; existing.note = (note||'').trim(); existing.ts = Date.now(); }
@@ -1851,6 +2040,239 @@ function doSignUp(email, password){
     .catch(err => { authError = friendlyAuthError(err); })
     .finally(() => { authBusy = false; render(); });
 }
+
+/* ---------------- Signup wizard (Hinge/Tinder-style, one question per step) ----------------
+   Folds credentials + reading-plan choice + a short profile bio into ONE continuous flow, ending
+   with account creation on the review page — rather than the old order (create the Firebase
+   account first, THEN separately get funneled into the plan-choice onboarding screen on next
+   render). Plan/bio are applied to local `state` immediately (updateProfile()/applyPlan() both
+   already no-op their Firestore-writing parts without a signed-in user), and doSignUp() only runs
+   at the very end — the first Firestore snapshot for a brand-new uid always takes the
+   "!snap.exists" branch in subscribeToUserDoc(), which unconditionally pushes whatever local state
+   already exists (already including the chosen plan and bio) straight up. Login/reset are left as
+   the plain single-screen form in renderAuthGate() — this wizard only ever appears for signup. */
+let authWizardStep = 0;
+let authWizardError = '';
+let authWizardEmail = '';
+let authWizardPassword = '';
+let authWizardUsingCustomBuilder = false;
+let signupDisplayName = '';
+let signupBio = '';
+function authWizardSteps(){
+  const steps = ['credentials','planPreset'];
+  if(authWizardUsingCustomBuilder) steps.push('planCustom');
+  steps.push('bio','review');
+  return steps;
+}
+function resetAuthWizard(){
+  authWizardStep = 0; authWizardError = ''; authWizardEmail = ''; authWizardPassword = '';
+  authWizardUsingCustomBuilder = false; signupDisplayName = ''; signupBio = '';
+}
+const AUTH_WIZARD_STEP_META = {
+  credentials: { icon:'person',   title:'Create your account', sub:'Just an email and password to get started.' },
+  planPreset:  { icon:'notebook', title:'Choose a reading plan', sub:'Pick a preset to start reading today, or build your own.' },
+  planCustom:  { icon:'notebook', title:'Build your plan', sub:'Choose how many categories you want and which books go in each.' },
+  bio:         { icon:'person',   title:'Tell us a little about you', sub:'Optional — shows up on your profile. You can change this anytime.' },
+  review:      { icon:'check',    title:'Review & create account', sub:"Here's everything before we set up your account." },
+};
+function renderSignupWizard(){
+  const steps = authWizardSteps();
+  const stepIndex = Math.min(authWizardStep, steps.length-1);
+  const stepId = steps[stepIndex];
+  const meta = AUTH_WIZARD_STEP_META[stepId];
+  // The reused plan-preset/plan-builder markup (renderPlanChoose/renderCustomBuilder) carries its
+  // own heading (.auth-brand) — showing the wizard's own generic icon/title/sub on top of that
+  // would read as a duplicate heading, so those two steps skip it.
+  const skipGenericHeader = stepId === 'planPreset' || stepId === 'planCustom';
+  const showGenericNext = stepId === 'credentials' || stepId === 'bio';
+  return `
+    <div class="wizard-overlay open" id="authWizardOverlay">
+      <div class="wizard-card">
+        <div class="wizard-topbar">
+          <button type="button" class="wizard-close-btn" id="authWizardCloseBtn" aria-label="Close">${icon('close',18)}</button>
+          <div class="wizard-progress"><div class="wizard-progress-fill" style="width:${(((stepIndex+1)/steps.length)*100).toFixed(1)}%"></div></div>
+          <span class="wizard-step-count">${stepIndex+1}/${steps.length}</span>
+        </div>
+        <div class="wizard-body" id="authWizardBody">
+          <div class="wizard-step">
+            ${skipGenericHeader ? '' : `<div class="wizard-step-icon">${icon(meta.icon,26)}</div><h2>${meta.title}</h2><p class="wizard-step-sub">${meta.sub}</p>`}
+            ${renderAuthWizardStepBody(stepId)}
+          </div>
+        </div>
+        <div class="wizard-nav">
+          ${stepIndex>0 ? `<button type="button" class="btn" id="authWizardBackBtn">Back</button>` : `<span></span>`}
+          ${stepId==='review'
+            ? `<button type="button" class="btn primary" id="authWizardCreateBtn" ${authBusy?'disabled':''}>${authBusy?'Creating…':'Create account'}</button>`
+            : (showGenericNext ? `<button type="button" class="btn primary" id="authWizardNextBtn">Next</button>` : `<span></span>`)}
+        </div>
+      </div>
+    </div>`;
+}
+function renderAuthWizardStepBody(stepId){
+  const errorHtml = (authWizardError || authError) ? `<div class="auth-error">${escapeHtml(authWizardError || authError)}</div>` : '';
+  if(stepId === 'credentials'){
+    return `
+      ${errorHtml}
+      <div class="auth-field">
+        <label for="wizardAuthEmail">Email</label>
+        <input type="email" id="wizardAuthEmail" autocomplete="email" value="${escapeHtml(authWizardEmail)}">
+      </div>
+      <div class="auth-field">
+        <label for="wizardAuthPassword">Password</label>
+        <input type="password" id="wizardAuthPassword" autocomplete="new-password" value="${escapeHtml(authWizardPassword)}">
+      </div>
+      <p style="text-align:center; margin-top:16px;"><a href="#" id="authWizardToLogin" style="color:var(--ink-soft); font-size:0.85rem;">Already have an account? Log in</a></p>`;
+  }
+  if(stepId === 'planPreset') return renderPlanChoose(false);
+  if(stepId === 'planCustom') return renderCustomBuilder(false);
+  if(stepId === 'bio'){
+    return `
+      <div class="auth-field">
+        <label for="wizardDisplayName">Display name</label>
+        <input type="text" id="wizardDisplayName" placeholder="What should we call you?" value="${escapeHtml(signupDisplayName)}">
+      </div>
+      <div class="auth-field">
+        <label for="wizardBio">A short bio (optional)</label>
+        <textarea id="wizardBio" rows="3" placeholder="Share a bit about your walk…" style="width:100%; padding:9px 10px; border:1px solid var(--line); border-radius:8px; font-size:0.9rem; font-family:inherit; resize:vertical;">${escapeHtml(signupBio)}</textarea>
+      </div>`;
+  }
+  // review
+  const planName = state.plan && PRESET_PLANS[state.plan.presetId] ? PRESET_PLANS[state.plan.presetId].name : (state.plan ? 'Custom plan' : 'Not chosen yet');
+  return `
+    ${errorHtml}
+    <div class="wizard-review-card">
+      <div class="wizard-review-row"><span>Email</span><strong>${escapeHtml(authWizardEmail)}</strong></div>
+      <div class="wizard-review-row"><span>Reading plan</span><strong>${escapeHtml(planName)}</strong></div>
+      ${signupDisplayName ? `<div class="wizard-review-row"><span>Name</span><strong>${escapeHtml(signupDisplayName)}</strong></div>` : ''}
+      ${signupBio ? `<div class="wizard-review-row"><span>Bio</span><strong>${escapeHtml(signupBio)}</strong></div>` : ''}
+    </div>`;
+}
+function attachSignupWizardEvents(){
+  const closeBtn = document.getElementById('authWizardCloseBtn');
+  if(closeBtn) closeBtn.addEventListener('click', ()=>{
+    forceShowGate = false; authView = 'login'; authError = ''; authWizardError = ''; render();
+  });
+  const toLogin = document.getElementById('authWizardToLogin');
+  if(toLogin) toLogin.addEventListener('click', e=>{ e.preventDefault(); authView='login'; authError=''; authWizardError=''; render(); });
+
+  const emailInput = document.getElementById('wizardAuthEmail');
+  if(emailInput) emailInput.addEventListener('input', e=>{ authWizardEmail = e.target.value; });
+  const passwordInput = document.getElementById('wizardAuthPassword');
+  if(passwordInput) passwordInput.addEventListener('input', e=>{ authWizardPassword = e.target.value; });
+
+  // ---- Plan step: reuses the same preset/custom-builder markup and underlying state (customDraft,
+  // applyPlan, addDraftCategory, etc.) as the standalone "Change plan" flow in Account settings —
+  // just wired to this wizard's own step navigation instead of that flow's planChooserOpen flag. ----
+  document.querySelectorAll('[data-preset]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const preset = PRESET_PLANS[btn.dataset.preset];
+      applyPlan(preset.id, preset.categories);
+      authWizardUsingCustomBuilder = false;
+      authWizardStep = authWizardSteps().indexOf('bio');
+      render();
+    });
+  });
+  const openBuilder = document.getElementById('openCustomBuilder');
+  if(openBuilder) openBuilder.addEventListener('click', ()=>{
+    openCustomBuilder();
+    authWizardUsingCustomBuilder = true;
+    authWizardStep = authWizardSteps().indexOf('planCustom');
+    render();
+  });
+  const backToPresetsBtn = document.getElementById('backToPresets');
+  if(backToPresetsBtn) backToPresetsBtn.addEventListener('click', ()=>{
+    authWizardUsingCustomBuilder = false;
+    authWizardStep = authWizardSteps().indexOf('planPreset');
+    render();
+  });
+  const addCat = document.getElementById('addDraftCategory');
+  if(addCat) addCat.addEventListener('click', addDraftCategory);
+  const saveCustomBtn = document.getElementById('saveCustomPlan');
+  if(saveCustomBtn) saveCustomBtn.addEventListener('click', ()=>{
+    saveCustomPlan();
+    if(state.plan && state.plan.presetId === 'custom'){
+      authWizardStep = authWizardSteps().indexOf('bio');
+      render();
+    }
+  });
+  document.querySelectorAll('[data-name-for]').forEach(inp=>{
+    inp.addEventListener('input', ()=>{
+      const cat = customDraft.find(c=>c.id===inp.dataset.nameFor);
+      if(cat) cat.name = inp.value;
+    });
+  });
+  document.querySelectorAll('[data-color-for]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const cat = customDraft.find(c=>c.id===btn.dataset.colorFor);
+      if(cat){ cat.color = btn.dataset.color; render(); }
+    });
+  });
+  document.querySelectorAll('[data-remove-cat]').forEach(btn=>{
+    btn.addEventListener('click', ()=> removeDraftCategory(btn.dataset.removeCat));
+  });
+  document.querySelectorAll('[data-add-book]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const cat = customDraft.find(c=>c.id===btn.dataset.addBook);
+      const select = document.querySelector(`[data-book-select-for="${btn.dataset.addBook}"]`);
+      if(cat && select) cat.books.push(bookObj(select.value));
+      render();
+    });
+  });
+  document.querySelectorAll('[data-move]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const cat = customDraft.find(c=>c.id===btn.dataset.cat);
+      const idx = Number(btn.dataset.idx);
+      if(!cat) return;
+      const swapWith = btn.dataset.move==='up' ? idx-1 : idx+1;
+      if(swapWith<0 || swapWith>=cat.books.length) return;
+      const tmp = cat.books[idx]; cat.books[idx] = cat.books[swapWith]; cat.books[swapWith] = tmp;
+      render();
+    });
+  });
+  document.querySelectorAll('[data-remove-book]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const cat = customDraft.find(c=>c.id===btn.dataset.removeBook);
+      if(cat) cat.books.splice(Number(btn.dataset.idx),1);
+      render();
+    });
+  });
+
+  // ---- Bio step ----
+  const nameInput = document.getElementById('wizardDisplayName');
+  if(nameInput) nameInput.addEventListener('input', e=>{ signupDisplayName = e.target.value; });
+  const bioInput = document.getElementById('wizardBio');
+  if(bioInput) bioInput.addEventListener('input', e=>{ signupBio = e.target.value; });
+
+  // ---- Nav ----
+  const backBtn = document.getElementById('authWizardBackBtn');
+  if(backBtn) backBtn.addEventListener('click', ()=>{
+    authWizardError = '';
+    authWizardStep = Math.max(0, authWizardStep - 1);
+    render();
+  });
+  const nextBtn = document.getElementById('authWizardNextBtn');
+  if(nextBtn){
+    nextBtn.addEventListener('click', ()=>{
+      const steps = authWizardSteps();
+      const stepId = steps[authWizardStep];
+      if(stepId === 'credentials'){
+        const email = authWizardEmail.trim();
+        if(!email || !email.includes('@') || !email.includes('.')){ authWizardError = "That doesn't look like a valid email address."; render(); return; }
+        if(!authWizardPassword || authWizardPassword.length < 6){ authWizardError = 'Password should be at least 6 characters.'; render(); return; }
+      }
+      authWizardError = '';
+      authWizardStep = Math.min(steps.length - 1, authWizardStep + 1);
+      render();
+    });
+  }
+  const createBtn = document.getElementById('authWizardCreateBtn');
+  if(createBtn){
+    createBtn.addEventListener('click', ()=>{
+      updateProfile({ displayName: signupDisplayName.trim(), bio: signupBio.trim() });
+      doSignUp(authWizardEmail.trim(), authWizardPassword);
+    });
+  }
+}
 function doLogIn(email, password){
   authBusy = true; authError = ''; render();
   fbAuth.signInWithEmailAndPassword(email, password)
@@ -1878,6 +2300,7 @@ function doLogOut(){
     state = defaultState();
     saveState({skipSync:true});
     syncStatus = 'unconfigured'; lastSyncedAt = null;
+    resetAuthWizard();
     render();
   });
 }
@@ -1944,7 +2367,7 @@ function initFirebase(){
         subscribeMyGroups();
         if(pendingGroupInvite){
           const inv = pendingGroupInvite; pendingGroupInvite = null;
-          activeTab = 'groups';
+          activeTab = 'community'; communitySubTab = 'groups';
           joinGroupViaInviteCode(inv.groupId, inv.code);
           try{ window.history.replaceState({}, '', window.location.pathname); }catch(e){}
         }
@@ -2583,7 +3006,7 @@ function notifItems(){
       items.push({
         id:'joinreq:'+gid+':'+r.id, iconName:'users', text:'Group join request',
         sub:(g ? g.name : 'A group you manage') + ' — tap to review', time:r.createdAt||0,
-        action:()=>{ notifPanelOpen=false; activeTab='groups'; openGroup(gid); activeGroupTab='requests'; render(); }
+        action:()=>{ notifPanelOpen=false; activeTab='community'; communitySubTab='groups'; openGroup(gid); activeGroupTab='requests'; render(); }
       });
     });
   });
@@ -2697,15 +3120,65 @@ function closeGroup(){
   groupUnsubs = [];
   activeGroupId = null; activeGroupData = null; activeGroupMembers = [];
   activeGroupMessages = []; activeGroupJoinRequests = [];
+  groupMessageText = ''; mentionDropdownOpen = false; mentionQuery = '';
 }
 
-// ---- Create group ----
+// ---- Create group (full-screen, one-question-per-step wizard) ----
 let groupCreateOpen = false;
 let groupCreateError = '';
 let groupCreateBusy = false;
 let groupDraftBooks = [];
 let bookPickerOpen = false; // whether the full OT/NT checkbox picker is expanded
 let bookFilterQuery = ''; // filters the checkbox picker by book name
+// Wizard-specific state: which step is showing, the per-step validation message (distinct from
+// groupCreateError, which is reserved for the final network/create failure), and the draft fields
+// that used to only live as DOM input values — they have to live in real JS state now, since each
+// step unmounts the previous step's inputs entirely when render() rebuilds the page.
+let groupWizardStep = 0;
+let groupWizardError = '';
+let groupDraftName = '';
+let groupDraftDescription = '';
+let groupDraftPlanMode = 'free';
+let groupDraftChaptersPerWeek = 5;
+const GROUP_WIZARD_DRAFT_KEY = 'cultivateGroupWizardDraft';
+// The step order is dynamic: "paceDetail" (chapters/week) only exists at all when Paced is chosen,
+// so every place that moves between steps re-derives this list rather than assuming a fixed count.
+function groupWizardSteps(){
+  const steps = ['basics','pace'];
+  if(groupDraftPlanMode === 'paced') steps.push('paceDetail');
+  steps.push('reading','review');
+  return steps;
+}
+function saveGroupWizardDraft(){
+  try{
+    localStorage.setItem(GROUP_WIZARD_DRAFT_KEY, JSON.stringify({
+      name: groupDraftName, description: groupDraftDescription, planMode: groupDraftPlanMode,
+      chaptersPerWeek: groupDraftChaptersPerWeek, books: groupDraftBooks, step: groupWizardStep
+    }));
+  }catch(e){}
+}
+// Restores a draft left over from a previous visit (closed the wizard partway through, or the app
+// was backgrounded) — returns whether one was actually found, so the caller only resets to a blank
+// slate when there was nothing to resume.
+function restoreGroupWizardDraft(){
+  try{
+    const raw = localStorage.getItem(GROUP_WIZARD_DRAFT_KEY);
+    if(!raw) return false;
+    const d = JSON.parse(raw);
+    if(!d || typeof d !== 'object') return false;
+    groupDraftName = d.name || '';
+    groupDraftDescription = d.description || '';
+    groupDraftPlanMode = d.planMode === 'paced' ? 'paced' : 'free';
+    groupDraftChaptersPerWeek = Number(d.chaptersPerWeek) || 5;
+    groupDraftBooks = Array.isArray(d.books) ? d.books : [];
+    const steps = groupWizardSteps();
+    groupWizardStep = Math.min(Math.max(0, Number(d.step)||0), steps.length-1);
+    return true;
+  }catch(e){ return false; }
+}
+function clearGroupWizardDraft(){
+  try{ localStorage.removeItem(GROUP_WIZARD_DRAFT_KEY); }catch(e){}
+}
 function toggleGroupDraftBook(bookName){
   const i = groupDraftBooks.indexOf(bookName);
   if(i === -1) groupDraftBooks.push(bookName); else groupDraftBooks.splice(i,1);
@@ -2742,6 +3215,9 @@ function createGroup(fields){
     })
   ).then(()=>{
     groupCreateBusy = false; groupCreateOpen = false; groupDraftBooks = [];
+    groupWizardStep = 0; groupWizardError = '';
+    groupDraftName = ''; groupDraftDescription = ''; groupDraftPlanMode = 'free'; groupDraftChaptersPerWeek = 5;
+    clearGroupWizardDraft();
     // Add it to groupsDirectory immediately from the object already in hand, rather than only
     // waiting on loadGroupsDirectory(true)'s round trip — this is the exact data the bulk list()
     // query would eventually return anyway, so there's nothing to gain from waiting for it, and
@@ -2841,9 +3317,80 @@ function leaveGroup(groupId){
   removeGroupMember(groupId, currentUser.uid);
   closeGroup();
 }
+// ---- Delete group (owner only) ----
+// Firestore has no built-in "delete this doc and everything under it" for client SDKs — each
+// subcollection has to be cleared out by hand. Order matters: the group doc itself is deleted
+// LAST, since the security rules for deleting a message (and for an owner removing another
+// member) both need to look the group doc up to confirm who its owner is — delete it first and
+// those checks would fail. Deleting non-owner members before the owner's own membership doc
+// matters for the same reason on the members side.
+let groupDeleteError = '';
+function deleteAllInSubcollection(groupRef, name){
+  return groupRef.collection(name).get().then(snap=> Promise.all(snap.docs.map(d=> d.ref.delete())));
+}
+function deleteGroup(groupId){
+  if(!fbDb || !currentUser) return Promise.reject(new Error('Not signed in.'));
+  const groupRef = fbDb.collection('groups').doc(groupId);
+  return groupRef.collection('members').get().then(memberSnap=>{
+    const others = memberSnap.docs.filter(d=> d.id !== currentUser.uid);
+    const mine = memberSnap.docs.find(d=> d.id === currentUser.uid);
+    return Promise.all(others.map(d=> d.ref.delete())).then(()=> mine ? mine.ref.delete() : null);
+  }).then(()=> Promise.all([
+    deleteAllInSubcollection(groupRef, 'messages'),
+    deleteAllInSubcollection(groupRef, 'joinRequests')
+  ])).then(()=> groupRef.delete());
+}
 
 // ---- Discussion ----
 let groupMessageText = '';
+// ---- @mention autocomplete ----
+// Typing "@" followed by non-space characters (and nothing sent/selected yet) opens a dropdown of
+// this group's members whose name contains what's been typed so far; picking one splices the full
+// "@Display Name " in at the right spot. mentionQuery holds just the in-progress fragment after the
+// last unterminated "@" — a plain space (or sending/switching away) clears it.
+let mentionDropdownOpen = false;
+let mentionQuery = '';
+function detectMentionQuery(value, cursorPos){
+  const before = value.slice(0, cursorPos);
+  const atIndex = before.lastIndexOf('@');
+  if(atIndex === -1) return null;
+  const between = before.slice(atIndex+1);
+  if(/\s/.test(between)) return null; // the @ belongs to an already-finished word, not one being typed now
+  return between;
+}
+function updateMentionDropdown(el){
+  const q = detectMentionQuery(el.value, el.selectionStart);
+  if(q === null){ mentionDropdownOpen = false; mentionQuery = ''; return; }
+  mentionQuery = q;
+  mentionDropdownOpen = true;
+}
+function mentionMatches(){
+  if(!mentionDropdownOpen) return [];
+  const q = mentionQuery.toLowerCase();
+  return activeGroupMembers.filter(m=> m.displayName && m.displayName.toLowerCase().includes(q)).slice(0,6);
+}
+function closeMentionDropdown(){ mentionDropdownOpen = false; mentionQuery = ''; }
+function selectMention(uid){
+  const el = document.getElementById('groupMessageInput');
+  const member = activeGroupMembers.find(m=>m.uid===uid);
+  if(!el || !member || !member.displayName) return;
+  const cursor = el.selectionStart;
+  const value = el.value;
+  const before = value.slice(0, cursor);
+  const atIndex = before.lastIndexOf('@');
+  if(atIndex === -1) return;
+  const after = value.slice(cursor);
+  const inserted = '@' + member.displayName + ' ';
+  groupMessageText = value.slice(0, atIndex) + inserted + after;
+  closeMentionDropdown();
+  render();
+  const newEl = document.getElementById('groupMessageInput');
+  if(newEl){
+    newEl.focus();
+    const pos = atIndex + inserted.length;
+    if(newEl.setSelectionRange) newEl.setSelectionRange(pos, pos);
+  }
+}
 function sendGroupMessage(groupId, text){
   const trimmed = (text||'').trim();
   if(!trimmed || !fbDb || !currentUser) return;
@@ -2854,7 +3401,20 @@ function sendGroupMessage(groupId, text){
     text: trimmed.slice(0,2000),
     mentionedUids,
     createdAt: Date.now()
-  }).then(()=>{ groupMessageText = ''; render(); }).catch(()=>{});
+  }).then(()=>{
+    groupMessageText = '';
+    mentionDropdownOpen = false;
+    // render() snapshots whichever element currently has focus and force-restores its PRE-render
+    // value afterward (see restoreFocus() near the top of render()) — that's what makes typing
+    // survive an unrelated re-render elsewhere in the app. But it also means that if the message
+    // box itself still has focus right after sending (the normal case — nobody clicks away first),
+    // it would snapshot the just-sent text and paste it right back in, undoing the clear above.
+    // Blurring first means this render() has nothing focused to snapshot, so the fresh empty value
+    // from the template actually sticks.
+    const inputEl = document.getElementById('groupMessageInput');
+    if(inputEl) inputEl.blur();
+    render();
+  }).catch(()=>{});
 }
 
 /* ---------------- Check-in reminders (push notifications) ---------------- */
@@ -2952,8 +3512,16 @@ function render(){
   // appears, so they're wrapped in .app-main directly rather than the full render() layout below —
   // that's the same box that used to be #app itself, so they keep the identical centered/padded look.
   if(shouldShowGate()){
-    app.innerHTML = `<div class="app-main">${renderAuthGate()}</div>`;
-    attachAuthGateEvents();
+    // Signup gets the full-screen, one-question-per-step wizard (credentials -> plan -> bio ->
+    // review -> account creation); log in and password reset stay the plain single-screen form —
+    // there's nothing to break into steps for either of those.
+    if(authView === 'signup'){
+      app.innerHTML = `<div class="app-main">${renderSignupWizard()}</div>`;
+      attachSignupWizardEvents();
+    } else {
+      app.innerHTML = `<div class="app-main">${renderAuthGate()}</div>`;
+      attachAuthGateEvents();
+    }
     restoreFocus();
     return;
   }
@@ -2970,8 +3538,7 @@ function render(){
     activeTab==='journal' ? renderJournal() :
     activeTab==='memorize' ? renderMemorize() :
     activeTab==='dashboard' ? renderDashboard() :
-    activeTab==='friends' ? renderFriends() :
-    activeTab==='groups' ? renderGroups() :
+    activeTab==='community' ? renderCommunity() :
     activeTab==='account' ? renderAccountTab() : ''
   );
   // A full innerHTML rebuild on every render() call is what makes every navigation feel like an
@@ -2981,8 +3548,8 @@ function render(){
   // group) slides in from the right like a native navigation push; switching between top-level
   // tabs just cross-fades. Anything that re-renders the same view (typing, a background sync
   // completing) gets no animation class at all, so it stays instant as before.
-  const isDrillIn = !!viewedProfileUid || (activeTab==='groups' && !!activeGroupId);
-  const viewKey = activeTab + (viewedProfileUid ? ':profile:'+viewedProfileUid : '') + (activeTab==='groups' && activeGroupId ? ':group:'+activeGroupId : '');
+  const isDrillIn = !!viewedProfileUid || (activeTab==='community' && !!activeGroupId);
+  const viewKey = activeTab + (viewedProfileUid ? ':profile:'+viewedProfileUid : '') + (activeTab==='community' && activeGroupId ? ':group:'+activeGroupId : '');
   const viewChanged = viewKey !== lastRenderedViewKey;
   lastRenderedViewKey = viewKey;
   const viewAnimClass = viewChanged ? (isDrillIn ? 'view-enter-slide' : 'view-enter-fade') : '';
@@ -3003,6 +3570,8 @@ function render(){
     ${renderDialogOverlay()}
     ${renderCommandPalette()}
     ${renderToastStack()}
+    ${(currentUser && activeTab==='community' && communitySubTab!=='groups' && !activeGroupId) ? `
+      <button type="button" class="fab-add-post" id="openPostComposerBtn" aria-label="New update">${icon('plus',24)}</button>` : ''}
   `;
   attachEvents();
   restoreFocus();
@@ -3223,7 +3792,7 @@ function attachAuthGateEvents(){
     });
   }
   const toSignup = document.getElementById('toSignup');
-  if(toSignup) toSignup.addEventListener('click', e=>{ e.preventDefault(); authView='signup'; authError=''; render(); });
+  if(toSignup) toSignup.addEventListener('click', e=>{ e.preventDefault(); authView='signup'; authError=''; resetAuthWizard(); render(); });
   const toLogin = document.getElementById('toLogin');
   if(toLogin) toLogin.addEventListener('click', e=>{ e.preventDefault(); authView='login'; authError=''; render(); });
   const toReset = document.getElementById('toReset');
@@ -3328,9 +3897,12 @@ function renderNotifPanel(){
 // sidebar shows whatever's left over. Icon names reference the icon() helper above (a small
 // inline-SVG set) instead of emoji. ALL_TABS carries the same icon per id as MAIN_TABS/MORE_TABS
 // so the desktop sidebar can render every tab from one list without a separate lookup.
-const MAIN_TABS = [['today','Today','home'],['log','Log','calendar'],['dashboard','Dashboard','chart'],['groups','Groups','users'],['account','Account','person']];
-const MORE_TABS = [['journal','Journal','notebook'],['memorize','Memorize','bookmark'],['friends','Friends','userPlus']];
-const ALL_TABS = [['today','Today','home'],['log','Log','calendar'],['journal','Journal','notebook'],['memorize','Memorize','bookmark'],['dashboard','Dashboard','chart'],['friends','Friends','userPlus'],['groups','Groups','users'],['account','Account','person']];
+// Friends and Groups used to be two separate tabs; they're now one "Community" tab with a dual
+// sub-tab switcher at the top (see renderCommunity/communitySubTab) — so every tab list below has
+// a single 'community' entry instead of the old 'friends'+'groups' pair.
+const MAIN_TABS = [['today','Today','home'],['log','Log','calendar'],['dashboard','Dashboard','chart'],['community','Community','users'],['account','Account','person']];
+const MORE_TABS = [['journal','Journal','notebook'],['memorize','Memorize','bookmark']];
+const ALL_TABS = [['today','Today','home'],['log','Log','calendar'],['journal','Journal','notebook'],['memorize','Memorize','bookmark'],['dashboard','Dashboard','chart'],['community','Community','users'],['account','Account','person']];
 
 // Desktop's persistent left nav — replaces the old flat top text-tab row. Fixed to the left edge
 // above the mobile breakpoint (see the .desktop-nav media queries), with #app shifted over to make
@@ -3385,7 +3957,7 @@ function renderConsiderHim(){
   const e = considerHimForToday();
   return `
     <div class="settings-box consider-him-card" style="max-width:none;">
-      <h3>Consider Him</h3>
+      <h3>${icon('bookmark',16)} Consider Him</h3>
       <div class="consider-him-ref">${e.ref}</div>
       <p class="consider-him-verse">&ldquo;${e.text}&rdquo;</p>
       <details class="consider-him-commentary">
@@ -3441,8 +4013,12 @@ function renderToday(){
     <div class="settings-box" style="max-width:none;">
       <h3>How's your walk today?</h3>
       <p style="font-size:0.82rem; color:var(--ink-soft); margin-top:-6px;">Purely optional, just for you — no reminders, no tracking pressure.</p>
-      <div style="display:flex; gap:6px; flex-wrap:wrap;">
-        ${[1,2,3,4,5].map(v=>`<button class="btn small ${existingCheckin && existingCheckin.value===v ? 'primary' : ''}" data-checkin-value="${v}">${CHECKIN_LABELS[v]}</button>`).join('')}
+      <div class="checkin-icon-row">
+        ${[1,2,3,4,5].map(v=>`
+          <button type="button" class="checkin-icon-btn ${existingCheckin && existingCheckin.value===v ? 'selected' : ''}" data-checkin-value="${v}">
+            <span class="checkin-icon-circle">${icon(CHECKIN_ICON_NAMES[v], 22)}</span>
+            <span class="checkin-icon-label">${CHECKIN_LABELS[v]}</span>
+          </button>`).join('')}
       </div>
     </div>`;
 
@@ -3450,7 +4026,7 @@ function renderToday(){
   const extraTodayEntries = state.extraLog.filter(e=>e.date===selectedDate);
   const extraReadingHtml = `
     <div class="settings-box" style="max-width:none;">
-      <h3>Reading outside your plan</h3>
+      <h3>${icon('bookmark',16)} Reading outside your plan</h3>
       <p style="font-size:0.82rem; color:var(--ink-soft); margin-top:-6px;">Read something today that wasn't on today's cards? Log it here.</p>
       <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;">
         <select id="extraBook" style="padding:7px 10px; border:1px solid var(--line); border-radius:8px; font-size:0.85rem; font-family:inherit;">${bookOptions}</select>
@@ -3548,7 +4124,7 @@ function renderOneYearAgo(){
   if(!journal.length && !log.length) return '';
   return `
     <div class="settings-box" style="max-width:none; background:var(--accent-soft); border-color:var(--accent);">
-      <h3>One year ago today</h3>
+      <h3>${icon('calendar',16)} One year ago today</h3>
       <p style="font-size:0.85rem; color:var(--ink-soft); margin-top:-6px;">${fmtDate(date)}</p>
       ${log.length ? `<p style="font-size:0.85rem;">You read: ${log.map(e=>`${e.book} ${e.chapter}`).join(', ')}</p>` : ''}
       ${journal.map(e=>`
@@ -3564,7 +4140,7 @@ function renderJournal(){
   const bookOptions = `<option value="">No specific passage</option>` + BOOK_LIBRARY.map(b=>`<option value="${b.name}">${b.name}</option>`).join('');
   const formHtml = `
     <div class="settings-box journal-form">
-      <h3>New entry</h3>
+      <h3>${icon('notebook',16)} New entry</h3>
       <div style="display:flex; gap:12px; flex-wrap:wrap; margin-bottom:12px;">
         <div>
           <label style="font-size:0.8rem; font-weight:600; display:block; margin-bottom:4px;">Date</label>
@@ -3639,7 +4215,7 @@ function renderMemorize(){
   const bookOptions = BOOK_LIBRARY.map(b=>`<option value="${b.name}">${b.name}</option>`).join('');
   const formHtml = `
     <div class="settings-box">
-      <h3>Add a verse to memorize</h3>
+      <h3>${icon('bookmark',16)} Add a verse to memorize</h3>
       <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;">
         <input type="text" id="memRef" placeholder="Reference (e.g. Psalm 23:1)" style="flex:1; min-width:200px; padding:9px 10px; border:1px solid var(--line); border-radius:8px; font-size:0.9rem; font-family:inherit;">
       </div>
@@ -3669,6 +4245,166 @@ function renderMemorize(){
   `;
 }
 
+/* ---------------- Community (Friends + Groups, unified tab) ----------------
+   Friends and Groups now live behind one "Community" tab with a dual sub-tab switcher at the top.
+   The Friends sub-tab additionally gets a lightweight status-update feed: a floating + button
+   opens a one-field composer (text + optional photo), no likes/comments in this first version.
+   Audience is derived from the existing profile public/private toggle at the moment of posting —
+   friends can always see it; everyone can if the account was public when it was posted — rather
+   than asking the user to choose a visibility per post, which would just duplicate a setting that
+   already exists. Posts live in a per-user `users/{uid}/posts` subcollection (see firestore rules)
+   so that "list a friend's posts" is a single scoped query, never a broad cross-user query. */
+let communitySubTab = 'friends';
+let communityPosts = [];
+let communityPostsLoading = false;
+let communityPostsLoaded = false;
+let communityPostsError = '';
+const POST_PHOTO_MAX_LEN = 300000;
+let postComposerOpen = false;
+let postDraftText = '';
+let postDraftPhoto = '';
+let postPhotoError = '';
+let postCreateBusy = false;
+let postCreateError = '';
+
+function loadCommunityFeed(force){
+  if(!fbDb || !currentUser) return;
+  if(communityPostsLoaded && !force) return;
+  communityPostsLoading = true; communityPostsError = ''; render();
+  const myUid = currentUser.uid;
+  const friendUids = friendLinksData.filter(l=>l.status==='accepted').map(l=> l.userIds.find(u=>u!==myUid));
+  const uidsToFetch = [myUid].concat(friendUids);
+  Promise.all(uidsToFetch.map(uid=>
+    fbDb.collection('users').doc(uid).collection('posts').orderBy('createdAt','desc').limit(20).get()
+      .then(snap=> snap.docs.map(d=>Object.assign({ id:d.id, uid }, d.data())))
+      .catch(()=>[])
+  )).then(results=>{
+    const merged = [];
+    results.forEach(arr=> merged.push(...arr));
+    merged.sort((a,b)=> (b.createdAt||0)-(a.createdAt||0));
+    communityPosts = merged.slice(0,40);
+    communityPostsLoading = false; communityPostsLoaded = true;
+    render();
+  }).catch(err=>{
+    communityPostsLoading = false; communityPostsError = (err&&err.message) || 'Could not load the feed.';
+    render();
+  });
+}
+
+function openPostComposer(){
+  postComposerOpen = true; postDraftText=''; postDraftPhoto=''; postPhotoError=''; postCreateError='';
+  render();
+}
+function closePostComposer(){ postComposerOpen = false; render(); }
+function createCommunityPost(){
+  if(!fbDb || !currentUser) return;
+  const text = postDraftText.trim();
+  if(!text && !postDraftPhoto){ postCreateError = 'Write something or add a photo first.'; render(); return; }
+  postCreateBusy = true; postCreateError = ''; render();
+  const visibility = state.profile.visibility === 'public' ? 'public' : 'friends';
+  const doc = {
+    text: text.slice(0,500),
+    photo: postDraftPhoto || null,
+    visibility,
+    authorName: displayNameOr(currentUser.email.split('@')[0]),
+    authorPhoto: state.profile.photo || null,
+    createdAt: Date.now()
+  };
+  fbDb.collection('users').doc(currentUser.uid).collection('posts').add(doc).then(ref=>{
+    postCreateBusy = false; postComposerOpen = false;
+    communityPosts = [Object.assign({ id: ref.id, uid: currentUser.uid }, doc)].concat(communityPosts).slice(0,40);
+    showToast('Posted.', { tone:'good' });
+    render();
+  }).catch(err=>{
+    postCreateBusy = false; postCreateError = (err&&err.message) || 'Could not post that — try again.';
+    render();
+  });
+}
+function deleteCommunityPost(postId){
+  if(!fbDb || !currentUser) return;
+  fbDb.collection('users').doc(currentUser.uid).collection('posts').doc(postId).delete().then(()=>{
+    communityPosts = communityPosts.filter(p=>p.id!==postId);
+    render();
+  }).catch(()=> showToast('Could not delete that post.', { tone:'bad' }));
+}
+
+function renderCommunity(){
+  if(!currentUser){
+    return `<div class="empty-note">Community requires an account, since it connects your progress with friends and groups. Create an account or log in from the Account tab.</div>`;
+  }
+  const showingGroups = communitySubTab === 'groups' || !!activeGroupId;
+  const subtabsHtml = `
+    <div class="group-tabs community-subtabs">
+      <button class="${!showingGroups?'active':''}" data-community-subtab="friends">${icon('userPlus',14)} Friends</button>
+      <button class="${showingGroups?'active':''}" data-community-subtab="groups">${icon('users',14)} Groups</button>
+    </div>`;
+  if(showingGroups) return subtabsHtml + renderGroups();
+  return subtabsHtml + renderCommunityFeed() + renderFriends() + renderPostComposerSheet();
+}
+
+function renderCommunityFeed(){
+  let feedHtml;
+  if(communityPostsLoading && !communityPostsLoaded){
+    feedHtml = skeletonCardListHtml(2);
+  } else if(communityPostsError){
+    feedHtml = `<div class="auth-error">${escapeHtml(communityPostsError)}</div>`;
+  } else if(!communityPosts.length){
+    feedHtml = emptyState('userPlus', "No posts yet — be the first to share a quick update with your friends.");
+  } else {
+    feedHtml = `<div class="community-feed">${communityPosts.map(renderCommunityPostCard).join('')}</div>`;
+  }
+  return `<div class="settings-box">
+    <h3>${icon('notebook',16)} Updates</h3>
+    ${feedHtml}
+  </div>`;
+}
+function renderCommunityPostCard(p){
+  const mine = currentUser && p.uid === currentUser.uid;
+  return `
+    <div class="card community-post-card">
+      <div class="community-post-head">
+        ${renderAvatarHtml({displayName:p.authorName, photo:p.authorPhoto}, 36)}
+        <div class="community-post-meta">
+          <div class="community-post-name">${escapeHtml(p.authorName||'Someone')}</div>
+          <div class="community-post-time">${timeAgo(p.createdAt)}${p.visibility==='public' ? ' &middot; Public' : ''}</div>
+        </div>
+        ${mine ? `<button type="button" class="community-post-delete" data-delete-post="${p.id}" aria-label="Delete post">${icon('trash',15)}</button>` : ''}
+      </div>
+      ${p.text ? `<div class="community-post-text">${escapeHtml(p.text)}</div>` : ''}
+      ${p.photo ? `<img src="${p.photo}" class="community-post-photo" alt="">` : ''}
+    </div>`;
+}
+function renderPostComposerSheet(){
+  return `
+    <div id="postComposerBackdrop" class="sheet-backdrop ${postComposerOpen?'open':''}"></div>
+    <div class="sheet-panel ${postComposerOpen?'open':''}">
+      <div class="sheet-handle"></div>
+      ${postComposerOpen ? `
+        <div class="sheet-body">
+          <div class="sheet-header">
+            <h3>${icon('plus',16)} New update</h3>
+            <button type="button" class="sheet-close-btn" id="closePostComposerBtn" aria-label="Close">${icon('close',18)}</button>
+          </div>
+          ${postCreateError ? `<div class="auth-error">${escapeHtml(postCreateError)}</div>` : ''}
+          <p style="font-size:0.82rem; color:var(--ink-soft); margin-top:-6px;">${state.profile.visibility==='public' ? 'Your profile is public, so this will be visible to everyone.' : 'Only your friends will see this.'}</p>
+          <div class="auth-field">
+            <textarea id="postComposerText" rows="4" placeholder="Share a quick update…" style="width:100%; padding:9px 10px; border:1px solid var(--line); border-radius:8px; font-size:0.9rem; font-family:inherit; resize:vertical;">${escapeHtml(postDraftText)}</textarea>
+          </div>
+          ${postPhotoError ? `<div class="auth-error">${escapeHtml(postPhotoError)}</div>` : ''}
+          ${postDraftPhoto ? `
+            <div style="position:relative; display:inline-block; margin-bottom:10px;">
+              <img src="${postDraftPhoto}" style="max-width:100%; max-height:220px; border-radius:10px; display:block;" alt="">
+              <button type="button" class="sheet-close-btn" id="removePostPhotoBtn" style="position:absolute; top:6px; right:6px;" aria-label="Remove photo">${icon('close',14)}</button>
+            </div>` : `
+            <div style="margin-bottom:10px;">
+              <button type="button" class="btn small" id="addPostPhotoBtn">Add a photo</button>
+              <input type="file" id="postPhotoInput" accept="image/*" style="display:none;">
+            </div>`}
+          <button class="btn primary" id="submitPostBtn" ${postCreateBusy?'disabled':''} style="width:100%;">${postCreateBusy?'Posting…':'Post'}</button>
+        </div>` : ''}
+    </div>`;
+}
+
 function renderFriends(){
   if(!currentUser){
     return `<div class="empty-note">Friends & Family requires an account, since it connects your progress with someone else's. Create an account or log in from the Account tab.</div>`;
@@ -3694,7 +4430,7 @@ function renderFriends(){
 
   const addFormHtml = `
     <div class="settings-box">
-      <h3>Add a friend &mdash; ${accepted.length} connection${accepted.length===1?'':'s'}</h3>
+      <h3>${icon('userPlus',16)} Add a friend &mdash; ${accepted.length} connection${accepted.length===1?'':'s'}</h3>
       <p style="font-size:0.85rem; color:var(--ink-soft);">Search by name or their exact email. We only ever share your name, last-active date, and current plan &mdash; never your journal or reading log.</p>
       ${friendRequestError ? `<div class="auth-error">${friendRequestError}</div>` : ''}
       <input type="text" id="friendSearchInput" placeholder="Search by name or email…" value="${friendSearchQuery}" style="width:100%; padding:9px 10px; border:1px solid var(--line); border-radius:8px; font-size:0.9rem; font-family:inherit;">
@@ -3790,18 +4526,156 @@ function renderGroups(){
     return `<div class="empty-note">Groups require an account, since they're shared with other people — a Bible study, table, or devotion group. Create an account or log in from the Account tab.</div>`;
   }
   const page = activeGroupId ? renderGroupDetail() : renderGroupsDirectory();
-  // "Create a group" is a bottom sheet now — it slides up over whatever's already on screen
-  // instead of replacing it, so you never lose your place in the directory behind it.
-  return page + renderGroupCreateSheet();
+  // "Create a group" is a full-screen, one-question-per-step wizard (Hinge/Tinder-style onboarding)
+  // that overlays whatever's already on screen, rather than replacing it — closing partway through
+  // (even accidentally) returns you to exactly where you were, with the draft saved for next time.
+  return page + renderGroupWizard();
 }
 
-function renderGroupCreateSheet(){
+const GROUP_WIZARD_STEP_META = {
+  basics:     { icon:'plus',     title:"What's your group called?", sub:"Give it a name people will recognize." },
+  pace:       { icon:'calendar', title:'How will you read together?', sub:'You can change this later.' },
+  paceDetail: { icon:'calendar', title:'Set your pace', sub:'How many chapters should the group read each week?' },
+  reading:    { icon:'bookmark', title:'What will you read?', sub:'Pick a preset, or choose specific books below.' },
+  review:     { icon:'check',    title:'Review & create', sub:"Here's what your group will look like." },
+};
+
+function renderGroupWizard(){
+  if(!groupCreateOpen) return '';
+  const steps = groupWizardSteps();
+  const stepIndex = Math.min(groupWizardStep, steps.length-1);
+  const stepId = steps[stepIndex];
+  const meta = GROUP_WIZARD_STEP_META[stepId];
   return `
-    <div id="groupSheetBackdrop" class="sheet-backdrop ${groupCreateOpen?'open':''}"></div>
-    <div class="sheet-panel ${groupCreateOpen?'open':''}">
-      <div class="sheet-handle"></div>
-      ${groupCreateOpen ? renderGroupCreateForm() : ''}
+    <div class="wizard-overlay open" id="groupWizardOverlay">
+      <div class="wizard-card">
+        <div class="wizard-topbar">
+          <button type="button" class="wizard-close-btn" id="groupWizardCloseBtn" aria-label="Close">${icon('close',18)}</button>
+          <div class="wizard-progress"><div class="wizard-progress-fill" style="width:${(((stepIndex+1)/steps.length)*100).toFixed(1)}%"></div></div>
+          <span class="wizard-step-count">${stepIndex+1}/${steps.length}</span>
+        </div>
+        <div class="wizard-body" id="groupWizardBody">
+          <div class="wizard-step">
+            <div class="wizard-step-icon">${icon(meta.icon,26)}</div>
+            <h2>${meta.title}</h2>
+            <p class="wizard-step-sub">${meta.sub}</p>
+            ${renderGroupWizardStepBody(stepId)}
+          </div>
+        </div>
+        <div class="wizard-nav">
+          ${stepIndex>0 ? `<button type="button" class="btn" id="groupWizardBackBtn">Back</button>` : `<span></span>`}
+          ${stepId==='review'
+            ? `<button type="button" class="btn primary" id="groupWizardCreateBtn" ${groupCreateBusy?'disabled':''}>${groupCreateBusy?'Creating…':'Create group'}</button>`
+            : `<button type="button" class="btn primary" id="groupWizardNextBtn">Next</button>`}
+        </div>
+      </div>
     </div>`;
+}
+
+function renderGroupWizardStepBody(stepId){
+  const errorHtml = groupWizardError ? `<div class="auth-error">${escapeHtml(groupWizardError)}</div>` : '';
+  if(stepId === 'basics'){
+    return `
+      ${errorHtml}
+      <div class="auth-field">
+        <label for="wizardGroupName">Group name</label>
+        <input type="text" id="wizardGroupName" placeholder="e.g. Tuesday Night Bible Study" value="${escapeHtml(groupDraftName)}">
+      </div>
+      <div class="auth-field">
+        <label for="wizardGroupDescription">Description (optional)</label>
+        <input type="text" id="wizardGroupDescription" placeholder="What's this group about?" value="${escapeHtml(groupDraftDescription)}">
+      </div>`;
+  }
+  if(stepId === 'pace'){
+    return `
+      <div class="wizard-choice-list">
+        <label class="wizard-choice ${groupDraftPlanMode==='free'?'selected':''}">
+          <input type="radio" name="wizardPlanMode" value="free" ${groupDraftPlanMode==='free'?'checked':''}>
+          <span><strong>Free pace</strong><br><span class="wizard-choice-sub">Everyone reads the same outline, at their own pace. No calendar, no pressure.</span></span>
+        </label>
+        <label class="wizard-choice ${groupDraftPlanMode==='paced'?'selected':''}">
+          <input type="radio" name="wizardPlanMode" value="paced" ${groupDraftPlanMode==='paced'?'checked':''}>
+          <span><strong>Paced schedule</strong><br><span class="wizard-choice-sub">The group moves through the outline together, week by week — good for discussing the same passage on the same week.</span></span>
+        </label>
+      </div>`;
+  }
+  if(stepId === 'paceDetail'){
+    return `
+      ${errorHtml}
+      <div class="auth-field">
+        <label for="wizardChaptersPerWeek">Chapters per week</label>
+        <input type="number" id="wizardChaptersPerWeek" value="${groupDraftChaptersPerWeek}" min="1" style="width:120px;">
+      </div>`;
+  }
+  if(stepId === 'reading'){
+    return errorHtml + renderGroupWizardReadingBody();
+  }
+  // review
+  const total = outlineTotalChapters(groupDraftBooks.map(b=>({book:b,chapters:chaptersFor(b)})));
+  return `
+    ${groupCreateError ? `<div class="auth-error">${escapeHtml(groupCreateError)}</div>` : ''}
+    <div class="wizard-review-card">
+      <div class="wizard-review-row"><span>Name</span><strong>${escapeHtml(groupDraftName)}</strong></div>
+      ${groupDraftDescription ? `<div class="wizard-review-row"><span>Description</span><strong>${escapeHtml(groupDraftDescription)}</strong></div>` : ''}
+      <div class="wizard-review-row"><span>Pace</span><strong>${groupDraftPlanMode==='paced' ? groupDraftChaptersPerWeek+' chapters/week' : 'Free pace'}</strong></div>
+      <div class="wizard-review-row"><span>Reading</span><strong>${groupDraftBooks.length} book${groupDraftBooks.length===1?'':'s'} &middot; ${total} chapters</strong></div>
+    </div>`;
+}
+
+function renderGroupWizardReadingBody(){
+  const bookCheckbox = name => `
+    <label class="book-tile" style="--tile-color:${colorForName(name)}; --tile-soft:${softColorForName(name)};">
+      <input type="checkbox" data-group-draft-book="${escapeHtml(name)}" ${groupDraftBooks.includes(name)?'checked':''}>
+      <span class="book-tile-name">${escapeHtml(name)}</span>
+    </label>`;
+
+  const fq = bookFilterQuery.trim().toLowerCase();
+  const matches = name => !fq || name.toLowerCase().includes(fq);
+  const otSelected = OT_BOOK_NAMES.filter(n=>groupDraftBooks.includes(n)).length;
+  const ntSelected = NT_BOOK_NAMES.filter(n=>groupDraftBooks.includes(n)).length;
+
+  const total = outlineTotalChapters(groupDraftBooks.map(b=>({book:b,chapters:chaptersFor(b)})));
+  let summaryHtml;
+  if(!groupDraftBooks.length){
+    summaryHtml = `<div class="empty-note">No books chosen yet — pick a preset above, or open the list below to choose specific books.</div>`;
+  } else if(sameBookSet(groupDraftBooks, BOOK_LIBRARY.map(b=>b.name))){
+    summaryHtml = `<div class="reading-summary-line"><strong>Whole Bible</strong> &middot; ${total} chapters total</div>`;
+  } else if(sameBookSet(groupDraftBooks, OT_BOOK_NAMES)){
+    summaryHtml = `<div class="reading-summary-line"><strong>Old Testament</strong> &middot; ${total} chapters total</div>`;
+  } else if(sameBookSet(groupDraftBooks, NT_BOOK_NAMES)){
+    summaryHtml = `<div class="reading-summary-line"><strong>New Testament</strong> &middot; ${total} chapters total</div>`;
+  } else if(groupDraftBooks.length <= 14){
+    summaryHtml = `
+      <div class="book-chip-list">
+        ${groupDraftBooks.map(name=>`<span class="book-chip">${escapeHtml(name)}<button type="button" class="chip-remove" data-remove-draft-book="${escapeHtml(name)}" aria-label="Remove ${escapeHtml(name)}">${icon('close',12)}</button></span>`).join('')}
+      </div>
+      <div class="reading-summary-line">${total} chapters total</div>`;
+  } else {
+    summaryHtml = `<div class="reading-summary-line"><strong>${groupDraftBooks.length} books selected</strong> &middot; ${total} chapters total</div>`;
+  }
+
+  return `
+    <div class="reading-preset-row">
+      <button type="button" class="btn small" id="pickWholeBible">Whole Bible</button>
+      <button type="button" class="btn small" id="pickOT">Old Testament</button>
+      <button type="button" class="btn small" id="pickNT">New Testament</button>
+      ${groupDraftBooks.length ? `<button type="button" class="btn small" id="pickNone">Clear</button>` : ''}
+    </div>
+    ${summaryHtml}
+    <details class="book-picker-details" ${bookPickerOpen ? 'open' : ''}>
+      <summary>Choose specific books</summary>
+      <div class="book-picker-body">
+        <input type="text" id="bookFilterInput" placeholder="Filter books…" value="${escapeHtml(bookFilterQuery)}">
+        <div class="book-picker-section">
+          <div class="book-picker-section-label">Old Testament (${otSelected}/${OT_BOOK_NAMES.length})</div>
+          <div class="book-picker">${OT_BOOK_NAMES.filter(matches).map(bookCheckbox).join('') || `<div class="empty-note-inline">No matches.</div>`}</div>
+        </div>
+        <div class="book-picker-section">
+          <div class="book-picker-section-label">New Testament (${ntSelected}/${NT_BOOK_NAMES.length})</div>
+          <div class="book-picker">${NT_BOOK_NAMES.filter(matches).map(bookCheckbox).join('') || `<div class="empty-note-inline">No matches.</div>`}</div>
+        </div>
+      </div>
+    </details>`;
 }
 
 function renderGroupsDirectory(){
@@ -3844,7 +4718,7 @@ function renderGroupsDirectory(){
   return `
     <div class="settings-box">
       <div class="group-dir-header">
-        <h3>Groups</h3>
+        <h3>${icon('users',16)} Groups</h3>
         <button class="btn primary small" id="openGroupCreateBtn">+ Create a group</button>
       </div>
       <div class="group-tabs">
@@ -3853,103 +4727,6 @@ function renderGroupsDirectory(){
       </div>
       ${groupDirTab==='discover' ? `<div class="group-search-row"><input type="text" id="groupSearchInput" placeholder="Search groups by name…" value="${escapeHtml(groupSearchQuery)}"></div>` : ''}
       ${listHtml}
-    </div>`;
-}
-
-function renderGroupCreateForm(){
-  const bookCheckbox = name => `
-    <label class="book-tile" style="--tile-color:${colorForName(name)}; --tile-soft:${softColorForName(name)};">
-      <input type="checkbox" data-group-draft-book="${escapeHtml(name)}" ${groupDraftBooks.includes(name)?'checked':''}>
-      <span class="book-tile-name">${escapeHtml(name)}</span>
-    </label>`;
-
-  const fq = bookFilterQuery.trim().toLowerCase();
-  const matches = name => !fq || name.toLowerCase().includes(fq);
-  const otSelected = OT_BOOK_NAMES.filter(n=>groupDraftBooks.includes(n)).length;
-  const ntSelected = NT_BOOK_NAMES.filter(n=>groupDraftBooks.includes(n)).length;
-
-  // A clean, human summary instead of a raw checkbox wall — recognizes the common presets by
-  // name, and only falls back to a chip list (or a plain count, once it'd be too many chips to
-  // stay tidy) for a genuinely custom selection.
-  const total = outlineTotalChapters(groupDraftBooks.map(b=>({book:b,chapters:chaptersFor(b)})));
-  let summaryHtml;
-  if(!groupDraftBooks.length){
-    summaryHtml = `<div class="empty-note">No books chosen yet — pick a preset above, or open the list below to choose specific books.</div>`;
-  } else if(sameBookSet(groupDraftBooks, BOOK_LIBRARY.map(b=>b.name))){
-    summaryHtml = `<div class="reading-summary-line"><strong>Whole Bible</strong> &middot; ${total} chapters total</div>`;
-  } else if(sameBookSet(groupDraftBooks, OT_BOOK_NAMES)){
-    summaryHtml = `<div class="reading-summary-line"><strong>Old Testament</strong> &middot; ${total} chapters total</div>`;
-  } else if(sameBookSet(groupDraftBooks, NT_BOOK_NAMES)){
-    summaryHtml = `<div class="reading-summary-line"><strong>New Testament</strong> &middot; ${total} chapters total</div>`;
-  } else if(groupDraftBooks.length <= 14){
-    summaryHtml = `
-      <div class="book-chip-list">
-        ${groupDraftBooks.map(name=>`<span class="book-chip">${escapeHtml(name)}<button type="button" class="chip-remove" data-remove-draft-book="${escapeHtml(name)}" aria-label="Remove ${escapeHtml(name)}">${icon('close',12)}</button></span>`).join('')}
-      </div>
-      <div class="reading-summary-line">${total} chapters total</div>`;
-  } else {
-    summaryHtml = `<div class="reading-summary-line"><strong>${groupDraftBooks.length} books selected</strong> &middot; ${total} chapters total</div>`;
-  }
-
-  return `
-    <div class="sheet-body">
-      <div class="sheet-header">
-        <h3>Create a group</h3>
-        <button type="button" class="sheet-close-btn" id="cancelGroupCreateBtn" aria-label="Close">${icon('close',18)}</button>
-      </div>
-      ${groupCreateError ? `<div class="auth-error">${escapeHtml(groupCreateError)}</div>` : ''}
-      <div class="auth-field">
-        <label for="groupName">Group name</label>
-        <input type="text" id="groupName" placeholder="e.g. Tuesday Night Bible Study">
-      </div>
-      <div class="auth-field">
-        <label for="groupDescription">Description (optional)</label>
-        <input type="text" id="groupDescription" placeholder="What's this group about?">
-      </div>
-      <div class="auth-field">
-        <label>Pace</label>
-        <div style="display:flex; flex-direction:column; gap:6px; margin-top:4px;">
-          <label style="display:flex; align-items:flex-start; gap:8px; font-size:0.88rem; cursor:pointer;">
-            <input type="radio" name="groupPlanMode" value="free" checked style="margin-top:3px;">
-            <span><strong>Free pace</strong><br><span style="color:var(--ink-soft); font-size:0.8rem;">Everyone reads the same outline, at their own pace. No calendar, no pressure.</span></span>
-          </label>
-          <label style="display:flex; align-items:flex-start; gap:8px; font-size:0.88rem; cursor:pointer;">
-            <input type="radio" name="groupPlanMode" value="paced" style="margin-top:3px;">
-            <span><strong>Paced schedule</strong><br><span style="color:var(--ink-soft); font-size:0.8rem;">The group moves through the outline together, week by week — good for discussing the same passage on the same week.</span></span>
-          </label>
-        </div>
-      </div>
-      <div class="auth-field" id="groupChaptersPerWeekField" style="display:none;">
-        <label for="groupChaptersPerWeek">Chapters per week</label>
-        <input type="number" id="groupChaptersPerWeek" value="5" min="1" style="width:100px;">
-      </div>
-      <div class="auth-field">
-        <label>What will the group read?</label>
-        <div class="reading-preset-row">
-          <button type="button" class="btn small" id="pickWholeBible">Whole Bible</button>
-          <button type="button" class="btn small" id="pickOT">Old Testament</button>
-          <button type="button" class="btn small" id="pickNT">New Testament</button>
-          ${groupDraftBooks.length ? `<button type="button" class="btn small" id="pickNone">Clear</button>` : ''}
-        </div>
-        ${summaryHtml}
-        <details class="book-picker-details" ${bookPickerOpen ? 'open' : ''}>
-          <summary>Choose specific books</summary>
-          <div class="book-picker-body">
-            <input type="text" id="bookFilterInput" placeholder="Filter books…" value="${escapeHtml(bookFilterQuery)}">
-            <div class="book-picker-section">
-              <div class="book-picker-section-label">Old Testament (${otSelected}/${OT_BOOK_NAMES.length})</div>
-              <div class="book-picker">${OT_BOOK_NAMES.filter(matches).map(bookCheckbox).join('') || `<div class="empty-note-inline">No matches.</div>`}</div>
-            </div>
-            <div class="book-picker-section">
-              <div class="book-picker-section-label">New Testament (${ntSelected}/${NT_BOOK_NAMES.length})</div>
-              <div class="book-picker">${NT_BOOK_NAMES.filter(matches).map(bookCheckbox).join('') || `<div class="empty-note-inline">No matches.</div>`}</div>
-            </div>
-          </div>
-        </details>
-      </div>
-      <div style="display:flex; gap:8px; margin-top:10px;">
-        <button class="btn primary" id="submitGroupCreateBtn" ${groupCreateBusy?'disabled':''} style="flex:1;">${groupCreateBusy?'Creating…':'Create group'}</button>
-      </div>
     </div>`;
 }
 
@@ -3993,6 +4770,7 @@ function renderGroupDetail(){
       </details>
       <div class="group-detail-actions">
         ${myRole ? `<button class="btn small danger" id="leaveGroupBtn">Leave group</button>` : ''}
+        ${myRole==='owner' ? `<button class="btn small danger" id="deleteGroupBtn">Delete group</button>` : ''}
       </div>
     </div>
     ${tabsHtml}
@@ -4009,13 +4787,24 @@ function renderGroupDiscussion(){
         <div class="body">${html.replace(/\n/g,'<br>')}</div>
       </div>`;
   }).join('');
+  const mentionMatchList = mentionMatches();
   return `
     <div class="settings-box">
       <div style="max-height:420px; overflow-y:auto; margin-bottom:12px;">
         ${messages || emptyState('notebook', "No messages yet — say hello, or share what stood out from this week's reading.")}
       </div>
       <div style="display:flex; gap:8px;">
-        <input type="text" id="groupMessageInput" placeholder="Message the group… use @name to mention someone" value="${escapeHtml(groupMessageText)}" style="flex:1; padding:9px 10px; border:1px solid var(--line); border-radius:8px; font-size:0.9rem; font-family:inherit;">
+        <div style="position:relative; flex:1;">
+          ${mentionMatchList.length ? `
+            <div class="mention-dropdown">
+              ${mentionMatchList.map(m=>`
+                <button type="button" class="mention-dropdown-item" data-mention-uid="${m.uid}">
+                  ${renderAvatarHtml(m, 22)}
+                  <span>${escapeHtml(m.displayName)}</span>
+                </button>`).join('')}
+            </div>` : ''}
+          <input type="text" id="groupMessageInput" placeholder="Message the group… use @name to mention someone" value="${escapeHtml(groupMessageText)}" style="width:100%; padding:9px 10px; border:1px solid var(--line); border-radius:8px; font-size:0.9rem; font-family:inherit;">
+        </div>
         <button class="btn primary" id="sendGroupMessageBtn">Send</button>
       </div>
     </div>`;
@@ -4038,7 +4827,7 @@ function renderGroupPlan(){
   return `
     <div class="settings-box">
       ${paceHtml}
-      <h3>Outline</h3>
+      <h3>${icon('notebook',16)} Outline</h3>
       <p style="font-size:0.85rem; color:var(--ink-soft);">${total} chapters across ${(g.outline||[]).length} book${(g.outline||[]).length===1?'':'s'}.</p>
       <div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:8px;">
         ${(g.outline||[]).map(o=>`<span class="role-badge member">${escapeHtml(o.book)} (${o.chapters})</span>`).join('')}
@@ -4085,7 +4874,7 @@ function renderYearInReview(){
   if(s.chaptersRead === 0 && s.journalEntries === 0) return '';
   return `
     <div class="settings-box" style="max-width:none; background:var(--accent-soft); border-color:var(--accent);">
-      <h3>${s.year} in review</h3>
+      <h3>${icon('chart',16)} ${s.year} in review</h3>
       <p style="font-size:0.92rem; line-height:1.7;">
         This year you sat with <strong>${s.chaptersRead}</strong> chapter${s.chaptersRead===1?'':'s'} across <strong>${s.booksTouched}</strong> book${s.booksTouched===1?'':'s'} of the Bible.
         ${s.journalEntries ? ` You wrote <strong>${s.journalEntries}</strong> journal entr${s.journalEntries===1?'y':'ies'}` : ''}
@@ -4377,15 +5166,34 @@ function renderFooter(){
 }
 
 /* ---------------- Events ---------------- */
+// The min-height:100dvh fix (see body{} above) stops the bottom nav from jumping due to the
+// browser's address-bar chrome differing between a short tab and a tall one. But that's only half
+// of the "nav bar pops when switching to tabs with less content" bug: if you'd scrolled partway (or
+// all the way) down a tall tab and then tap over to a short one, the page's scrollable height
+// shrinks out from under the browser's existing scroll position, and the browser has to forcibly
+// snap scrollTop back down to the new (smaller) max — THAT snap, on top of the address bar
+// re-expanding because the new content no longer justifies staying collapsed, is what reads as a
+// visible pop/jump. Resetting scroll to the top ourselves, before the new tab's shorter content
+// ever gets a chance to force that snap, removes the jump instead of just reacting to it.
+function scrollAppToTop(){
+  if(typeof window !== 'undefined' && window.scrollTo) window.scrollTo(0, 0);
+  if(typeof document !== 'undefined' && document.body) document.body.scrollTop = 0;
+  if(typeof document !== 'undefined' && document.documentElement) document.documentElement.scrollTop = 0;
+}
 // Shared by the desktop top-tab nav, the mobile bottom nav, and the mobile "More" sidebar — all
 // three ultimately just switch activeTab, so they share one handler instead of three copies.
 function switchToTab(tabId){
   activeTab = tabId;
   sidebarOpen = false;
   if(viewedProfileUid) closeViewedProfile();
-  // Warm the search cache the moment the tab opens, so results feel instant once typing starts.
-  if(activeTab === 'friends') loadFriendDirectory();
-  if(activeTab === 'groups' && !activeGroupId) loadGroupsDirectory();
+  // Warm both sub-tabs' caches the moment Community opens, so switching between Friends/Groups
+  // (or typing in either one's search box) feels instant rather than waiting on a fetch.
+  if(activeTab === 'community'){
+    loadFriendDirectory();
+    loadCommunityFeed();
+    if(!activeGroupId) loadGroupsDirectory();
+  }
+  scrollAppToTop();
   render();
 }
 function attachEvents(){
@@ -4521,7 +5329,7 @@ function attachEvents(){
   }
   const upgradeBtn = document.getElementById('upgradeAccountBtn');
   if(upgradeBtn){
-    upgradeBtn.addEventListener('click', ()=>{ forceShowGate = true; authView = 'signup'; authError=''; render(); });
+    upgradeBtn.addEventListener('click', ()=>{ forceShowGate = true; authView = 'signup'; authError=''; resetAuthWizard(); render(); });
   }
   const changePlanBtn = document.getElementById('changePlanBtn');
   if(changePlanBtn) changePlanBtn.addEventListener('click', openPlanChooser);
@@ -4710,7 +5518,7 @@ function attachEvents(){
   const closeViewedProfileBtn = document.getElementById('closeViewedProfileBtn');
   if(closeViewedProfileBtn) closeViewedProfileBtn.addEventListener('click', closeViewedProfile);
   const guestBannerCreateAccountBtn = document.getElementById('guestBannerCreateAccountBtn');
-  if(guestBannerCreateAccountBtn) guestBannerCreateAccountBtn.addEventListener('click', ()=>{ forceShowGate = true; authView = 'signup'; authError=''; render(); });
+  if(guestBannerCreateAccountBtn) guestBannerCreateAccountBtn.addEventListener('click', ()=>{ forceShowGate = true; authView = 'signup'; authError=''; resetAuthWizard(); render(); });
   const guestBannerDismissBtn = document.getElementById('guestBannerDismissBtn');
   if(guestBannerDismissBtn) guestBannerDismissBtn.addEventListener('click', ()=>{
     try{ localStorage.setItem(GUEST_BANNER_DISMISS_KEY, '1'); }catch(e){}
@@ -4727,7 +5535,7 @@ function attachEvents(){
     });
   }
   const acceptGroupInviteBtn = document.getElementById('acceptGroupInviteBtn');
-  if(acceptGroupInviteBtn) acceptGroupInviteBtn.addEventListener('click', ()=>{ forceShowGate = true; authView = 'signup'; authError=''; render(); });
+  if(acceptGroupInviteBtn) acceptGroupInviteBtn.addEventListener('click', ()=>{ forceShowGate = true; authView = 'signup'; authError=''; resetAuthWizard(); render(); });
 
   const shareAppBtn = document.getElementById('shareAppBtn');
   if(shareAppBtn){
@@ -4742,55 +5550,166 @@ function attachEvents(){
     });
   }
 
+  /* ---- Community (Friends/Groups sub-tabs + status-update feed) ---- */
+  document.querySelectorAll('[data-community-subtab]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const target = btn.dataset.communitySubtab;
+      // Switching to Friends while a group is drilled into should back out of that group first —
+      // otherwise the Friends sub-tab would render underneath a group detail view still showing.
+      if(target === 'friends' && activeGroupId) closeGroup();
+      communitySubTab = target;
+      render();
+    });
+  });
+  const openPostComposerBtn = document.getElementById('openPostComposerBtn');
+  if(openPostComposerBtn) openPostComposerBtn.addEventListener('click', openPostComposer);
+  const closePostComposerBtn = document.getElementById('closePostComposerBtn');
+  if(closePostComposerBtn) closePostComposerBtn.addEventListener('click', closePostComposer);
+  const postComposerBackdrop = document.getElementById('postComposerBackdrop');
+  if(postComposerBackdrop) postComposerBackdrop.addEventListener('click', closePostComposer);
+  const postComposerText = document.getElementById('postComposerText');
+  if(postComposerText) postComposerText.addEventListener('input', (e)=>{ postDraftText = e.target.value; });
+  const addPostPhotoBtn = document.getElementById('addPostPhotoBtn');
+  const postPhotoInput = document.getElementById('postPhotoInput');
+  if(addPostPhotoBtn && postPhotoInput) addPostPhotoBtn.addEventListener('click', ()=> postPhotoInput.click());
+  if(postPhotoInput){
+    postPhotoInput.addEventListener('change', (e)=>{
+      const file = e.target.files && e.target.files[0];
+      if(!file) return;
+      postPhotoError = '';
+      if(!file.type.startsWith('image/')){ postPhotoError = "That doesn't look like an image file."; render(); return; }
+      const reader = new FileReader();
+      reader.onload = (evt)=>{
+        const img = new Image();
+        img.onload = ()=>{
+          // Downscale to a max dimension (keeping aspect ratio, unlike the square-cropped profile
+          // photo) so a normal phone photo doesn't blow past Firestore's per-document size limit.
+          const MAX_SIDE = 800;
+          const scale = Math.min(1, MAX_SIDE / Math.max(img.width, img.height));
+          const w = Math.round(img.width * scale), h = Math.round(img.height * scale);
+          const canvas = document.createElement('canvas');
+          canvas.width = w; canvas.height = h;
+          canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+          if(dataUrl.length > POST_PHOTO_MAX_LEN){
+            postPhotoError = 'That photo is too large even after compressing — try a different one.';
+            render();
+            return;
+          }
+          postDraftPhoto = dataUrl;
+          render();
+        };
+        img.onerror = ()=>{ postPhotoError = 'Could not read that image — try a different file.'; render(); };
+        img.src = evt.target.result;
+      };
+      reader.onerror = ()=>{ postPhotoError = 'Could not read that file.'; render(); };
+      reader.readAsDataURL(file);
+    });
+  }
+  const removePostPhotoBtn = document.getElementById('removePostPhotoBtn');
+  if(removePostPhotoBtn) removePostPhotoBtn.addEventListener('click', ()=>{ postDraftPhoto = ''; render(); });
+  const submitPostBtn = document.getElementById('submitPostBtn');
+  if(submitPostBtn) submitPostBtn.addEventListener('click', createCommunityPost);
+  document.querySelectorAll('[data-delete-post]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      customConfirm('Delete this update?', { confirmLabel:'Delete', danger:true }).then(ok=>{
+        if(ok) deleteCommunityPost(btn.dataset.deletePost);
+      });
+    });
+  });
+
   /* ---- Groups ---- */
   const groupSearchInput = document.getElementById('groupSearchInput');
   if(groupSearchInput) groupSearchInput.addEventListener('input', (e)=>{ groupSearchQuery = e.target.value; render(); });
 
-  function openGroupCreateSheet(){ groupCreateOpen = true; groupDraftBooks = []; groupCreateError=''; bookPickerOpen = false; bookFilterQuery = ''; render(); }
+  function openGroupCreateSheet(){
+    groupCreateOpen = true; groupCreateError = ''; groupWizardError = ''; bookPickerOpen = false; bookFilterQuery = '';
+    // Silently resumes a draft left over from a previous visit (see saveGroupWizardDraft) — only
+    // resets to a blank slate if there genuinely isn't one to resume.
+    const hadDraft = restoreGroupWizardDraft();
+    if(!hadDraft){
+      groupDraftBooks = []; groupDraftName = ''; groupDraftDescription = '';
+      groupDraftPlanMode = 'free'; groupDraftChaptersPerWeek = 5; groupWizardStep = 0;
+    }
+    render();
+  }
   const openGroupCreateBtn = document.getElementById('openGroupCreateBtn');
   if(openGroupCreateBtn) openGroupCreateBtn.addEventListener('click', openGroupCreateSheet);
   const emptyStateCreateGroupBtn = document.getElementById('emptyStateCreateGroupBtn');
   if(emptyStateCreateGroupBtn) emptyStateCreateGroupBtn.addEventListener('click', openGroupCreateSheet);
-  const cancelGroupCreateBtn = document.getElementById('cancelGroupCreateBtn');
-  if(cancelGroupCreateBtn) cancelGroupCreateBtn.addEventListener('click', ()=>{ groupCreateOpen = false; render(); });
-  const groupSheetBackdrop = document.getElementById('groupSheetBackdrop');
-  if(groupSheetBackdrop) groupSheetBackdrop.addEventListener('click', ()=>{ groupCreateOpen = false; render(); });
   document.querySelectorAll('[data-group-dir-tab]').forEach(btn=> btn.addEventListener('click', ()=>{ groupDirTab = btn.dataset.groupDirTab; render(); }));
 
-  document.querySelectorAll('input[name="groupPlanMode"]').forEach(radio=>{
-    radio.addEventListener('change', ()=>{
-      const field = document.getElementById('groupChaptersPerWeekField');
-      const checked = document.querySelector('input[name="groupPlanMode"]:checked');
-      if(field) field.style.display = (checked && checked.value==='paced') ? 'block' : 'none';
-    });
+  // ---- Group creation wizard: full-screen, one question per step ----
+  const groupWizardCloseBtn = document.getElementById('groupWizardCloseBtn');
+  if(groupWizardCloseBtn) groupWizardCloseBtn.addEventListener('click', ()=>{
+    // Closing (rather than finishing) keeps the draft saved — see saveGroupWizardDraft/
+    // restoreGroupWizardDraft — so re-opening later picks up exactly where you left off.
+    saveGroupWizardDraft();
+    groupCreateOpen = false; render();
   });
+  const wizardGroupName = document.getElementById('wizardGroupName');
+  if(wizardGroupName) wizardGroupName.addEventListener('input', (e)=>{ groupDraftName = e.target.value; saveGroupWizardDraft(); });
+  const wizardGroupDescription = document.getElementById('wizardGroupDescription');
+  if(wizardGroupDescription) wizardGroupDescription.addEventListener('input', (e)=>{ groupDraftDescription = e.target.value; saveGroupWizardDraft(); });
+  document.querySelectorAll('input[name="wizardPlanMode"]').forEach(radio=>{
+    radio.addEventListener('change', (e)=>{ groupDraftPlanMode = e.target.value; saveGroupWizardDraft(); render(); });
+  });
+  const wizardChaptersPerWeek = document.getElementById('wizardChaptersPerWeek');
+  if(wizardChaptersPerWeek) wizardChaptersPerWeek.addEventListener('input', (e)=>{ groupDraftChaptersPerWeek = Number(e.target.value)||1; saveGroupWizardDraft(); });
   const pickWholeBible = document.getElementById('pickWholeBible');
-  if(pickWholeBible) pickWholeBible.addEventListener('click', ()=>{ setGroupDraftBooks(BOOK_LIBRARY.map(b=>b.name)); render(); });
+  if(pickWholeBible) pickWholeBible.addEventListener('click', ()=>{ setGroupDraftBooks(BOOK_LIBRARY.map(b=>b.name)); saveGroupWizardDraft(); render(); });
   const pickOT = document.getElementById('pickOT');
-  if(pickOT) pickOT.addEventListener('click', ()=>{ setGroupDraftBooks(OT_BOOK_NAMES); render(); });
+  if(pickOT) pickOT.addEventListener('click', ()=>{ setGroupDraftBooks(OT_BOOK_NAMES); saveGroupWizardDraft(); render(); });
   const pickNT = document.getElementById('pickNT');
-  if(pickNT) pickNT.addEventListener('click', ()=>{ setGroupDraftBooks(NT_BOOK_NAMES); render(); });
+  if(pickNT) pickNT.addEventListener('click', ()=>{ setGroupDraftBooks(NT_BOOK_NAMES); saveGroupWizardDraft(); render(); });
   const pickNone = document.getElementById('pickNone');
-  if(pickNone) pickNone.addEventListener('click', ()=>{ setGroupDraftBooks([]); render(); });
+  if(pickNone) pickNone.addEventListener('click', ()=>{ setGroupDraftBooks([]); saveGroupWizardDraft(); render(); });
   document.querySelectorAll('[data-group-draft-book]').forEach(cb=>{
-    cb.addEventListener('change', ()=>{ toggleGroupDraftBook(cb.dataset.groupDraftBook); render(); });
+    cb.addEventListener('change', ()=>{ toggleGroupDraftBook(cb.dataset.groupDraftBook); saveGroupWizardDraft(); render(); });
   });
   document.querySelectorAll('[data-remove-draft-book]').forEach(btn=>{
-    btn.addEventListener('click', ()=>{ toggleGroupDraftBook(btn.dataset.removeDraftBook); render(); });
+    btn.addEventListener('click', ()=>{ toggleGroupDraftBook(btn.dataset.removeDraftBook); saveGroupWizardDraft(); render(); });
   });
   const bookFilterInput = document.getElementById('bookFilterInput');
   if(bookFilterInput) bookFilterInput.addEventListener('input', (e)=>{ bookFilterQuery = e.target.value; render(); });
   const bookPickerDetails = document.querySelector('.book-picker-details');
   if(bookPickerDetails) bookPickerDetails.addEventListener('toggle', ()=>{ bookPickerOpen = bookPickerDetails.open; });
-  const submitGroupCreateBtn = document.getElementById('submitGroupCreateBtn');
-  if(submitGroupCreateBtn){
-    submitGroupCreateBtn.addEventListener('click', ()=>{
-      const checkedMode = document.querySelector('input[name="groupPlanMode"]:checked');
+
+  const groupWizardBackBtn = document.getElementById('groupWizardBackBtn');
+  if(groupWizardBackBtn) groupWizardBackBtn.addEventListener('click', ()=>{
+    groupWizardError = '';
+    groupWizardStep = Math.max(0, groupWizardStep - 1);
+    saveGroupWizardDraft(); render();
+  });
+  const groupWizardNextBtn = document.getElementById('groupWizardNextBtn');
+  if(groupWizardNextBtn){
+    groupWizardNextBtn.addEventListener('click', ()=>{
+      // Inline validation per step — same "one logical question, checked before you can move on"
+      // pattern as the dating-app onboarding flows this was modeled after.
+      const steps = groupWizardSteps();
+      const stepId = steps[groupWizardStep];
+      if(stepId === 'basics' && !groupDraftName.trim()){
+        groupWizardError = 'Give your group a name first.'; render(); return;
+      }
+      if(stepId === 'paceDetail' && (!groupDraftChaptersPerWeek || groupDraftChaptersPerWeek < 1)){
+        groupWizardError = 'Enter at least 1 chapter per week.'; render(); return;
+      }
+      if(stepId === 'reading' && !groupDraftBooks.length){
+        groupWizardError = 'Pick at least one book for the group to read.'; render(); return;
+      }
+      groupWizardError = '';
+      groupWizardStep = Math.min(steps.length - 1, groupWizardStep + 1);
+      saveGroupWizardDraft(); render();
+    });
+  }
+  const groupWizardCreateBtn = document.getElementById('groupWizardCreateBtn');
+  if(groupWizardCreateBtn){
+    groupWizardCreateBtn.addEventListener('click', ()=>{
       createGroup({
-        name: document.getElementById('groupName').value,
-        description: document.getElementById('groupDescription').value,
-        planMode: checkedMode ? checkedMode.value : 'free',
-        chaptersPerWeek: document.getElementById('groupChaptersPerWeek') ? document.getElementById('groupChaptersPerWeek').value : 5
+        name: groupDraftName,
+        description: groupDraftDescription,
+        planMode: groupDraftPlanMode,
+        chaptersPerWeek: groupDraftChaptersPerWeek
       });
     });
   }
@@ -4801,7 +5720,7 @@ function attachEvents(){
   });
   const backToGroupsBtn = document.getElementById('backToGroupsBtn');
   if(backToGroupsBtn) backToGroupsBtn.addEventListener('click', ()=>{ closeGroup(); loadGroupsDirectory(true); render(); });
-  document.querySelectorAll('[data-group-tab]').forEach(btn=> btn.addEventListener('click', ()=>{ activeGroupTab = btn.dataset.groupTab; render(); }));
+  document.querySelectorAll('[data-group-tab]').forEach(btn=> btn.addEventListener('click', ()=>{ activeGroupTab = btn.dataset.groupTab; closeMentionDropdown(); render(); }));
   const copyGroupInviteBtn = document.getElementById('copyGroupInviteBtn');
   if(copyGroupInviteBtn){
     copyGroupInviteBtn.addEventListener('click', ()=>{
@@ -4810,6 +5729,30 @@ function attachEvents(){
       if(navigator.clipboard && navigator.clipboard.writeText){
         navigator.clipboard.writeText(url).then(()=> showToast('Invite link copied.', { tone:'good' }));
       }
+    });
+  }
+  const deleteGroupBtn = document.getElementById('deleteGroupBtn');
+  if(deleteGroupBtn){
+    deleteGroupBtn.addEventListener('click', ()=>{
+      if(!activeGroupData) return;
+      const groupId = activeGroupData.id;
+      const groupName = activeGroupData.name || 'this group';
+      customConfirm(`Delete "${groupName}" permanently? This removes all members, messages, and join requests. This cannot be undone.`, { confirmLabel:'Delete group', danger:true }).then(ok=>{
+        if(!ok) return;
+        groupDeleteError = '';
+        deleteGroup(groupId).then(()=>{
+          myGroupIds = myGroupIds.filter(id=> id !== groupId);
+          groupsDirectory = groupsDirectory.filter(g=> g.id !== groupId);
+          closeGroup();
+          loadGroupsDirectory(true);
+          showToast('Group deleted.', { tone:'good' });
+          render();
+        }).catch(err=>{
+          groupDeleteError = (err && err.message) || 'Could not delete the group. Please try again.';
+          showToast(groupDeleteError, { tone:'bad' });
+          render();
+        });
+      });
     });
   }
   const leaveGroupBtn = document.getElementById('leaveGroupBtn');
@@ -4823,15 +5766,31 @@ function attachEvents(){
   }
   const sendGroupMessageBtn = document.getElementById('sendGroupMessageBtn');
   const groupMessageInput = document.getElementById('groupMessageInput');
-  if(groupMessageInput) groupMessageInput.addEventListener('input', (e)=>{ groupMessageText = e.target.value; });
+  if(groupMessageInput) groupMessageInput.addEventListener('input', (e)=>{
+    groupMessageText = e.target.value;
+    updateMentionDropdown(e.target);
+    render();
+  });
   if(sendGroupMessageBtn && activeGroupData){
     sendGroupMessageBtn.addEventListener('click', ()=> sendGroupMessage(activeGroupData.id, groupMessageInput ? groupMessageInput.value : groupMessageText));
   }
   if(groupMessageInput && activeGroupData){
     groupMessageInput.addEventListener('keydown', (e)=>{
-      if(e.key === 'Enter'){ e.preventDefault(); sendGroupMessage(activeGroupData.id, groupMessageInput.value); }
+      if(e.key === 'Enter'){
+        e.preventDefault();
+        if(mentionDropdownOpen){
+          const matches = mentionMatches();
+          if(matches.length){ selectMention(matches[0].uid); return; }
+        }
+        sendGroupMessage(activeGroupData.id, groupMessageInput.value);
+      } else if(e.key === 'Escape' && mentionDropdownOpen){
+        closeMentionDropdown(); render();
+      }
     });
   }
+  document.querySelectorAll('[data-mention-uid]').forEach(btn=>{
+    btn.addEventListener('click', ()=> selectMention(btn.dataset.mentionUid));
+  });
   document.querySelectorAll('[data-set-role]').forEach(btn=>{
     btn.addEventListener('click', ()=>{
       const [uid, role] = btn.dataset.setRole.split('|');
@@ -4889,6 +5848,7 @@ if(typeof document !== 'undefined' && document.addEventListener){
       if(commandPaletteOpen){ closeCommandPalette(); return; }
       if(activeDialog){ closeDialog(activeDialog.mode==='confirm' ? false : null); return; }
       if(groupCreateOpen){ groupCreateOpen = false; render(); return; }
+      if(shouldShowGate() && authView === 'signup'){ forceShowGate = false; authView = 'login'; authError=''; authWizardError=''; render(); return; }
       if(notifPanelOpen){ notifPanelOpen = false; render(); return; }
       if(sidebarOpen){ sidebarOpen = false; render(); return; }
     }
