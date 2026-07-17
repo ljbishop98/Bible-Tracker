@@ -210,6 +210,13 @@ function bookObj(bookName){ return {name: bookName, chapters: chaptersFor(bookNa
 
 const COLOR_PALETTE = ['#7a4b2e','#8a5a2b','#2f6b4f','#3d6b8a','#4a5f8a','#8a3d5c','#a34b3e','#6b4f8a','#b8860b','#5c5248','#4b6b3a','#6b3a5c'];
 
+// Now that other people's text (group discussion messages, viewed profiles) renders on YOUR
+// screen — not just your own private journal — anything sourced from another user must be
+// escaped before going into innerHTML, or one user could break/inject markup into another's view.
+function escapeHtml(s){
+  return (s==null ? '' : String(s)).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+}
+
 /* ---------------- Deep links to Bible apps/sites (verified URL formats) ---------------- */
 const READING_APPS = {
   biblegateway: { id:'biblegateway', label:'Bible Gateway', note:'Opens in your browser — works everywhere.' },
@@ -362,7 +369,7 @@ function defaultState(){
   return {
     cursors:{}, cycles:{}, log:[], plan:null, journal:[], readingApp:'biblegateway',
     memorization:[], extraLog:[], checkins:[],
-    profile:{ displayName:'', bio:'', color: COLOR_PALETTE[0], photo:'' }
+    profile:{ displayName:'', bio:'', color: COLOR_PALETTE[0], photo:'', aboutMe:'', location:'', favoriteSong:'', lifeVerse:'', visibility:'friends' }
   };
 }
 // Photos are resized/compressed client-side to a small square thumbnail before ever reaching
@@ -378,7 +385,14 @@ function sanitizeProfile(p){
     displayName: typeof p.displayName === 'string' ? p.displayName.slice(0,60) : '',
     bio: typeof p.bio === 'string' ? p.bio.slice(0,240) : '',
     color: typeof p.color === 'string' ? p.color : COLOR_PALETTE[0],
-    photo
+    photo,
+    aboutMe: typeof p.aboutMe === 'string' ? p.aboutMe.slice(0,1000) : '',
+    location: typeof p.location === 'string' ? p.location.slice(0,80) : '',
+    favoriteSong: typeof p.favoriteSong === 'string' ? p.favoriteSong.slice(0,120) : '',
+    lifeVerse: typeof p.lifeVerse === 'string' ? p.lifeVerse.slice(0,40) : '',
+    // 'friends' (default) = only accepted friends can view the fuller profile. 'public' = any
+    // signed-in Cultivate user can view it (still never journal/log data — just the profile fields).
+    visibility: p.visibility === 'public' ? 'public' : 'friends'
   };
 }
 function loadState(){
@@ -577,26 +591,32 @@ function deleteExtraReading(id){
 
 /* ---------------- Custom profile ---------------- */
 let profilePhotoError = '';
-function updateProfile(displayName, bio, color){
-  // Spread the existing profile first so saving the name/bio/color form never wipes out
-  // a photo that was uploaded separately.
-  state.profile = sanitizeProfile(Object.assign({}, state.profile, { displayName, bio, color }));
+let profileEditMode = false;
+let appShareCopied = false;
+// Takes a partial object and merges it into the existing profile — spreading the current
+// profile first means saving any subset of fields (e.g. just the photo, or just the bio form)
+// never wipes out whatever else was already set.
+function updateProfile(fields){
+  state.profile = sanitizeProfile(Object.assign({}, state.profile, fields));
   saveState(); render();
   syncPublicActivity();
   ensureUserDirectory();
 }
-function updateProfilePhoto(dataUrl){
-  state.profile = sanitizeProfile(Object.assign({}, state.profile, { photo: dataUrl }));
-  saveState(); render();
-  syncPublicActivity();
-}
-function removeProfilePhoto(){
-  state.profile = sanitizeProfile(Object.assign({}, state.profile, { photo: '' }));
-  saveState(); render();
-  syncPublicActivity();
-}
+function updateProfilePhoto(dataUrl){ updateProfile({ photo: dataUrl }); }
+function removeProfilePhoto(){ updateProfile({ photo: '' }); }
 function displayNameOr(fallback){
   return (state.profile && state.profile.displayName) ? state.profile.displayName : fallback;
+}
+// "Cultivating since March 2026" — computed straight from the Firebase Auth account's own
+// creation timestamp, so there's nothing to type and nothing that can drift out of sync.
+function formatJoinDate(){
+  if(!currentUser || !currentUser.metadata || !currentUser.metadata.creationTime) return '';
+  const d = new Date(currentUser.metadata.creationTime);
+  if(isNaN(d.getTime())) return '';
+  return d.toLocaleDateString(undefined, { month:'long', year:'numeric' });
+}
+function currentPlanName(){
+  return state.plan && PRESET_PLANS[state.plan.presetId] ? PRESET_PLANS[state.plan.presetId].name : (state.plan ? 'Custom plan' : '');
 }
 // Renders either the user's uploaded photo or a colored circle with their initial — used for
 // the Account tab preview and (via publicActivity's copy of `photo`) the friends list.
@@ -768,7 +788,10 @@ function doLogOut(){
   fbAuth.signOut().then(() => {
     if(fbUnsub){ fbUnsub(); fbUnsub = null; }
     if(friendsUnsub){ friendsUnsub(); friendsUnsub = null; }
+    if(myGroupsUnsub){ myGroupsUnsub(); myGroupsUnsub = null; }
+    closeGroup();
     friendLinksData = []; friendActivityCache = {};
+    myGroupIds = []; groupsDirectory = []; groupsDirectoryLoaded = false;
     localStorage.removeItem(AUTH_CHOICE_KEY);
     state = defaultState();
     saveState({skipSync:true});
@@ -820,9 +843,17 @@ function initFirebase(){
         ensureEmailIndex();
         ensureUserDirectory();
         subscribeFriends();
+        subscribeMyGroups();
+        if(pendingGroupInvite){
+          const inv = pendingGroupInvite; pendingGroupInvite = null;
+          activeTab = 'groups';
+          joinGroupViaInviteCode(inv.groupId, inv.code);
+          try{ window.history.replaceState({}, '', window.location.pathname); }catch(e){}
+        }
       } else if(fbUnsub){
         fbUnsub(); fbUnsub = null;
         if(friendsUnsub){ friendsUnsub(); friendsUnsub = null; }
+        if(myGroupsUnsub){ myGroupsUnsub(); myGroupsUnsub = null; }
       }
       render();
     });
@@ -944,10 +975,22 @@ function syncPublicActivity(){
   const last30 = new Date(); last30.setDate(last30.getDate()-30);
   const last30Str = last30.toISOString().slice(0,10);
   const activeDays = new Set(state.log.filter(e=>e.status==='complete' && e.date >= last30Str).map(e=>e.date)).size;
-  const planName = state.plan ? (PRESET_PLANS[state.plan.presetId] ? PRESET_PLANS[state.plan.presetId].name : 'Custom plan') : '';
+  const planName = currentPlanName();
+  // Carries the full profile (not just the activity summary) so that a "public" profile can be
+  // read by any signed-in user, not only accepted friends — the read rule checks `visibility`
+  // right on this same document. Friends always see all of it regardless of visibility, same as
+  // before; the only thing `visibility` changes is whether NON-friends can read it too.
   fbDb.collection('publicActivity').doc(currentUser.uid).set({
     displayName: displayNameOr(currentUser.email.split('@')[0]),
     photo: (state.profile && state.profile.photo) || null,
+    bio: (state.profile && state.profile.bio) || '',
+    aboutMe: (state.profile && state.profile.aboutMe) || '',
+    location: (state.profile && state.profile.location) || '',
+    favoriteSong: (state.profile && state.profile.favoriteSong) || '',
+    lifeVerse: (state.profile && state.profile.lifeVerse) || '',
+    color: (state.profile && state.profile.color) || COLOR_PALETTE[0],
+    visibility: (state.profile && state.profile.visibility) || 'friends',
+    joinDate: formatJoinDate(),
     lastActiveDate: lastActivityDate() || null,
     activeDaysLast30: activeDays,
     planName,
@@ -1057,6 +1100,69 @@ function friendStatusWith(uid){
   return { status: link.requestedBy===currentUser.uid ? 'outgoing' : 'incoming', linkId };
 }
 
+/* ---------------- Viewing someone else's profile (a friend, or a public profile from a group) ---------------- */
+let viewedProfileUid = null;
+let viewedProfile = null;
+let viewedProfileLoading = false;
+let viewedProfileError = '';
+function viewProfile(uid){
+  viewedProfileUid = uid;
+  viewedProfile = friendActivityCache[uid] || null; // already have it if this is an accepted friend
+  viewedProfileError = '';
+  viewedProfileLoading = !viewedProfile;
+  render();
+  if(viewedProfile || !fbDb) return;
+  fbDb.collection('publicActivity').doc(uid).get().then(doc=>{
+    if(viewedProfileUid !== uid) return; // superseded by opening a different profile meanwhile
+    viewedProfileLoading = false;
+    if(!doc.exists){ viewedProfileError = "This person hasn't set up a profile yet."; render(); return; }
+    viewedProfile = doc.data();
+    render();
+  }).catch(err=>{
+    if(viewedProfileUid !== uid) return;
+    viewedProfileLoading = false;
+    // A permission-denied here means the profile is set to friends-only and you aren't one.
+    viewedProfileError = (err && err.code === 'permission-denied') ? 'This profile is private.' : "Couldn't load that profile — check your connection and try again.";
+    render();
+  });
+}
+function closeViewedProfile(){ viewedProfileUid = null; viewedProfile = null; viewedProfileError = ''; render(); }
+function renderViewedProfileOverlay(){
+  if(!viewedProfileUid) return '';
+  let body;
+  if(viewedProfileLoading) body = `<div class="empty-note">Loading…</div>`;
+  else if(viewedProfileError) body = `<div class="empty-note">${escapeHtml(viewedProfileError)}</div>`;
+  else if(viewedProfile){
+    const act = viewedProfile;
+    body = `
+      <div style="display:flex; align-items:center; gap:16px; margin-bottom:14px;">
+        ${renderAvatarHtml(act, 76)}
+        <div>
+          <div style="font-weight:700; font-size:1.15rem;">${escapeHtml(act.displayName||'Someone')}</div>
+          ${act.bio ? `<div style="color:var(--ink-soft); font-style:italic; font-size:0.9rem; margin-top:2px;">${escapeHtml(act.bio)}</div>` : ''}
+          <div style="color:var(--ink-soft); font-size:0.78rem; margin-top:4px;">
+            ${act.joinDate ? `Cultivating since ${escapeHtml(act.joinDate)}` : ''}${act.joinDate && act.planName ? ' &middot; ' : ''}${act.planName ? `On the ${escapeHtml(act.planName)} plan` : ''}
+          </div>
+        </div>
+      </div>
+      ${(act.location || act.favoriteSong || act.lifeVerse) ? `
+        <div style="display:flex; flex-direction:column; gap:6px; font-size:0.88rem; margin-bottom:12px; padding:10px 0; border-top:1px solid var(--line); border-bottom:1px solid var(--line);">
+          ${act.location ? `<div>&#128205; ${escapeHtml(act.location)}</div>` : ''}
+          ${act.lifeVerse ? `<div>&#128214; Life verse: <strong>${escapeHtml(act.lifeVerse)}</strong></div>` : ''}
+          ${act.favoriteSong ? `<div>&#127925; Favorite worship song: <strong>${escapeHtml(act.favoriteSong)}</strong></div>` : ''}
+        </div>` : ''}
+      ${act.aboutMe ? `<div style="font-size:0.9rem; line-height:1.6;">${escapeHtml(act.aboutMe).replace(/\n/g,'<br>')}</div>` : ''}
+    `;
+  } else body = '';
+  return `
+  <div id="profileOverlayBackdrop" style="position:fixed; inset:0; background:rgba(20,15,8,0.45); display:flex; align-items:flex-start; justify-content:center; padding:40px 16px; z-index:50; overflow-y:auto;">
+    <div class="settings-box" style="max-width:440px; width:100%; position:relative;">
+      <button type="button" id="closeViewedProfileBtn" style="position:absolute; top:8px; right:10px; background:none; border:none; font-size:1.3rem; cursor:pointer; color:var(--ink-soft); line-height:1;">&times;</button>
+      ${body}
+    </div>
+  </div>`;
+}
+
 /* ---------------- Friend search (search-as-you-type, by name or exact email) ---------------- */
 let friendSearchQuery = '';
 let friendSearchResults = [];
@@ -1138,6 +1244,294 @@ function searchFriends(queryText){
     friendSearchBusy = false;
     render();
   });
+}
+
+/* ---------------- Groups (Bible studies, tables, devotion groups) ----------------
+   Design notes, since this touches Firestore rules in a way that bit us once already this
+   project (the friendLinks list-query bug): every LIST rule below is either (a) a blanket
+   auth-only condition with zero dependency on the matched documents' data, or (b) a condition
+   based only on a get() of a path derived from request.auth.uid (the CALLER's own membership
+   doc) — never a condition that depends on each individual matched document's own fields. Both
+   of those are things Firestore can prove hold for an entire query's potential result set, which
+   is what made the friendLinks bug happen the first time (an ID-split rule couldn't be correlated
+   with a query filtered on a different field). Single-document get/create/update/delete rules
+   don't have this restriction at all — they can reference resource.data freely.
+
+   Progress within a group (paced or free) is tracked as a single "cursor": how many chapters
+   into the group's flattened reading outline this member has personally read. For a free-pace
+   group that's the whole story. For a paced group, the SAME cursor is kept, but the group also
+   has a chaptersPerWeek + startDate, so "this week's assigned reading" can be computed on the fly
+   without needing a separately-stored week-by-week schedule.
+------------------------------------------------------------------------------- */
+function generateInviteCode(){
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no ambiguous 0/O/1/I
+  let out = '';
+  for(let i=0;i<8;i++) out += chars[Math.floor(Math.random()*chars.length)];
+  return out;
+}
+// Turns an ordered list of {book, chapters} into a flat ordered list of {book, chapter} —
+// the group's actual reading sequence, used identically whether the group is paced or free.
+function flattenOutline(outline){
+  const out = [];
+  (outline||[]).forEach(entry=>{
+    const total = entry.chapters || chaptersFor(entry.book);
+    for(let c=1;c<=total;c++) out.push({ book: entry.book, chapter: c });
+  });
+  return out;
+}
+function outlineTotalChapters(outline){
+  return (outline||[]).reduce((s,e)=> s + (e.chapters || chaptersFor(e.book)), 0);
+}
+// Which week (0-indexed) a paced group is currently on, based on its start date.
+function currentGroupWeekIndex(startDate){
+  if(!startDate) return 0;
+  const start = new Date(startDate + 'T00:00:00');
+  const now = new Date();
+  const days = Math.floor((now - start) / 86400000);
+  return Math.max(0, Math.floor(days / 7));
+}
+// The slice of the flattened outline assigned to a given week of a paced group.
+function chaptersForWeek(outline, chaptersPerWeek, weekIndex){
+  const flat = flattenOutline(outline);
+  const perWeek = Math.max(1, chaptersPerWeek||1);
+  return flat.slice(weekIndex*perWeek, weekIndex*perWeek + perWeek);
+}
+function formatChapterRange(chapters){
+  if(!chapters.length) return '';
+  if(chapters.length === 1) return `${chapters[0].book} ${chapters[0].chapter}`;
+  const first = chapters[0], last = chapters[chapters.length-1];
+  if(first.book === last.book) return `${first.book} ${first.chapter}–${last.chapter}`;
+  return `${first.book} ${first.chapter} – ${last.book} ${last.chapter}`;
+}
+// Detects "@Name" mentions in a discussion message against the group's known members, returns
+// the list of mentioned uids plus HTML with each recognized mention wrapped for a visual
+// highlight (bold + accent color) — visual only for now, no push notification.
+function parseMentions(text, members){
+  const escaped = escapeHtml(text);
+  const mentionedUids = [];
+  // Sort longest-name-first so "@John Smith" matches before a shorter "@John" would steal it.
+  // A match is swapped out for a placeholder token immediately (rather than the final HTML), so
+  // a shorter name that happens to be a PREFIX of an already-matched longer one (like "John" inside
+  // "John Smith") can't also match against text that's already been claimed — the placeholder no
+  // longer contains "@John" as a substring once the longer match has consumed it.
+  const sorted = (members||[]).slice().sort((a,b)=> (b.displayName||'').length - (a.displayName||'').length);
+  let working = escaped;
+  const placeholders = [];
+  sorted.forEach(m=>{
+    if(!m.displayName) return;
+    const escapedName = escapeHtml(m.displayName);
+    const at = '@' + escapedName;
+    if(working.includes(at)){
+      mentionedUids.push(m.uid);
+      // A distinctive marker real message text won't plausibly contain, used only to reserve
+      // this spot until every member's been checked — swapped for the real highlighted HTML after.
+      const token = '@@MENTIONSLOT' + placeholders.length + '@@';
+      placeholders.push(`<strong style="color:var(--accent);">${at}</strong>`);
+      working = working.split(at).join(token);
+    }
+  });
+  placeholders.forEach((frag, i)=>{ working = working.split('@@MENTIONSLOT'+i+'@@').join(frag); });
+  return { html: working, mentionedUids };
+}
+
+let groupsDirectory = [];
+let groupsDirectoryLoaded = false;
+let groupsDirectoryLoading = false;
+let groupSearchQuery = '';
+function loadGroupsDirectory(force){
+  if(!fbDb || !currentUser) return Promise.resolve();
+  if(groupsDirectoryLoaded && !force) return Promise.resolve();
+  if(groupsDirectoryLoading) return Promise.resolve();
+  groupsDirectoryLoading = true;
+  return fbDb.collection('groups').limit(200).get().then(snap=>{
+    groupsDirectory = snap.docs.map(d=>({ id:d.id, ...d.data() }));
+    groupsDirectoryLoaded = true; groupsDirectoryLoading = false;
+    render();
+  }).catch(()=>{ groupsDirectoryLoading = false; });
+}
+
+let myGroupIds = [];
+let myGroupsUnsub = null;
+// "My groups" is derived directly from the members subcollections via a collectionGroup query,
+// rather than a separate denormalized userGroups doc. The denormalized-doc version had a real
+// permission problem: approving someone else's join request would need to write into THEIR
+// userGroups doc, which Firestore rules can't safely allow without a much bigger hole. Deriving
+// it from `members` instead needs no extra writes or extra rules at all — every member doc
+// already carries a plain `uid` field (equal to its own doc ID) specifically so this query can
+// filter on it. Note: Firestore may prompt to auto-create a collection-group index the first
+// time this runs in a real project — that's expected, just follow the link it gives you once.
+function subscribeMyGroups(){
+  if(!fbDb || !currentUser) return;
+  if(myGroupsUnsub) myGroupsUnsub();
+  myGroupsUnsub = fbDb.collectionGroup('members').where('uid','==',currentUser.uid).onSnapshot(snap=>{
+    myGroupIds = snap.docs.map(d=> d.ref.parent.parent.id);
+    render();
+  }, ()=>{});
+}
+
+// ---- Active (open) group ----
+let activeGroupId = null;
+let activeGroupData = null;
+let activeGroupMembers = [];
+let activeGroupMessages = [];
+let activeGroupJoinRequests = [];
+let activeGroupTab = 'discussion'; // discussion | plan | members | requests
+let groupUnsubs = [];
+function myRoleInActiveGroup(){
+  if(!currentUser) return null;
+  const m = activeGroupMembers.find(m=>m.uid===currentUser.uid);
+  return m ? m.role : null;
+}
+function openGroup(groupId){
+  closeGroup();
+  activeGroupId = groupId;
+  activeGroupTab = 'discussion';
+  render();
+  if(!fbDb) return;
+  groupUnsubs.push(fbDb.collection('groups').doc(groupId).onSnapshot(doc=>{
+    activeGroupData = doc.exists ? { id:doc.id, ...doc.data() } : null;
+    render();
+  }, ()=>{}));
+  groupUnsubs.push(fbDb.collection('groups').doc(groupId).collection('members').onSnapshot(snap=>{
+    activeGroupMembers = snap.docs.map(d=>({ uid:d.id, ...d.data() }));
+    render();
+  }, ()=>{}));
+  groupUnsubs.push(fbDb.collection('groups').doc(groupId).collection('messages').orderBy('createdAt','asc').limitToLast(200).onSnapshot(snap=>{
+    activeGroupMessages = snap.docs.map(d=>({ id:d.id, ...d.data() }));
+    render();
+  }, ()=>{}));
+  // Only owner/admin can actually read this (rules-enforced) — harmless to subscribe regardless,
+  // errors are swallowed and the Requests tab simply stays empty for a plain member.
+  groupUnsubs.push(fbDb.collection('groups').doc(groupId).collection('joinRequests').onSnapshot(snap=>{
+    activeGroupJoinRequests = snap.docs.map(d=>({ uid:d.id, ...d.data() }));
+    render();
+  }, ()=>{ activeGroupJoinRequests = []; }));
+}
+function closeGroup(){
+  groupUnsubs.forEach(u=>{ try{ u(); }catch(e){} });
+  groupUnsubs = [];
+  activeGroupId = null; activeGroupData = null; activeGroupMembers = [];
+  activeGroupMessages = []; activeGroupJoinRequests = [];
+}
+
+// ---- Create group ----
+let groupCreateOpen = false;
+let groupCreateError = '';
+let groupCreateBusy = false;
+let groupDraftBooks = [];
+function toggleGroupDraftBook(bookName){
+  const i = groupDraftBooks.indexOf(bookName);
+  if(i === -1) groupDraftBooks.push(bookName); else groupDraftBooks.splice(i,1);
+}
+function setGroupDraftBooks(names){ groupDraftBooks = names.slice(); }
+function createGroup(fields){
+  if(!fbDb || !currentUser) return Promise.reject({message:'You need an account to create a group.'});
+  const name = (fields.name||'').trim();
+  if(!name) return Promise.reject({message:'Give your group a name.'});
+  if(!groupDraftBooks.length) return Promise.reject({message:'Pick at least one book for the group to read.'});
+  groupCreateBusy = true; groupCreateError = ''; render();
+  const outline = groupDraftBooks.map(b=>({ book:b, chapters: chaptersFor(b) }));
+  const groupRef = fbDb.collection('groups').doc();
+  const groupDoc = {
+    name: name.slice(0,80),
+    description: (fields.description||'').trim().slice(0,300),
+    ownerUid: currentUser.uid,
+    memberCount: 1,
+    createdAt: Date.now(),
+    planMode: fields.planMode === 'paced' ? 'paced' : 'free',
+    outline,
+    chaptersPerWeek: fields.planMode === 'paced' ? Math.max(1, Number(fields.chaptersPerWeek)||5) : null,
+    startDate: fields.planMode === 'paced' ? todayStr() : null,
+    inviteCode: generateInviteCode()
+  };
+  return groupRef.set(groupDoc).then(()=>
+    groupRef.collection('members').doc(currentUser.uid).set({
+      uid: currentUser.uid, role:'owner', displayName: displayNameOr(currentUser.email.split('@')[0]), photo: state.profile.photo||null, joinedAt: Date.now()
+    })
+  ).then(()=>{
+    groupCreateBusy = false; groupCreateOpen = false; groupDraftBooks = [];
+    loadGroupsDirectory(true);
+    openGroup(groupRef.id);
+  }).catch(err=>{
+    groupCreateBusy = false; groupCreateError = (err&&err.message) || 'Something went wrong creating that group.';
+    render();
+  });
+}
+
+// ---- Join flow ----
+let groupJoinBusy = false;
+let groupJoinError = '';
+function requestToJoinGroup(groupId){
+  if(!fbDb || !currentUser) return;
+  groupJoinBusy = true; groupJoinError = ''; render();
+  fbDb.collection('groups').doc(groupId).collection('joinRequests').doc(currentUser.uid).set({
+    displayName: displayNameOr(currentUser.email.split('@')[0]), requestedAt: Date.now()
+  }).then(()=>{ groupJoinBusy = false; render(); }).catch(err=>{
+    groupJoinBusy = false; groupJoinError = (err&&err.message) || 'Could not send that request.'; render();
+  });
+}
+function cancelJoinRequest(groupId){
+  if(!fbDb || !currentUser) return;
+  fbDb.collection('groups').doc(groupId).collection('joinRequests').doc(currentUser.uid).delete().catch(()=>{});
+}
+function joinGroupViaInviteCode(groupId, code){
+  if(!fbDb || !currentUser) return Promise.reject({message:'Sign in first.'});
+  groupJoinBusy = true; groupJoinError = ''; render();
+  return fbDb.collection('groups').doc(groupId).get().then(doc=>{
+    if(!doc.exists) throw { message: "That invite link doesn't match a group anymore." };
+    if(doc.data().inviteCode !== code) throw { message: 'That invite link looks incorrect.' };
+    return fbDb.collection('groups').doc(groupId).collection('members').doc(currentUser.uid).set({
+      uid: currentUser.uid, role:'member', displayName: displayNameOr(currentUser.email.split('@')[0]), photo: state.profile.photo||null,
+      joinedAt: Date.now(), joinedViaCode: code
+    });
+  }).then(()=> fbDb.collection('groups').doc(groupId).update({ memberCount: firebase.firestore.FieldValue.increment(1) }))
+    .then(()=>{ groupJoinBusy = false; openGroup(groupId); })
+    .catch(err=>{ groupJoinBusy = false; groupJoinError = (err&&err.message) || 'Could not join that group.'; render(); });
+}
+function approveJoinRequest(groupId, uid, displayName){
+  if(!fbDb) return;
+  fbDb.collection('groups').doc(groupId).collection('members').doc(uid).set({
+    uid, role:'member', displayName: displayName||'Member', photo: null, joinedAt: Date.now()
+  }).then(()=> Promise.all([
+    fbDb.collection('groups').doc(groupId).collection('joinRequests').doc(uid).delete(),
+    fbDb.collection('groups').doc(groupId).update({ memberCount: firebase.firestore.FieldValue.increment(1) })
+  ])).catch(()=>{});
+}
+function declineJoinRequest(groupId, uid){
+  if(!fbDb) return;
+  fbDb.collection('groups').doc(groupId).collection('joinRequests').doc(uid).delete().catch(()=>{});
+}
+
+// ---- Roles / membership management ----
+function setMemberRole(groupId, uid, role){
+  if(!fbDb) return;
+  fbDb.collection('groups').doc(groupId).collection('members').doc(uid).update({ role }).catch(()=>{});
+}
+function removeGroupMember(groupId, uid){
+  if(!fbDb) return;
+  fbDb.collection('groups').doc(groupId).collection('members').doc(uid).delete()
+    .then(()=> fbDb.collection('groups').doc(groupId).update({ memberCount: firebase.firestore.FieldValue.increment(-1) }))
+    .catch(()=>{});
+}
+function leaveGroup(groupId){
+  if(!fbDb || !currentUser) return;
+  removeGroupMember(groupId, currentUser.uid);
+  closeGroup();
+}
+
+// ---- Discussion ----
+let groupMessageText = '';
+function sendGroupMessage(groupId, text){
+  const trimmed = (text||'').trim();
+  if(!trimmed || !fbDb || !currentUser) return;
+  const { mentionedUids } = parseMentions(trimmed, activeGroupMembers);
+  fbDb.collection('groups').doc(groupId).collection('messages').add({
+    authorUid: currentUser.uid,
+    authorName: displayNameOr(currentUser.email.split('@')[0]),
+    text: trimmed.slice(0,2000),
+    mentionedUids,
+    createdAt: Date.now()
+  }).then(()=>{ groupMessageText = ''; render(); }).catch(()=>{});
 }
 
 /* ---------------- Check-in reminders (push notifications) ---------------- */
@@ -1246,6 +1640,7 @@ function render(){
   }
   app.innerHTML = `
     ${renderHeader()}
+    ${renderGroupInviteBanner()}
     ${renderCheckinBanner()}
     ${renderInstallBanner()}
     ${renderTabs()}
@@ -1255,14 +1650,26 @@ function render(){
     ${activeTab==='memorize' ? renderMemorize() : ''}
     ${activeTab==='dashboard' ? renderDashboard() : ''}
     ${activeTab==='friends' ? renderFriends() : ''}
+    ${activeTab==='groups' ? renderGroups() : ''}
     ${activeTab==='account' ? renderAccountTab() : ''}
     ${renderFooter()}
+    ${renderViewedProfileOverlay()}
     <input type="file" id="importFile" accept="application/json">
   `;
   attachEvents();
   restoreFocus();
 }
 
+function renderGroupInviteBanner(){
+  // Only reachable in guest mode (an already-signed-in user's invite gets handled automatically
+  // right after auth resolves; someone brand new lands on the sign-up gate first, which handles
+  // itself). This covers the one gap: an existing guest-mode user clicking an invite link.
+  if(!pendingGroupInvite || currentUser) return '';
+  return `<div class="checkin-banner">
+    <span>&#128101; You've been invited to join a group on Cultivate — create a free account to accept it.</span>
+    <button class="btn primary small" id="acceptGroupInviteBtn">Create account</button>
+  </div>`;
+}
 function renderCheckinBanner(){
   const last = lastActivityDate();
   if(!last) return '';
@@ -1525,7 +1932,7 @@ function renderHeader(){
 }
 
 function renderTabs(){
-  const tabs = [['today','Today'],['log','Log'],['journal','Journal'],['memorize','Memorize'],['dashboard','Dashboard'],['friends','Friends'],['account','Account']];
+  const tabs = [['today','Today'],['log','Log'],['journal','Journal'],['memorize','Memorize'],['dashboard','Dashboard'],['friends','Friends'],['groups','Groups'],['account','Account']];
   return `<nav class="tabs">
     ${tabs.map(([id,label])=>`<button data-tab="${id}" class="${activeTab===id?'active':''}">${label}</button>`).join('')}
   </nav>`;
@@ -1848,7 +2255,10 @@ function renderFriends(){
           <div style="flex:1;">
             <div style="font-weight:700;">${act ? act.displayName : 'Loading…'}</div>
             ${act ? `<div style="font-size:0.82rem; color:var(--ink-soft);">${act.planName ? act.planName + ' &middot; ' : ''}${act.activeDaysLast30||0} of the last 30 days active${act.lastActiveDate ? ' &middot; last read ' + fmtDate(act.lastActiveDate) : ''}</div>` : ''}
-            <button class="btn small danger" data-friend-decline="${l.id}" style="margin-top:6px;">Remove</button>
+            <div style="display:flex; gap:6px; margin-top:6px;">
+              <button class="btn small" data-view-profile="${otherUid}">View profile</button>
+              <button class="btn small danger" data-friend-decline="${l.id}">Remove</button>
+            </div>
           </div>
         </div>`;
       }).join('')}
@@ -1873,6 +2283,248 @@ function renderFriends(){
     </details>`;
 
   return addFormHtml + incomingHtml + outgoingHtml + acceptedHtml + troubleshootingHtml;
+}
+
+/* ---------------- Groups UI ---------------- */
+let requestedGroupIds = new Set(); // tracked locally so the button updates instantly after clicking
+const NT_START_INDEX = BOOK_LIBRARY.findIndex(b=>b.name==='Matthew');
+const OT_BOOK_NAMES = BOOK_LIBRARY.slice(0, NT_START_INDEX).map(b=>b.name);
+const NT_BOOK_NAMES = BOOK_LIBRARY.slice(NT_START_INDEX).map(b=>b.name);
+
+function renderGroups(){
+  if(!currentUser){
+    return `<div class="empty-note">Groups require an account, since they're shared with other people — a Bible study, table, or devotion group. Create an account or log in from the Account tab.</div>`;
+  }
+  return activeGroupId ? renderGroupDetail() : renderGroupsDirectory();
+}
+
+function renderGroupsDirectory(){
+  const q = groupSearchQuery.trim().toLowerCase();
+  const all = groupsDirectory.filter(g=> !q || g.name.toLowerCase().includes(q));
+  const mine = all.filter(g=> myGroupIds.includes(g.id));
+  const discover = all.filter(g=> !myGroupIds.includes(g.id));
+
+  const groupRow = g => {
+    const isMember = myGroupIds.includes(g.id);
+    const requested = requestedGroupIds.has(g.id);
+    let actionHtml;
+    if(isMember) actionHtml = `<button class="btn small primary" data-open-group="${g.id}">Open</button>`;
+    else if(requested) actionHtml = `<span style="font-size:0.8rem; color:var(--ink-soft);">Requested — pending approval</span>`;
+    else actionHtml = `<button class="btn small" data-request-join="${g.id}">Request to join</button>`;
+    return `
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; padding:10px 0; border-bottom:1px solid var(--line);">
+        <div>
+          <div style="font-weight:700;">${escapeHtml(g.name)}</div>
+          <div style="font-size:0.8rem; color:var(--ink-soft);">${g.memberCount||1} member${g.memberCount===1?'':'s'} &middot; ${g.planMode==='paced' ? 'Paced schedule' : 'Free pace'}${g.description ? ' &middot; ' + escapeHtml(g.description) : ''}</div>
+        </div>
+        ${actionHtml}
+      </div>`;
+  };
+
+  const createFormHtml = groupCreateOpen ? renderGroupCreateForm() : `
+    <div class="settings-box">
+      <h3>Groups</h3>
+      <p style="font-size:0.85rem; color:var(--ink-soft);">Bible studies, tables, or devotion groups — centered around a shared reading plan, with a discussion space. Anyone can browse and request to join, or use an invite link to join directly.</p>
+      <button class="btn primary" id="openGroupCreateBtn">Create a group</button>
+    </div>`;
+
+  const searchHtml = `
+    <div class="settings-box">
+      <input type="text" id="groupSearchInput" placeholder="Search groups by name…" value="${escapeHtml(groupSearchQuery)}" style="width:100%; padding:9px 10px; border:1px solid var(--line); border-radius:8px; font-size:0.9rem; font-family:inherit;">
+    </div>`;
+
+  const mineHtml = mine.length ? `
+    <div class="settings-box">
+      <h3>My groups (${mine.length})</h3>
+      ${mine.map(groupRow).join('')}
+    </div>` : '';
+
+  const discoverHtml = `
+    <div class="settings-box">
+      <h3>Discover</h3>
+      ${groupsDirectoryLoading ? `<div style="font-size:0.82rem; color:var(--ink-soft);">Loading groups…</div>` : ''}
+      ${!groupsDirectoryLoading && !discover.length ? `<div class="empty-note">${q ? 'No groups match that search.' : 'No groups yet — be the first to create one.'}</div>` : ''}
+      ${discover.map(groupRow).join('')}
+    </div>`;
+
+  return createFormHtml + searchHtml + mineHtml + discoverHtml;
+}
+
+function renderGroupCreateForm(){
+  const bookCheckbox = name => `
+    <label style="display:flex; align-items:center; gap:6px; font-size:0.82rem; padding:3px 0;">
+      <input type="checkbox" data-group-draft-book="${escapeHtml(name)}" ${groupDraftBooks.includes(name)?'checked':''}> ${name}
+    </label>`;
+  return `
+    <div class="settings-box">
+      <h3>Create a group</h3>
+      ${groupCreateError ? `<div class="auth-error">${escapeHtml(groupCreateError)}</div>` : ''}
+      <div class="auth-field">
+        <label for="groupName">Group name</label>
+        <input type="text" id="groupName" placeholder="e.g. Tuesday Night Bible Study">
+      </div>
+      <div class="auth-field">
+        <label for="groupDescription">Description (optional)</label>
+        <input type="text" id="groupDescription" placeholder="What's this group about?">
+      </div>
+      <div class="auth-field">
+        <label>Pace</label>
+        <div style="display:flex; flex-direction:column; gap:6px; margin-top:4px;">
+          <label style="display:flex; align-items:flex-start; gap:8px; font-size:0.88rem; cursor:pointer;">
+            <input type="radio" name="groupPlanMode" value="free" checked style="margin-top:3px;">
+            <span><strong>Free pace</strong><br><span style="color:var(--ink-soft); font-size:0.8rem;">Everyone reads the same outline, at their own pace. No calendar, no pressure.</span></span>
+          </label>
+          <label style="display:flex; align-items:flex-start; gap:8px; font-size:0.88rem; cursor:pointer;">
+            <input type="radio" name="groupPlanMode" value="paced" style="margin-top:3px;">
+            <span><strong>Paced schedule</strong><br><span style="color:var(--ink-soft); font-size:0.8rem;">The group moves through the outline together, week by week — good for discussing the same passage on the same week.</span></span>
+          </label>
+        </div>
+      </div>
+      <div class="auth-field" id="groupChaptersPerWeekField" style="display:none;">
+        <label for="groupChaptersPerWeek">Chapters per week</label>
+        <input type="number" id="groupChaptersPerWeek" value="5" min="1" style="width:100px;">
+      </div>
+      <div class="auth-field">
+        <label>What will the group read? (pick one or more books)</label>
+        <div style="display:flex; gap:8px; margin:6px 0;">
+          <button type="button" class="btn small" id="pickWholeBible">Whole Bible</button>
+          <button type="button" class="btn small" id="pickOT">Old Testament</button>
+          <button type="button" class="btn small" id="pickNT">New Testament</button>
+          <button type="button" class="btn small" id="pickNone">Clear</button>
+        </div>
+        <div style="max-height:220px; overflow-y:auto; border:1px solid var(--line); border-radius:8px; padding:8px 12px; columns:2;">
+          ${BOOK_LIBRARY.map(b=>bookCheckbox(b.name)).join('')}
+        </div>
+        <div style="font-size:0.78rem; color:var(--ink-soft); margin-top:4px;">${groupDraftBooks.length} book${groupDraftBooks.length===1?'':'s'} selected &middot; ${outlineTotalChapters(groupDraftBooks.map(b=>({book:b,chapters:chaptersFor(b)})))} chapters total</div>
+      </div>
+      <div style="display:flex; gap:8px; margin-top:10px;">
+        <button class="btn primary" id="submitGroupCreateBtn" ${groupCreateBusy?'disabled':''}>${groupCreateBusy?'Creating…':'Create group'}</button>
+        <button class="btn" id="cancelGroupCreateBtn">Cancel</button>
+      </div>
+    </div>`;
+}
+
+function renderGroupDetail(){
+  if(!activeGroupData) return `<div class="empty-note">Loading group…</div>`;
+  const g = activeGroupData;
+  const myRole = myRoleInActiveGroup();
+  const isOwnerOrAdmin = myRole === 'owner' || myRole === 'admin';
+  const inviteUrl = `${window.location.origin}${window.location.pathname}?joinGroup=${g.id}&code=${g.inviteCode}`;
+
+  const tabsHtml = `
+    <div style="display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap;">
+      <button class="btn ${activeGroupTab==='discussion'?'primary':''} small" data-group-tab="discussion">Discussion</button>
+      <button class="btn ${activeGroupTab==='plan'?'primary':''} small" data-group-tab="plan">Plan</button>
+      <button class="btn ${activeGroupTab==='members'?'primary':''} small" data-group-tab="members">Members (${activeGroupMembers.length})</button>
+      ${isOwnerOrAdmin ? `<button class="btn ${activeGroupTab==='requests'?'primary':''} small" data-group-tab="requests">Requests${activeGroupJoinRequests.length ? ' ('+activeGroupJoinRequests.length+')' : ''}</button>` : ''}
+    </div>`;
+
+  let body = '';
+  if(activeGroupTab === 'discussion') body = renderGroupDiscussion();
+  else if(activeGroupTab === 'plan') body = renderGroupPlan();
+  else if(activeGroupTab === 'members') body = renderGroupMembers();
+  else if(activeGroupTab === 'requests') body = renderGroupRequests();
+
+  return `
+    <div class="settings-box">
+      <button class="btn small" id="backToGroupsBtn" style="margin-bottom:10px;">&larr; All groups</button>
+      <h3>${escapeHtml(g.name)}</h3>
+      ${g.description ? `<p style="font-size:0.85rem; color:var(--ink-soft);">${escapeHtml(g.description)}</p>` : ''}
+      <div style="font-size:0.8rem; color:var(--ink-soft); margin-bottom:10px;">${g.memberCount||1} member${g.memberCount===1?'':'s'} &middot; ${g.planMode==='paced' ? 'Paced schedule' : 'Free pace'}</div>
+      <details style="margin-bottom:10px;">
+        <summary style="cursor:pointer; font-size:0.85rem;">Invite link</summary>
+        <div style="margin-top:8px; display:flex; gap:8px; flex-wrap:wrap;">
+          <input type="text" readonly value="${inviteUrl}" style="flex:1; min-width:200px; padding:8px; border:1px solid var(--line); border-radius:8px; font-size:0.78rem;" onclick="this.select()">
+          <button class="btn small" id="copyGroupInviteBtn">Copy link</button>
+        </div>
+      </details>
+      ${myRole ? `<button class="btn small danger" id="leaveGroupBtn" style="margin-bottom:14px;">Leave group</button>` : ''}
+    </div>
+    ${tabsHtml}
+    ${body}`;
+}
+
+function renderGroupDiscussion(){
+  const messages = activeGroupMessages.map(m=>{
+    const { html } = parseMentions(m.text, activeGroupMembers);
+    const mine = currentUser && m.authorUid === currentUser.uid;
+    return `
+      <div style="padding:8px 0; border-bottom:1px solid var(--line);">
+        <div style="font-size:0.8rem; color:var(--ink-soft); margin-bottom:2px;"><strong style="color:var(--ink);">${escapeHtml(m.authorName||'Someone')}</strong>${mine ? ' (you)' : ''} &middot; ${m.createdAt ? new Date(m.createdAt).toLocaleString(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}) : ''}</div>
+        <div style="font-size:0.92rem; line-height:1.5;">${html.replace(/\n/g,'<br>')}</div>
+      </div>`;
+  }).join('');
+  return `
+    <div class="settings-box">
+      <div style="max-height:420px; overflow-y:auto; margin-bottom:12px;">
+        ${messages || `<div class="empty-note">No messages yet — say hello, or share what stood out from this week's reading.</div>`}
+      </div>
+      <div style="display:flex; gap:8px;">
+        <input type="text" id="groupMessageInput" placeholder="Message the group… use @name to mention someone" value="${escapeHtml(groupMessageText)}" style="flex:1; padding:9px 10px; border:1px solid var(--line); border-radius:8px; font-size:0.9rem; font-family:inherit;">
+        <button class="btn primary" id="sendGroupMessageBtn">Send</button>
+      </div>
+    </div>`;
+}
+
+function renderGroupPlan(){
+  const g = activeGroupData;
+  const total = outlineTotalChapters(g.outline);
+  let paceHtml = '';
+  if(g.planMode === 'paced'){
+    const weekIndex = currentGroupWeekIndex(g.startDate);
+    const thisWeek = chaptersForWeek(g.outline, g.chaptersPerWeek, weekIndex);
+    paceHtml = `
+      <div style="background:var(--accent-soft); border:1px solid var(--accent); border-radius:10px; padding:12px 14px; margin-bottom:14px;">
+        <div style="font-weight:700; margin-bottom:4px;">Week ${weekIndex+1}</div>
+        <div style="font-size:0.9rem;">${thisWeek.length ? formatChapterRange(thisWeek) : "You've reached the end of the outline — nicely done."}</div>
+        <div style="font-size:0.78rem; color:var(--ink-soft); margin-top:4px;">${g.chaptersPerWeek} chapter${g.chaptersPerWeek===1?'':'s'} per week, started ${fmtDate(g.startDate)}</div>
+      </div>`;
+  }
+  return `
+    <div class="settings-box">
+      ${paceHtml}
+      <h3>Outline</h3>
+      <p style="font-size:0.85rem; color:var(--ink-soft);">${total} chapters across ${(g.outline||[]).length} book${(g.outline||[]).length===1?'':'s'}.</p>
+      <div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:8px;">
+        ${(g.outline||[]).map(o=>`<span class="status-pill complete">${escapeHtml(o.book)} (${o.chapters})</span>`).join('')}
+      </div>
+    </div>`;
+}
+
+function renderGroupMembers(){
+  const myRole = myRoleInActiveGroup();
+  const sorted = activeGroupMembers.slice().sort((a,b)=>{
+    const rank = r => r==='owner'?0:r==='admin'?1:2;
+    return rank(a.role)-rank(b.role);
+  });
+  const rows = sorted.map(m=>{
+    const canManage = myRole === 'owner' && m.role !== 'owner' && (!currentUser || m.uid !== currentUser.uid);
+    const canRemove = (myRole==='owner' || myRole==='admin') && m.role !== 'owner' && (!currentUser || m.uid !== currentUser.uid);
+    return `
+      <div style="display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid var(--line);">
+        ${renderAvatarHtml(m, 32)}
+        <div style="flex:1;">
+          <span style="cursor:pointer;" data-view-profile="${m.uid}">${escapeHtml(m.displayName||'Member')}</span>
+          <span class="status-pill ${m.role==='owner'?'complete':m.role==='admin'?'skip':''}" style="margin-left:6px; font-size:0.7rem;">${m.role}</span>
+        </div>
+        ${canManage ? `<button class="btn small" data-set-role="${m.uid}|${m.role==='admin'?'member':'admin'}">${m.role==='admin' ? 'Remove admin' : 'Make admin'}</button>` : ''}
+        ${canRemove ? `<button class="btn small danger" data-remove-member="${m.uid}">Remove</button>` : ''}
+      </div>`;
+  }).join('');
+  return `<div class="settings-box">${rows}</div>`;
+}
+
+function renderGroupRequests(){
+  if(!activeGroupJoinRequests.length) return `<div class="empty-note">No pending requests right now.</div>`;
+  const rows = activeGroupJoinRequests.map(r=>`
+    <div style="display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid var(--line);">
+      <span>${escapeHtml(r.displayName||'Someone')}</span>
+      <span style="display:flex; gap:6px;">
+        <button class="btn small primary" data-approve-request="${r.uid}|${escapeHtml(r.displayName||'Member').replace(/"/g,'&quot;')}">Approve</button>
+        <button class="btn small danger" data-decline-request="${r.uid}">Decline</button>
+      </span>
+    </div>`).join('');
+  return `<div class="settings-box">${rows}</div>`;
 }
 
 function renderYearInReview(){
@@ -1961,33 +2613,102 @@ function renderAccountTab(){
           ? `<p style="font-size:0.85rem; color:var(--bad);">Notifications are blocked for this app in your browser/device settings.</p>`
           : `<button class="btn primary" id="enableRemindersBtn">Enable check-in reminders</button>`}
     </div>`;
-  const profileBox = `
+  const p = state.profile;
+  const esc = s => (s||'').replace(/"/g,'&quot;');
+  const joinDate = formatJoinDate();
+  const planName = currentPlanName();
+  const profileViewHtml = `
     <div class="settings-box">
-      <h3>Profile</h3>
-      <p style="font-size:0.85rem; color:var(--ink-soft);">Your display name is what friends see instead of your email.</p>
+      <div style="display:flex; align-items:center; gap:16px; margin-bottom:14px;">
+        ${renderAvatarHtml(p, 76)}
+        <div>
+          <div style="font-weight:700; font-size:1.15rem;">${p.displayName || (currentUser ? currentUser.email.split('@')[0] : 'Guest')}</div>
+          ${p.bio ? `<div style="color:var(--ink-soft); font-style:italic; font-size:0.9rem; margin-top:2px;">${p.bio}</div>` : ''}
+          <div style="color:var(--ink-soft); font-size:0.78rem; margin-top:4px;">
+            ${joinDate ? `Cultivating since ${joinDate}` : ''}${joinDate && planName ? ' &middot; ' : ''}${planName ? `On the ${planName} plan` : ''}
+          </div>
+        </div>
+      </div>
+      ${(p.location || p.favoriteSong || p.lifeVerse) ? `
+        <div style="display:flex; flex-direction:column; gap:6px; font-size:0.88rem; margin-bottom:12px; padding:10px 0; border-top:1px solid var(--line); border-bottom:1px solid var(--line);">
+          ${p.location ? `<div>&#128205; ${p.location}</div>` : ''}
+          ${p.lifeVerse ? `<div>&#128214; Life verse: <strong>${p.lifeVerse}</strong></div>` : ''}
+          ${p.favoriteSong ? `<div>&#127925; Favorite worship song: <strong>${p.favoriteSong}</strong></div>` : ''}
+        </div>` : ''}
+      ${p.aboutMe ? `<div style="font-size:0.9rem; line-height:1.6; margin-bottom:14px;">${p.aboutMe.replace(/\n/g,'<br>')}</div>` : ''}
+      <div style="font-size:0.78rem; color:var(--ink-soft); margin-bottom:10px;">${p.visibility==='public' ? '&#127760; Public — any signed-in user can view this' : '&#128274; Friends only'}</div>
+      <button class="btn primary" id="editProfileBtn">Edit profile</button>
+    </div>`;
+  const profileEditHtml = `
+    <div class="settings-box">
+      <h3>Edit profile</h3>
+      <p style="font-size:0.85rem; color:var(--ink-soft);">This is just for you right now &mdash; friends still only ever see your name, photo, last-active date, and current plan, never any of this.</p>
       <div style="display:flex; align-items:center; gap:14px; margin-bottom:16px;">
-        ${renderAvatarHtml(state.profile, 64)}
+        ${renderAvatarHtml(p, 64)}
         <div style="display:flex; flex-direction:column; gap:8px;">
           <label class="btn" style="cursor:pointer; display:inline-block; text-align:center;">
-            ${state.profile.photo ? 'Change photo' : 'Add photo'}
+            ${p.photo ? 'Change photo' : 'Add photo'}
             <input type="file" id="profilePhotoInput" accept="image/*" style="display:none;">
           </label>
-          ${state.profile.photo ? `<button type="button" class="btn" id="removeProfilePhotoBtn" style="font-size:0.8rem;">Remove photo</button>` : ''}
+          ${p.photo ? `<button type="button" class="btn" id="removeProfilePhotoBtn" style="font-size:0.8rem;">Remove photo</button>` : ''}
           ${profilePhotoError ? `<p style="font-size:0.78rem; color:var(--bad); margin:0;">${profilePhotoError}</p>` : ''}
         </div>
       </div>
       <div class="auth-field">
-        <label for="profileDisplayName">Display name</label>
-        <input type="text" id="profileDisplayName" value="${(state.profile.displayName||'').replace(/"/g,'&quot;')}" placeholder="${currentUser ? currentUser.email.split('@')[0] : 'Guest'}">
+        <label for="profileDisplayName">Username</label>
+        <input type="text" id="profileDisplayName" value="${esc(p.displayName)}" placeholder="${currentUser ? currentUser.email.split('@')[0] : 'Guest'}">
       </div>
       <div class="auth-field">
-        <label for="profileBio">Short bio (optional)</label>
-        <input type="text" id="profileBio" value="${(state.profile.bio||'').replace(/"/g,'&quot;')}" placeholder="A line about your walk with God">
+        <label for="profileBio">Short bio header (optional)</label>
+        <input type="text" id="profileBio" value="${esc(p.bio)}" placeholder="A line about your walk with God">
+      </div>
+      <div class="auth-field">
+        <label for="profileLocation">Location (optional)</label>
+        <input type="text" id="profileLocation" value="${esc(p.location)}" placeholder="City, State">
+      </div>
+      <div class="auth-field">
+        <label for="profileLifeVerse">Life verse (optional)</label>
+        <input type="text" id="profileLifeVerse" value="${esc(p.lifeVerse)}" placeholder="e.g. Psalm 23:1">
+      </div>
+      <div class="auth-field">
+        <label for="profileFavoriteSong">Favorite worship song (optional)</label>
+        <input type="text" id="profileFavoriteSong" value="${esc(p.favoriteSong)}" placeholder="Title — Artist">
+      </div>
+      <div class="auth-field">
+        <label for="profileAboutMe">About me (optional)</label>
+        <textarea id="profileAboutMe" rows="4" style="width:100%; padding:9px 10px; border:1px solid var(--line); border-radius:8px; font-size:0.9rem; font-family:inherit; resize:vertical;" placeholder="Whatever you'd like people to know about you">${esc(p.aboutMe)}</textarea>
+      </div>
+      <div class="auth-field">
+        <label>Who can view this profile?</label>
+        <div style="display:flex; flex-direction:column; gap:6px; margin-top:4px;">
+          <label style="display:flex; align-items:flex-start; gap:8px; font-size:0.88rem; cursor:pointer;">
+            <input type="radio" name="profileVisibility" value="friends" ${p.visibility!=='public'?'checked':''} style="margin-top:3px;">
+            <span><strong>Friends only</strong><br><span style="color:var(--ink-soft); font-size:0.8rem;">Only accepted friends can see this page.</span></span>
+          </label>
+          <label style="display:flex; align-items:flex-start; gap:8px; font-size:0.88rem; cursor:pointer;">
+            <input type="radio" name="profileVisibility" value="public" ${p.visibility==='public'?'checked':''} style="margin-top:3px;">
+            <span><strong>Public</strong><br><span style="color:var(--ink-soft); font-size:0.8rem;">Any signed-in Cultivate user can view it — e.g. people you share a group with. Your journal and reading log are never shown either way.</span></span>
+          </label>
+        </div>
       </div>
       <div class="color-swatch-row" style="margin-bottom:12px;">
-        ${COLOR_PALETTE.map(c=>`<button type="button" data-profile-color="${c}" style="background:${c}" class="${state.profile.color===c?'selected':''}"></button>`).join('')}
+        ${COLOR_PALETTE.map(c=>`<button type="button" data-profile-color="${c}" style="background:${c}" class="${p.color===c?'selected':''}"></button>`).join('')}
       </div>
-      <button class="btn primary" id="saveProfileBtn">Save profile</button>
+      <div style="display:flex; gap:8px;">
+        <button class="btn primary" id="saveProfileBtn">Save profile</button>
+        <button class="btn" id="cancelEditProfileBtn">Cancel</button>
+      </div>
+    </div>`;
+  const profileBox = profileEditMode ? profileEditHtml : profileViewHtml;
+  const inviteAppBox = `
+    <div class="settings-box">
+      <h3>Invite someone to Cultivate</h3>
+      <p style="font-size:0.85rem; color:var(--ink-soft);">Share the app with a friend or family member.</p>
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <input type="text" readonly value="${window.location.origin}${window.location.pathname}" style="flex:1; min-width:200px; padding:8px; border:1px solid var(--line); border-radius:8px; font-size:0.8rem;" onclick="this.select()">
+        <button class="btn primary small" id="shareAppBtn">Share</button>
+      </div>
+      ${appShareCopied ? `<p style="font-size:0.8rem; color:var(--good); margin-top:6px;">&#10003; Link copied.</p>` : ''}
     </div>`;
   const exportBox = `
     <div class="settings-box">
@@ -2032,6 +2753,7 @@ function renderAccountTab(){
     </div>
     ${planBox}
     ${profileBox}
+    ${inviteAppBox}
     ${exportBox}
     ${readingAppBox}
     ${notifBox}
@@ -2045,6 +2767,7 @@ function renderAccountTab(){
     </div>
     ${planBox}
     ${profileBox}
+    ${inviteAppBox}
     ${exportBox}
     ${readingAppBox}
     ${notifBox}
@@ -2065,6 +2788,7 @@ function attachEvents(){
       activeTab = btn.dataset.tab;
       // Warm the search cache the moment the tab opens, so results feel instant once typing starts.
       if(activeTab === 'friends') loadFriendDirectory();
+      if(activeTab === 'groups' && !activeGroupId) loadGroupsDirectory();
       render();
     });
   });
@@ -2236,13 +2960,27 @@ function attachEvents(){
   });
 
   // Profile
+  const editProfileBtn = document.getElementById('editProfileBtn');
+  if(editProfileBtn) editProfileBtn.addEventListener('click', ()=>{ profileEditMode = true; render(); });
+  const cancelEditProfileBtn = document.getElementById('cancelEditProfileBtn');
+  if(cancelEditProfileBtn) cancelEditProfileBtn.addEventListener('click', ()=>{ profilePhotoError = ''; profileEditMode = false; render(); });
   const saveProfileBtn = document.getElementById('saveProfileBtn');
   if(saveProfileBtn){
     saveProfileBtn.addEventListener('click', ()=>{
-      const nameEl = document.getElementById('profileDisplayName');
-      const bioEl = document.getElementById('profileBio');
+      const val = id => { const el = document.getElementById(id); return el ? el.value : ''; };
       const selectedColorBtn = document.querySelector('[data-profile-color].selected');
-      updateProfile(nameEl.value, bioEl.value, selectedColorBtn ? selectedColorBtn.dataset.profileColor : state.profile.color);
+      const visibilityRadio = document.querySelector('input[name="profileVisibility"]:checked');
+      updateProfile({
+        displayName: val('profileDisplayName'),
+        bio: val('profileBio'),
+        location: val('profileLocation'),
+        lifeVerse: val('profileLifeVerse'),
+        favoriteSong: val('profileFavoriteSong'),
+        aboutMe: val('profileAboutMe'),
+        visibility: visibilityRadio ? visibilityRadio.value : state.profile.visibility,
+        color: selectedColorBtn ? selectedColorBtn.dataset.profileColor : state.profile.color
+      });
+      profileEditMode = false;
     });
   }
   document.querySelectorAll('[data-profile-color]').forEach(btn=>{
@@ -2337,6 +3075,11 @@ function attachEvents(){
   document.querySelectorAll('[data-friend-cancel]').forEach(btn=> btn.addEventListener('click', ()=> declineFriendRequest(btn.dataset.friendCancel)));
   document.querySelectorAll('[data-friend-accept]').forEach(btn=> btn.addEventListener('click', ()=> acceptFriendRequest(btn.dataset.friendAccept)));
   document.querySelectorAll('[data-friend-decline]').forEach(btn=> btn.addEventListener('click', ()=>{ if(confirm('Remove this connection?')) declineFriendRequest(btn.dataset.friendDecline); }));
+  document.querySelectorAll('[data-view-profile]').forEach(btn=> btn.addEventListener('click', ()=> viewProfile(btn.dataset.viewProfile)));
+  const closeViewedProfileBtn = document.getElementById('closeViewedProfileBtn');
+  if(closeViewedProfileBtn) closeViewedProfileBtn.addEventListener('click', closeViewedProfile);
+  const profileOverlayBackdrop = document.getElementById('profileOverlayBackdrop');
+  if(profileOverlayBackdrop) profileOverlayBackdrop.addEventListener('click', (e)=>{ if(e.target === profileOverlayBackdrop) closeViewedProfile(); });
   const installBtn = document.getElementById('installBtn');
   if(installBtn){
     installBtn.addEventListener('click', async ()=>{
@@ -2347,7 +3090,136 @@ function attachEvents(){
       render();
     });
   }
+  const acceptGroupInviteBtn = document.getElementById('acceptGroupInviteBtn');
+  if(acceptGroupInviteBtn) acceptGroupInviteBtn.addEventListener('click', ()=>{ forceShowGate = true; authView = 'signup'; authError=''; render(); });
+
+  const shareAppBtn = document.getElementById('shareAppBtn');
+  if(shareAppBtn){
+    shareAppBtn.addEventListener('click', ()=>{
+      const url = `${window.location.origin}${window.location.pathname}`;
+      const shareData = { title:'Cultivate', text:'I\'ve been using Cultivate to read the Bible — thought you might like it too.', url };
+      if(navigator.share){
+        navigator.share(shareData).catch(()=>{});
+      } else if(navigator.clipboard && navigator.clipboard.writeText){
+        navigator.clipboard.writeText(url).then(()=>{ appShareCopied = true; render(); setTimeout(()=>{ appShareCopied = false; render(); }, 2000); });
+      }
+    });
+  }
+
+  /* ---- Groups ---- */
+  const groupSearchInput = document.getElementById('groupSearchInput');
+  if(groupSearchInput) groupSearchInput.addEventListener('input', (e)=>{ groupSearchQuery = e.target.value; render(); });
+
+  const openGroupCreateBtn = document.getElementById('openGroupCreateBtn');
+  if(openGroupCreateBtn) openGroupCreateBtn.addEventListener('click', ()=>{ groupCreateOpen = true; groupDraftBooks = []; groupCreateError=''; render(); });
+  const cancelGroupCreateBtn = document.getElementById('cancelGroupCreateBtn');
+  if(cancelGroupCreateBtn) cancelGroupCreateBtn.addEventListener('click', ()=>{ groupCreateOpen = false; render(); });
+
+  document.querySelectorAll('input[name="groupPlanMode"]').forEach(radio=>{
+    radio.addEventListener('change', ()=>{
+      const field = document.getElementById('groupChaptersPerWeekField');
+      const checked = document.querySelector('input[name="groupPlanMode"]:checked');
+      if(field) field.style.display = (checked && checked.value==='paced') ? 'block' : 'none';
+    });
+  });
+  const pickWholeBible = document.getElementById('pickWholeBible');
+  if(pickWholeBible) pickWholeBible.addEventListener('click', ()=>{ setGroupDraftBooks(BOOK_LIBRARY.map(b=>b.name)); render(); });
+  const pickOT = document.getElementById('pickOT');
+  if(pickOT) pickOT.addEventListener('click', ()=>{ setGroupDraftBooks(OT_BOOK_NAMES); render(); });
+  const pickNT = document.getElementById('pickNT');
+  if(pickNT) pickNT.addEventListener('click', ()=>{ setGroupDraftBooks(NT_BOOK_NAMES); render(); });
+  const pickNone = document.getElementById('pickNone');
+  if(pickNone) pickNone.addEventListener('click', ()=>{ setGroupDraftBooks([]); render(); });
+  document.querySelectorAll('[data-group-draft-book]').forEach(cb=>{
+    cb.addEventListener('change', ()=>{ toggleGroupDraftBook(cb.dataset.groupDraftBook); render(); });
+  });
+  const submitGroupCreateBtn = document.getElementById('submitGroupCreateBtn');
+  if(submitGroupCreateBtn){
+    submitGroupCreateBtn.addEventListener('click', ()=>{
+      const checkedMode = document.querySelector('input[name="groupPlanMode"]:checked');
+      createGroup({
+        name: document.getElementById('groupName').value,
+        description: document.getElementById('groupDescription').value,
+        planMode: checkedMode ? checkedMode.value : 'free',
+        chaptersPerWeek: document.getElementById('groupChaptersPerWeek') ? document.getElementById('groupChaptersPerWeek').value : 5
+      });
+    });
+  }
+
+  document.querySelectorAll('[data-open-group]').forEach(btn=> btn.addEventListener('click', ()=> openGroup(btn.dataset.openGroup)));
+  document.querySelectorAll('[data-request-join]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const gid = btn.dataset.requestJoin;
+      requestedGroupIds.add(gid);
+      requestToJoinGroup(gid);
+    });
+  });
+  const backToGroupsBtn = document.getElementById('backToGroupsBtn');
+  if(backToGroupsBtn) backToGroupsBtn.addEventListener('click', ()=>{ closeGroup(); loadGroupsDirectory(true); render(); });
+  document.querySelectorAll('[data-group-tab]').forEach(btn=> btn.addEventListener('click', ()=>{ activeGroupTab = btn.dataset.groupTab; render(); }));
+  const copyGroupInviteBtn = document.getElementById('copyGroupInviteBtn');
+  if(copyGroupInviteBtn){
+    copyGroupInviteBtn.addEventListener('click', ()=>{
+      const g = activeGroupData; if(!g) return;
+      const url = `${window.location.origin}${window.location.pathname}?joinGroup=${g.id}&code=${g.inviteCode}`;
+      if(navigator.clipboard && navigator.clipboard.writeText){
+        navigator.clipboard.writeText(url).then(()=>{ copyGroupInviteBtn.textContent = 'Copied!'; setTimeout(()=>{ copyGroupInviteBtn.textContent = 'Copy link'; }, 1500); });
+      }
+    });
+  }
+  const leaveGroupBtn = document.getElementById('leaveGroupBtn');
+  if(leaveGroupBtn){
+    leaveGroupBtn.addEventListener('click', ()=>{
+      if(!activeGroupData) return;
+      if(confirm('Leave this group?')){ leaveGroup(activeGroupData.id); loadGroupsDirectory(true); render(); }
+    });
+  }
+  const sendGroupMessageBtn = document.getElementById('sendGroupMessageBtn');
+  const groupMessageInput = document.getElementById('groupMessageInput');
+  if(groupMessageInput) groupMessageInput.addEventListener('input', (e)=>{ groupMessageText = e.target.value; });
+  if(sendGroupMessageBtn && activeGroupData){
+    sendGroupMessageBtn.addEventListener('click', ()=> sendGroupMessage(activeGroupData.id, groupMessageInput ? groupMessageInput.value : groupMessageText));
+  }
+  if(groupMessageInput && activeGroupData){
+    groupMessageInput.addEventListener('keydown', (e)=>{
+      if(e.key === 'Enter'){ e.preventDefault(); sendGroupMessage(activeGroupData.id, groupMessageInput.value); }
+    });
+  }
+  document.querySelectorAll('[data-set-role]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const [uid, role] = btn.dataset.setRole.split('|');
+      if(activeGroupData) setMemberRole(activeGroupData.id, uid, role);
+    });
+  });
+  document.querySelectorAll('[data-remove-member]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      if(activeGroupData && confirm('Remove this member from the group?')) removeGroupMember(activeGroupData.id, btn.dataset.removeMember);
+    });
+  });
+  document.querySelectorAll('[data-approve-request]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const [uid, name] = btn.dataset.approveRequest.split('|');
+      if(activeGroupData) approveJoinRequest(activeGroupData.id, uid, name);
+    });
+  });
+  document.querySelectorAll('[data-decline-request]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      if(activeGroupData) declineJoinRequest(activeGroupData.id, btn.dataset.declineRequest);
+    });
+  });
 }
+
+// A group invite link looks like ?joinGroup=<groupId>&code=<inviteCode>. Captured once at load;
+// consumed (and stripped from the URL) the moment we know whether someone's signed in — if not,
+// a banner prompts sign-in/signup first and the join happens automatically right after.
+let pendingGroupInvite = null;
+(function(){
+  try{
+    const params = new URLSearchParams(window.location.search);
+    const gid = params.get('joinGroup'), code = params.get('code');
+    if(gid && code) pendingGroupInvite = { groupId: gid, code };
+  }catch(e){}
+})();
 
 refreshNotifStatus();
 render();
