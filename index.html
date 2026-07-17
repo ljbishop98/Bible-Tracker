@@ -781,6 +781,51 @@
   /* ---- Top strip (bell + theme toggle) — all that's left of the old full header, see
      renderTopStrip(). The title/stats/sync content that used to live here now lives in the
      Account tab instead. ---- */
+  /* ---- In-app Bible reader ---- */
+  .reader-panel{
+    position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); z-index:81;
+    width:min(620px, calc(100vw - 32px)); max-height:86vh; display:flex; flex-direction:column;
+    background:var(--card); border-radius:18px; box-shadow:0 16px 50px rgba(0,0,0,0.3); overflow:hidden;
+  }
+  .reader-panel.overlay-animate{ animation:dialogPop .18s cubic-bezier(.25,.8,.4,1); }
+  .reader-topbar{
+    display:flex; align-items:center; justify-content:space-between; padding:14px 18px 10px;
+    border-bottom:1px solid var(--line); font-size:1.05rem;
+  }
+  .reader-body{ flex:1; overflow-y:auto; -webkit-overflow-scrolling:touch; padding:16px 20px; }
+  .reader-text{ font-size:1.02rem; line-height:1.85; }
+  .reader-verse sup{ font-size:0.62em; color:var(--accent); margin-right:3px; font-weight:700; }
+  .reader-attrib{ font-size:0.72rem; color:var(--ink-soft); margin:16px 0 0; }
+  .reader-nav{ display:flex; align-items:center; justify-content:space-between; gap:8px; padding:10px 14px; border-top:1px solid var(--line); }
+  /* ---- Direct messages ---- */
+  .dm-thread-list{ display:flex; flex-direction:column; }
+  .dm-thread-row{
+    display:flex; align-items:center; gap:12px; width:100%; text-align:left; background:none;
+    border:none; border-top:1px solid var(--line); padding:10px 4px; cursor:pointer;
+    font-family:inherit; transition:background-color .2s ease;
+  }
+  .dm-thread-row:first-child{ border-top:none; }
+  @media (hover:hover) and (pointer:fine){ .dm-thread-row:hover{ background:var(--accent-soft); } }
+  .dm-thread-text{ display:flex; flex-direction:column; gap:1px; min-width:0; flex:1; }
+  .dm-thread-name{ font-weight:700; font-size:0.9rem; display:flex; align-items:center; gap:6px; }
+  .dm-thread-preview{ font-size:0.8rem; color:var(--ink-soft); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .dm-thread-row.unread .dm-thread-preview{ color:var(--ink); font-weight:600; }
+  .dm-thread-time{ font-size:0.72rem; color:var(--ink-soft); white-space:nowrap; }
+  .dm-unread-dot{ width:8px; height:8px; border-radius:50%; background:var(--accent); display:inline-block; }
+  .dm-scroll{ max-height:420px; overflow-y:auto; -webkit-overflow-scrolling:touch; display:flex; flex-direction:column; gap:6px; padding:4px 0; }
+  .dm-bubble-row{ display:flex; }
+  .dm-bubble-row.mine{ justify-content:flex-end; }
+  .dm-bubble{
+    max-width:78%; padding:8px 12px; border-radius:16px 16px 16px 5px; background:var(--accent-soft);
+    font-size:0.9rem; line-height:1.45; white-space:pre-wrap; word-break:break-word;
+  }
+  .dm-bubble-row.mine .dm-bubble{ background:var(--accent); color:#fff; border-radius:16px 16px 5px 16px; }
+  .dm-bubble-time{ display:block; font-size:0.65rem; opacity:0.65; margin-top:2px; text-align:right; }
+  /* ---- Group banner (hub feel) — bleeds to the card's edges above the content ---- */
+  .settings-box.has-banner{ padding-top:0; overflow:hidden; }
+  .group-banner{
+    display:block; width:calc(100% + 40px); margin:0 -20px 14px; height:130px; object-fit:cover;
+  }
   /* ---- Guided-study sessions (wizard builder + group plan tab) ---- */
   .session-num{
     display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px;
@@ -831,11 +876,18 @@
   .hm-2{ background:var(--accent); opacity:0.65; }
   .hm-3{ background:var(--accent); }
   .hm-legend{ display:flex; align-items:center; gap:5px; font-size:0.72rem; color:var(--ink-soft); }
-  /* Collapsible dashboard sections — <summary> is the whole header row, chevron rotates open. */
-  details.dash-collapse summary{ list-style:none; cursor:pointer; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  /* Collapsible dashboard sections — <summary> is the whole header row, chevron rotates open.
+     v32 redesign: icon circle + a clean two-line name/sub stack (the old inline cycle text sat
+     awkwardly offset beside the heading). */
+  details.dash-collapse summary{ list-style:none; cursor:pointer; display:flex; align-items:center; gap:12px; }
   details.dash-collapse summary::-webkit-details-marker{ display:none; }
-  details.dash-collapse summary h3{ margin-bottom:0; }
-  details.dash-collapse summary .cat-sub{ margin-bottom:0; }
+  .cat-icon-circle{
+    width:38px; height:38px; border-radius:12px; display:flex; align-items:center;
+    justify-content:center; flex-shrink:0;
+  }
+  .cat-head-text{ display:flex; flex-direction:column; gap:1px; min-width:0; }
+  .cat-head-name{ font-weight:700; font-size:1rem; }
+  .cat-head-sub{ font-size:0.78rem; color:var(--ink-soft); }
   .dash-collapse-chevron{ margin-left:auto; line-height:0; color:var(--ink-soft); transform:rotate(180deg); transition:transform .25s var(--ease-out); }
   details.dash-collapse[open] .dash-collapse-chevron{ transform:rotate(270deg); }
   details.dash-collapse[open] summary{ margin-bottom:8px; }
@@ -1313,6 +1365,11 @@ function icon(name, size){
     moon: '<path d="M20 14.3A8.3 8.3 0 1 1 9.7 4 6.7 6.7 0 0 0 20 14.3z"/>',
     sunrise: '<path d="M4.5 16.2h15"/><path d="M6 16.2a6 6 0 0 1 12 0"/><path d="M12 5.5v3.2M6.9 9l1.7 1.7M17.1 9l-1.7 1.7"/>',
     gear: '<path d="M3.5 7h6.3M13.4 7h7.1M3.5 12h11.3M18.4 12h2.1M3.5 17h3.3M10.4 17h10.1"/><circle cx="11.6" cy="7" r="1.8"/><circle cx="16.6" cy="12" r="1.8"/><circle cx="8.6" cy="17" r="1.8"/>',
+    scroll: '<path d="M6.5 4.5h11a2 2 0 0 1 2 2v0a2 2 0 0 1-2 2h-11"/><path d="M6.5 4.5a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h9.5a2 2 0 0 0 2-2V8.5"/><path d="M8 12h7M8 15.5h5"/>',
+    flame: '<path d="M12 3.5c1 2.8 4.5 4.6 4.5 8.6a4.5 4.5 0 0 1-9 0c0-1.6.6-2.8 1.5-4 .3 1 .9 1.7 1.8 2.1-.3-2.4.3-4.9 1.2-6.7z"/>',
+    cross: '<path d="M12 4v16M7 9h10"/>',
+    mail: '<rect x="3.5" y="6" width="17" height="12.5" rx="2"/><path d="M4.5 7.5 12 13.5l7.5-6"/>',
+    chat: '<path d="M4 6.5A2.5 2.5 0 0 1 6.5 4h11A2.5 2.5 0 0 1 20 6.5v7a2.5 2.5 0 0 1-2.5 2.5H10l-4.5 4v-4H6.5A2.5 2.5 0 0 1 4 13.5z"/>',
     auto: '<circle cx="12" cy="12" r="8.5"/><path d="M12 3.5v17" stroke-dasharray="0"/><path d="M12 3.5A8.5 8.5 0 0 1 12 20.5z" fill="currentColor" stroke="none"/>',
     check: '<path d="M5 12.5l4.5 4.5L19 7"/>',
     plus: '<path d="M12 5v14M5 12h14"/>',
@@ -1348,11 +1405,90 @@ function emptyState(iconName, message, opts){
 
 /* ---------------- Deep links to Bible apps/sites (verified URL formats) ---------------- */
 const READING_APPS = {
+  cultivate:    { id:'cultivate',    label:'Right here in Cultivate', note:'World English Bible (public domain), shown in-app — the whole loop stays in one place.' },
   biblegateway: { id:'biblegateway', label:'Bible Gateway', note:'Opens in your browser — works everywhere.' },
   youversion:   { id:'youversion',   label:'YouVersion',     note:'Opens in your browser, auto-switches to the YouVersion app if installed.' },
   blb:          { id:'blb',          label:'Blue Letter Bible', note:'Opens in your browser (King James Version).' },
   olivetree:    { id:'olivetree',    label:'Olive Tree',     note:'Requires the Olive Tree app installed — no web fallback if it isn\'t.' }
 };
+/* ---------------- In-app Bible reader (World English Bible, public domain) ----------------
+   Chapter text comes from bible-api.com (?translation=web), cached two ways: an in-memory map
+   for this session, and localStorage (best-effort, quota-guarded) so previously-read chapters
+   work offline. The reader is a full-screen overlay with prev/next chapter and — when the open
+   chapter is exactly what one of Today's cards is asking for — a "Mark complete" that logs it
+   without ever leaving the text. */
+let readerOpen = false;
+let readerBook = null;
+let readerChapter = null;
+let readerVerses = null;
+let readerLoading = false;
+let readerError = '';
+const readerMemCache = {};
+let lastRenderedReaderKey = null;
+function readerCacheKey(book, ch){ return 'cultivateWEB:' + book + ':' + ch; }
+function openInAppReader(book, chapter){
+  if(!book || !chapter || chapter < 1) return;
+  const maxCh = chaptersFor(book) || 999;
+  if(chapter > maxCh) return;
+  readerOpen = true; readerBook = book; readerChapter = chapter;
+  readerError = ''; readerVerses = null;
+  const key = readerCacheKey(book, chapter);
+  if(readerMemCache[key]){ readerVerses = readerMemCache[key]; readerLoading = false; render(); return; }
+  let cached = null;
+  try{ cached = JSON.parse(localStorage.getItem(key) || 'null'); }catch(e){}
+  if(cached && Array.isArray(cached)){
+    readerMemCache[key] = cached; readerVerses = cached; readerLoading = false; render(); return;
+  }
+  readerLoading = true; render();
+  fetch('https://bible-api.com/' + encodeURIComponent(book + ' ' + chapter) + '?translation=web')
+    .then(r=>{ if(!r.ok) throw new Error('http '+r.status); return r.json(); })
+    .then(data=>{
+      const verses = (data.verses||[]).map(v=>({ v: v.verse, t: (v.text||'').trim() }));
+      if(!verses.length) throw new Error('empty');
+      readerMemCache[key] = verses;
+      try{ localStorage.setItem(key, JSON.stringify(verses)); }catch(e){ /* quota — memory cache still works */ }
+      if(readerBook === book && readerChapter === chapter){ readerVerses = verses; readerLoading = false; render(); }
+    })
+    .catch(()=>{
+      if(readerBook === book && readerChapter === chapter){
+        readerLoading = false;
+        readerError = 'Could not load the chapter — check your connection and try again.';
+        render();
+      }
+    });
+}
+function renderReaderOverlay(){
+  if(!readerOpen){ lastRenderedReaderKey = null; return ''; }
+  const key = readerBook + ':' + readerChapter + ':' + (readerLoading ? 'l' : readerVerses ? 'v' : 'e');
+  const isNew = key !== lastRenderedReaderKey;
+  lastRenderedReaderKey = key;
+  const maxCh = chaptersFor(readerBook) || 1;
+  // Is this chapter exactly what one of Today's cards is due for? Then completing belongs here.
+  const dueCat = ACTIVE_CATEGORIES.find(cat=>{
+    const due = getDue(cat.id);
+    return due && due.book === readerBook && due.chapter === readerChapter;
+  });
+  let body;
+  if(readerLoading) body = `<div style="padding:30px 0;">${skeletonCardListHtml(2)}</div>`;
+  else if(readerError) body = `<div class="auth-error">${escapeHtml(readerError)}</div><button class="btn" id="readerRetryBtn">Try again</button>`;
+  else body = `<div class="reader-text">${(readerVerses||[]).map(v=>`<span class="reader-verse"><sup>${v.v}</sup>${escapeHtml(v.t)} </span>`).join('')}</div>
+    <p class="reader-attrib">World English Bible &mdash; public domain.</p>`;
+  return `
+    <div id="readerBackdrop" class="dialog-backdrop ${isNew?'overlay-animate':''}"></div>
+    <div class="reader-panel ${isNew?'overlay-animate':''}" role="dialog" aria-modal="true">
+      <div class="reader-topbar">
+        <strong>${escapeHtml(readerBook)} ${readerChapter}</strong>
+        <button type="button" class="sheet-close-btn" id="readerCloseBtn" aria-label="Close">${icon('close',18)}</button>
+      </div>
+      <div class="reader-body">${body}</div>
+      <div class="reader-nav">
+        <button class="btn small" id="readerPrevBtn" ${readerChapter<=1?'disabled':''}>${icon('back',14)} Prev</button>
+        ${dueCat ? `<button class="btn primary small" id="readerCompleteBtn" data-cat="${dueCat.id}">${icon('check',14)} Mark complete</button>` : ''}
+        <button class="btn small" id="readerNextBtn" ${readerChapter>=maxCh?'disabled':''}>Next <span style="display:inline-block; transform:rotate(180deg); line-height:0;">${icon('back',14)}</span></button>
+      </div>
+    </div>`;
+}
+
 // Uppercase 3-letter USFM codes YouVersion (bible.com) uses in its passage URLs.
 const YOUVERSION_BOOK_CODES = {
   'Genesis':'GEN','Exodus':'EXO','Leviticus':'LEV','Numbers':'NUM','Deuteronomy':'DEU','Joshua':'JOS','Judges':'JDG','Ruth':'RUT',
@@ -1498,6 +1634,7 @@ function defaultState(){
   return {
     cursors:{}, cycles:{}, log:[], plan:null, journal:[], readingApp:'biblegateway',
     memorization:[], extraLog:[], checkins:[], groupSessionsDone:{},
+    dailyReminder:{ enabled:false, hour:7 },
     profile:{ displayName:'', bio:'', color: COLOR_PALETTE[0], photo:'', aboutMe:'', location:'', favoriteSong:'', lifeVerse:'', visibility:'friends' }
   };
 }
@@ -1575,6 +1712,7 @@ let selectedDate = todayStr();
 let deferredInstallPrompt = null;
 let journalFilter = 'all'; // 'all' | 'prophetic' | 'prayer' | 'revelation'
 let journalDraftTag = JOURNAL_TAGS[0];
+let journalSearchQuery = '';
 let feedbackType = 'suggestion'; // 'suggestion' | 'bug'
 let sidebarOpen = false; // mobile "More" slide-in panel (Journal/Memorize/Friends)
 let checkinEditing = false; // lets you reopen the mood picker after already answering for the date
@@ -2010,6 +2148,46 @@ function addMemoryVerse(reference, text){
   });
   saveState(); render();
 }
+/* ---------------- Spaced repetition (v32) ----------------
+   "Reviewed today" was a checklist, not a method. Each verse now climbs a ladder of stretching
+   intervals — review it successfully and the next review moves further out; miss it and it steps
+   back down. Review happens through a small test (fill-in-the-blank when the verse text is
+   saved, recite-from-memory otherwise), not a self-reported button. */
+const SRS_INTERVALS = [1, 3, 7, 21, 45, 90]; // days until next review, by level
+function daysBetween(isoA, isoB){
+  const [y1,m1,d1] = isoA.split('-').map(Number);
+  const [y2,m2,d2] = isoB.split('-').map(Number);
+  return Math.round((Date.UTC(y2,m2-1,d2) - Date.UTC(y1,m1-1,d1)) / 86400000);
+}
+function verseDueInDays(v){
+  if(!v.lastReviewed) return 0; // never reviewed: due now
+  const interval = SRS_INTERVALS[Math.min(v.srsLevel||0, SRS_INTERVALS.length-1)];
+  return Math.max(0, interval - daysBetween(v.lastReviewed, todayStr()));
+}
+function verseIsDue(v){ return v.status !== 'mastered' && verseDueInDays(v) === 0; }
+function dueVerseCount(){ return (state.memorization||[]).filter(verseIsDue).length; }
+// Blank out every third word (keeping punctuation-ish shape) for the fill-in test.
+function blankVerseText(text){
+  const words = (text||'').split(/\s+/);
+  return words.map((w,i)=> (i % 3 === 2 && w.length > 2) ? '_'.repeat(Math.min(w.length, 8)) : w).join(' ');
+}
+let memTestId = null;
+let memTestRevealed = false;
+function startMemTest(id){ memTestId = id; memTestRevealed = false; render(); }
+function finishMemTest(id, gotIt){
+  const v = state.memorization.find(m=>m.id===id);
+  memTestId = null; memTestRevealed = false;
+  if(!v) { render(); return; }
+  v.reviewCount = (v.reviewCount||0)+1;
+  v.lastReviewed = todayStr();
+  const lvl = v.srsLevel||0;
+  v.srsLevel = gotIt ? Math.min(lvl+1, SRS_INTERVALS.length-1) : Math.max(0, lvl-1);
+  if(gotIt) hapticTap('Light');
+  saveState(); render();
+  showToast(gotIt
+    ? `Next review in ${SRS_INTERVALS[v.srsLevel]} day${SRS_INTERVALS[v.srsLevel]===1?'':'s'}.`
+    : 'No shame — it comes back sooner now.', { tone: gotIt ? 'good' : 'default' });
+}
 function reviewMemoryVerse(id){
   const v = state.memorization.find(m=>m.id===id);
   if(!v) return;
@@ -2288,6 +2466,41 @@ function setReadingApp(appId){
   if(!READING_APPS[appId]) return;
   state.readingApp = appId;
   saveState(); render();
+}
+
+/* ---------------- Site owner ----------------
+   The account signed in with this email is the app's owner: sees the feedback inbox in Settings
+   (backed by rules v21, which grant read/delete on the feedback collection to this exact email
+   via request.auth.token.email — no client-side check could protect anything by itself). */
+const OWNER_EMAIL = 'lukejeffery98@protonmail.com';
+function isOwner(){
+  return !!(currentUser && currentUser.email && currentUser.email.toLowerCase() === OWNER_EMAIL);
+}
+let ownerFeedbackItems = [];
+let ownerFeedbackLoading = false;
+let ownerFeedbackLoaded = false;
+let ownerFeedbackError = '';
+function loadOwnerFeedback(force){
+  if(!fbDb || !isOwner()) return;
+  if(ownerFeedbackLoaded && !force) return;
+  ownerFeedbackLoading = true; ownerFeedbackError = ''; render();
+  fbDb.collection('feedback').orderBy('createdAt','desc').limit(100).get().then(snap=>{
+    ownerFeedbackItems = snap.docs.map(d=>({ id:d.id, ...d.data() }));
+    ownerFeedbackLoading = false; ownerFeedbackLoaded = true; render();
+  }).catch(err=>{
+    ownerFeedbackLoading = false;
+    ownerFeedbackError = (err && err.code === 'permission-denied')
+      ? 'Permission denied — deploy the v21 Firestore rules to unlock the owner inbox.'
+      : 'Could not load submissions — check your connection.';
+    render();
+  });
+}
+function deleteOwnerFeedback(id){
+  if(!fbDb || !isOwner()) return;
+  fbDb.collection('feedback').doc(id).delete().then(()=>{
+    ownerFeedbackItems = ownerFeedbackItems.filter(f=>f.id!==id);
+    render();
+  }).catch(()=>{ showToast("Couldn't delete that submission."); });
 }
 
 /* ---------------- Feedback (bug reports / suggestions) ---------------- */
@@ -2616,6 +2829,58 @@ function doPasswordReset(email){
     .catch(err => { authError = friendlyAuthError(err); })
     .finally(() => { authBusy = false; render(); });
 }
+/* ---------------- Delete my account (App Store requirement + basic respect) ----------------
+   Best-effort, in order: leave/delete groups (owned groups are deleted outright, since a group
+   can't outlive its owner role model), remove friend links, remove posts, remove the public
+   directory/activity/email-index entries, remove the synced userProgress doc, then delete the
+   Firebase Auth user itself. If Firebase demands a recent login for that last step, the person
+   is told to sign out, sign back in, and run it again — their data is already gone by then.
+   DM threads are left in place (rules forbid deleting them) so the OTHER person keeps their own
+   side of past conversations, matching how messaging apps generally behave. */
+let accountDeleteBusy = false;
+function deleteMyAccount(){
+  if(!fbDb || !fbAuth || !currentUser || accountDeleteBusy) return;
+  customConfirm('Delete your account permanently? Your reading history, journal, profile, friendships, and groups you own will all be erased. This cannot be undone.', { confirmLabel:'Delete forever', danger:true }).then(ok=>{
+    if(!ok) return;
+    accountDeleteBusy = true; render();
+    const me = currentUser.uid;
+    const emailKey = currentUser.email ? sanitizeEmailKey(currentUser.email) : null;
+    if(fbUnsub){ fbUnsub(); fbUnsub = null; } // stop state sync re-creating docs mid-delete
+    const ownedGroupIds = myGroupIds.filter(id=> myGroupRoles[id]==='owner');
+    const memberGroupIds = myGroupIds.filter(id=> myGroupRoles[id]!=='owner');
+    Promise.all(ownedGroupIds.map(id=> deleteGroup(id).catch(()=>{})))
+      .then(()=> Promise.all(memberGroupIds.map(id=>
+        fbDb.collection('groups').doc(id).collection('members').doc(me).delete().catch(()=>{}))))
+      .then(()=> fbDb.collection('friendLinks').where('userIds','array-contains', me).get()
+        .then(snap=> Promise.all(snap.docs.map(d=> d.ref.delete().catch(()=>{})))).catch(()=>{}))
+      .then(()=> fbDb.collection('users').doc(me).collection('posts').get()
+        .then(snap=> Promise.all(snap.docs.map(d=> d.ref.delete().catch(()=>{})))).catch(()=>{}))
+      .then(()=> Promise.all([
+        fbDb.collection('publicActivity').doc(me).delete().catch(()=>{}),
+        fbDb.collection('userDirectory').doc(me).delete().catch(()=>{}),
+        emailKey ? fbDb.collection('emailIndex').doc(emailKey).delete().catch(()=>{}) : Promise.resolve(),
+        fbDb.collection('userProgress').doc(me).delete().catch(()=>{})
+      ]))
+      .then(()=> fbAuth.currentUser.delete())
+      .then(()=>{
+        accountDeleteBusy = false;
+        try{ localStorage.removeItem(AUTH_CHOICE_KEY); }catch(e){}
+        state = defaultState();
+        saveState({skipSync:true});
+        customAlert('Your account and data have been deleted. Thank you for cultivating with us.');
+        render();
+      })
+      .catch(err=>{
+        accountDeleteBusy = false;
+        if(err && err.code === 'auth/requires-recent-login'){
+          customAlert('Your data has been removed, but Firebase requires a recent sign-in to delete the account itself. Please log out, log back in, and press Delete my account once more to finish.');
+        } else {
+          customAlert('Something went wrong finishing the deletion — please try again.');
+        }
+        render();
+      });
+  });
+}
 function doLogOut(){
   if(!fbAuth) return;
   fbAuth.signOut().then(() => {
@@ -2623,6 +2888,8 @@ function doLogOut(){
     if(friendsUnsub){ friendsUnsub(); friendsUnsub = null; }
     if(myGroupsUnsub){ myGroupsUnsub(); myGroupsUnsub = null; }
     if(mentionsUnsub){ mentionsUnsub(); mentionsUnsub = null; myMentions = []; }
+    if(dmThreadsUnsub){ dmThreadsUnsub(); dmThreadsUnsub = null; dmThreads = []; }
+    closeDm();
     closeGroup();
     teardownAdminJoinRequestSubs();
     friendLinksData = []; friendActivityCache = {};
@@ -2698,6 +2965,7 @@ function initFirebase(){
         subscribeFriends();
         subscribeMyGroups();
         subscribeMentions();
+        subscribeDmThreads();
         if(pendingGroupInvite){
           const inv = pendingGroupInvite; pendingGroupInvite = null;
           activeTab = 'community'; communitySubTab = 'groups';
@@ -3424,6 +3692,15 @@ function notifItems(){
       action:()=>{ notifPanelOpen=false; communitySubTab='friends'; switchToTab('community'); }
     });
   });
+  // Unread direct messages — one item per thread with something new; disappears on read.
+  dmThreads.filter(t=> t.lastSenderUid && t.lastSenderUid !== myUid && (t.updatedAt||0) > ((t.reads && t.reads[myUid]) || 0)).forEach(t=>{
+    const otherUid = (t.userIds||[]).find(u=>u!==myUid);
+    items.push({
+      id:'dm:'+t.id+':'+(t.updatedAt||0), iconName:'chat', text:'New message from '+dmOtherName(t),
+      sub:(t.lastMessage||'').slice(0,60) || 'Tap to open the conversation', time:t.updatedAt||0,
+      action:()=>{ notifPanelOpen=false; communitySubTab='friends'; switchToTab('community'); openDmWith(otherUid); }
+    });
+  });
   // @mentions in group discussions (from the collection-group listener above).
   myMentions.forEach(m=>{
     const g = groupsDirectory.find(x=>x.id===m.groupId);
@@ -3433,12 +3710,12 @@ function notifItems(){
       action:()=>{ notifPanelOpen=false; communitySubTab='groups'; switchToTab('community'); openGroup(m.groupId); }
     });
   });
-  // Memorization: verses still being learned, none reviewed yet today — one quiet nudge per day.
-  const learningVerses = (state.memorization||[]).filter(v=>v.status!=='mastered');
-  if(learningVerses.length && !learningVerses.some(v=>v.lastReviewed === todayStr())){
+  // Memorization: verses DUE under the spaced-repetition schedule — one quiet nudge per day.
+  const dueVerses = (state.memorization||[]).filter(verseIsDue);
+  if(dueVerses.length){
     items.push({
       id:'memorize:'+todayStr(), iconName:'bookmark',
-      text: learningVerses.length===1 ? 'A verse is waiting for review' : learningVerses.length+' verses are waiting for review',
+      text: dueVerses.length===1 ? 'A verse is due for review' : dueVerses.length+' verses are due for review',
       sub:'Tap to review in Memorize', time: Date.now(),
       action:()=>{ notifPanelOpen=false; switchToTab('memorize'); }
     });
@@ -3635,6 +3912,12 @@ let groupDraftChaptersPerWeek = 5;
 // studying" line for studies built around a book beyond the Bible (e.g. Sit, Walk, Stand).
 let groupDraftSessions = [];
 let groupDraftStudyBook = '';
+// Optional banner image (base64, downscaled client-side) — gives the group page a hub feel.
+// Deliberately NOT saved into the localStorage wizard draft (base64 images blow past quota fast);
+// everything else about the draft survives, the banner just needs re-picking if you closed midway.
+let groupDraftBanner = '';
+let groupBannerError = '';
+const GROUP_BANNER_MAX_LEN = 400000;
 function blankDraftSession(){ return { title:'', reading:'', note:'' }; }
 const GROUP_WIZARD_DRAFT_KEY = 'cultivateGroupWizardDraft';
 // The step order is dynamic: "paceDetail" (chapters/week) only exists when Paced is chosen, and
@@ -3723,6 +4006,7 @@ function createGroup(fields){
     planMode: isSessions ? 'sessions' : (fields.planMode === 'paced' ? 'paced' : 'free'),
     outline,
     sessions,
+    banner: (groupDraftBanner && groupDraftBanner.length <= GROUP_BANNER_MAX_LEN) ? groupDraftBanner : null,
     studyBook: isSessions ? (groupDraftStudyBook||'').trim().slice(0,120) || null : null,
     chaptersPerWeek: fields.planMode === 'paced' ? Math.max(1, Number(fields.chaptersPerWeek)||5) : null,
     startDate: fields.planMode === 'paced' ? todayStr() : null,
@@ -3736,13 +4020,20 @@ function createGroup(fields){
     groupCreateBusy = false; groupCreateOpen = false; groupDraftBooks = [];
     groupWizardStep = 0; groupWizardError = '';
     groupDraftName = ''; groupDraftDescription = ''; groupDraftPlanMode = 'free'; groupDraftChaptersPerWeek = 5;
-    groupDraftSessions = []; groupDraftStudyBook = '';
+    groupDraftSessions = []; groupDraftStudyBook = ''; groupDraftBanner = ''; groupBannerError = '';
     clearGroupWizardDraft();
     // Add it to groupsDirectory immediately from the object already in hand, rather than only
     // waiting on loadGroupsDirectory(true)'s round trip — this is the exact data the bulk list()
     // query would eventually return anyway, so there's nothing to gain from waiting for it, and
     // it means "My Groups" is correct even in the window before that request resolves.
     if(!groupsDirectory.some(g=>g.id===groupRef.id)) groupsDirectory.push({ id: groupRef.id, ...groupDoc });
+    // Apply the owner's own membership IMMEDIATELY and persistently (localStorage-cached via
+    // applyMyGroups) — the group must appear under "My Groups" the instant it's created, with no
+    // dependence on the collection-group listener round-trip, rules deployment, or index state.
+    applyMyGroups(
+      myGroupIds.includes(groupRef.id) ? myGroupIds : myGroupIds.concat([groupRef.id]),
+      Object.assign({}, myGroupRoles, { [groupRef.id]: 'owner' })
+    );
     loadGroupsDirectory(true);
     openGroup(groupRef.id);
   }).catch(err=>{
@@ -3808,7 +4099,15 @@ function joinGroupViaInviteCode(groupId, code){
       joinedAt: Date.now(), joinedViaCode: code
     });
   }).then(()=> fbDb.collection('groups').doc(groupId).update({ memberCount: firebase.firestore.FieldValue.increment(1) }))
-    .then(()=>{ groupJoinBusy = false; openGroup(groupId); })
+    .then(()=>{
+      groupJoinBusy = false;
+      // Same instant-membership treatment as createGroup — never wait on the listener.
+      applyMyGroups(
+        myGroupIds.includes(groupId) ? myGroupIds : myGroupIds.concat([groupId]),
+        Object.assign({}, myGroupRoles, { [groupId]: myGroupRoles[groupId] || 'member' })
+      );
+      openGroup(groupId);
+    })
     .catch(err=>{ groupJoinBusy = false; groupJoinError = (err&&err.message) || 'Could not join that group.'; render(); });
 }
 function approveJoinRequest(groupId, uid, displayName){
@@ -3985,6 +4284,60 @@ function sendGroupMessage(groupId, text){
   }).catch(()=>{});
 }
 
+/* ---------------- Daily devotion reminder (opt-in) ----------------
+   "Your morning devotion is ready." at a time the person chooses. Two honest tiers:
+   - iOS app (Capacitor): a real, repeating LOCAL notification scheduled natively — fires daily
+     whether or not the app is open. No server needed.
+   - Web: the platform can't wake a closed tab without a push server, so the reminder fires via
+     the Notification API only while Cultivate is open (checked every few minutes + on load).
+     The Settings copy says exactly that, no pretending. */
+const DAILY_REMINDER_NATIVE_ID = 7001;
+const DAILY_REMINDER_SHOWN_KEY = 'cultivateDailyReminderShownDate';
+function dailyReminderBody(hour){
+  if(hour < 12) return 'Your morning devotion is ready.';
+  if(hour < 18) return 'Your midday moment with the Word is ready.';
+  return 'Your evening devotion is ready.';
+}
+function applyDailyReminderSchedule(){
+  const cfg = state.dailyReminder || { enabled:false, hour:7 };
+  const ln = capacitorPlugin('LocalNotifications');
+  if(!ln) return; // web path handled by checkDailyReminderWeb below
+  try{
+    ln.cancel({ notifications: [{ id: DAILY_REMINDER_NATIVE_ID }] }).catch(()=>{});
+    if(cfg.enabled){
+      ln.requestPermissions().then(()=>{
+        ln.schedule({ notifications: [{
+          id: DAILY_REMINDER_NATIVE_ID,
+          title: 'Cultivate',
+          body: dailyReminderBody(cfg.hour),
+          schedule: { on: { hour: cfg.hour, minute: 0 }, allowWhileIdle: true }
+        }]}).catch(()=>{});
+      }).catch(()=>{});
+    }
+  }catch(e){}
+}
+function checkDailyReminderWeb(){
+  const cfg = state.dailyReminder || { enabled:false, hour:7 };
+  if(!cfg.enabled || capacitorPlugin('LocalNotifications')) return;
+  if(typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+  const now = new Date();
+  if(now.getHours() < cfg.hour) return;
+  let shown = null;
+  try{ shown = localStorage.getItem(DAILY_REMINDER_SHOWN_KEY); }catch(e){}
+  if(shown === todayStr()) return;
+  try{
+    new Notification('Cultivate', { body: dailyReminderBody(cfg.hour), icon: 'icon-192.png' });
+    localStorage.setItem(DAILY_REMINDER_SHOWN_KEY, todayStr());
+  }catch(e){}
+}
+if(typeof setInterval !== 'undefined'){
+  setInterval(checkDailyReminderWeb, 5 * 60000);
+  setTimeout(checkDailyReminderWeb, 4000);
+  // Re-assert the native schedule at boot (idempotent: cancel + reschedule) so it survives
+  // reinstalls/OS cleanups without the person having to re-toggle the setting.
+  setTimeout(applyDailyReminderSchedule, 3000);
+}
+
 /* ---------------- Check-in reminders (push notifications) ---------------- */
 let notifStatus = 'unknown'; // unknown | unsupported | default | denied | granted
 function refreshNotifStatus(){
@@ -4117,8 +4470,8 @@ function render(){
   // group) slides in from the right like a native navigation push; switching between top-level
   // tabs just cross-fades. Anything that re-renders the same view (typing, a background sync
   // completing) gets no animation class at all, so it stays instant as before.
-  const isDrillIn = ownProfileOpen || !!viewedProfileUid || (activeTab==='community' && !!activeGroupId);
-  const viewKey = activeTab + (ownProfileOpen ? ':ownprofile' : '') + (viewedProfileUid ? ':profile:'+viewedProfileUid : '') + (activeTab==='community' && activeGroupId ? ':group:'+activeGroupId : '');
+  const isDrillIn = ownProfileOpen || !!viewedProfileUid || (activeTab==='community' && (!!activeGroupId || !!activeDmUid));
+  const viewKey = activeTab + (ownProfileOpen ? ':ownprofile' : '') + (viewedProfileUid ? ':profile:'+viewedProfileUid : '') + (activeTab==='community' && activeGroupId ? ':group:'+activeGroupId : '') + (activeTab==='community' && activeDmUid ? ':dm:'+activeDmUid : '');
   const viewChanged = viewKey !== lastRenderedViewKey;
   lastRenderedViewKey = viewKey;
   const viewAnimClass = viewChanged ? (isDrillIn ? 'view-enter-slide' : 'view-enter-fade') : '';
@@ -4143,6 +4496,7 @@ function render(){
       <button type="button" class="fab-add-post" id="openPostComposerBtn" aria-label="New update">${icon('plus',24)}</button>` : ''}
     ${(!ownProfileOpen && activeTab==='today') ? `
       <button type="button" class="fab-add-post" id="openExtraSheetBtn" aria-label="Log extra reading" title="Log reading outside your plan">${icon('plus',24)}</button>` : ''}
+    ${renderReaderOverlay()}
     ${renderIntroOverlay()}
   `;
   attachEvents();
@@ -4798,12 +5152,13 @@ function renderToday(){
 // still being learned and none of them has been reviewed yet today; vanishes the moment you
 // review one (lastReviewed stamps today) so it never nags twice.
 function renderMemorizeReminder(){
-  const learning = (state.memorization||[]).filter(m=>m.status!=='mastered');
-  if(!learning.length) return '';
-  if(learning.some(m=>m.lastReviewed === todayStr())) return '';
-  const label = learning.length===1
-    ? `&ldquo;${escapeHtml(learning[0].reference)}&rdquo; is waiting for review`
-    : `${learning.length} verses are waiting for review`;
+  // Spaced-repetition aware (v32): only verses actually DUE today appear — a verse reviewed
+  // yesterday with a 7-day interval stays quiet for six more days.
+  const due = (state.memorization||[]).filter(verseIsDue);
+  if(!due.length) return '';
+  const label = due.length===1
+    ? `&ldquo;${escapeHtml(due[0].reference)}&rdquo; is due for review`
+    : `${due.length} verses are due for review`;
   return `
     <button type="button" class="memorize-reminder" id="memorizeReminderBtn">
       ${icon('bookmark',14)} <span>${label}</span> <span class="mem-rem-go">Review &rarr;</span>
@@ -4947,9 +5302,31 @@ function renderJournal(){
     </div>`;
 
   const oneYearAgoHtml = renderOneYearAgo();
-  const entries = journalSorted().filter(e => journalFilter==='all' || e.tag===journalFilter);
-  const filterHtml = `
-    <div class="toolbar" style="margin-top:24px;">
+  const q = journalSearchQuery.trim().toLowerCase();
+  const matchesSearch = e => !q ||
+    (e.title||'').toLowerCase().includes(q) ||
+    (e.content||'').toLowerCase().includes(q) ||
+    (e.reference ? formatReference(e.reference).toLowerCase().includes(q) : false) ||
+    (e.tag||'').toLowerCase().includes(q);
+  const entries = journalSorted().filter(e => (journalFilter==='all' || e.tag===journalFilter) && matchesSearch(e));
+  // Searching also surfaces matching READING LOG entries ("when did I read Romans 8?") —
+  // journal and log are one memory to the person, so search treats them that way.
+  const logMatches = !q ? [] : state.log
+    .filter(e=> e.status==='complete' && (e.book + ' ' + e.chapter).toLowerCase().includes(q))
+    .sort((a,b)=> b.date.localeCompare(a.date))
+    .slice(0, 25);
+  const searchHtml = `
+    <div class="toolbar" style="margin-top:24px; margin-bottom:0;">
+      <input type="text" id="journalSearchInput" placeholder="Search entries, references, readings…" value="${escapeHtml(journalSearchQuery)}" style="flex:1; min-width:200px; padding:9px 12px; border:1px solid var(--line); border-radius:999px; font-size:0.9rem; font-family:inherit;">
+      ${q ? `<button class="btn small" id="clearJournalSearchBtn">Clear</button>` : ''}
+    </div>
+    ${logMatches.length ? `
+      <div class="settings-box" style="max-width:none; margin-top:12px;">
+        <h3 style="font-size:0.9rem;">${icon('calendar',14)} In your reading log</h3>
+        <div class="today-log-list">${logMatches.map(e=>`<div>${e.book} ${e.chapter||''} &mdash; ${fmtDate(e.date)}</div>`).join('')}</div>
+      </div>` : ''}`;
+  const filterHtml = searchHtml + `
+    <div class="toolbar" style="margin-top:12px;">
       <span style="font-size:0.85rem; color:var(--ink-soft);">Timeline:</span>
       ${['all',...JOURNAL_TAGS].map(t=>`<button class="btn small ${journalFilter===t?'primary':''}" data-journal-filter="${t}">${t==='all'?'All':JOURNAL_TAG_LABELS[t]}</button>`).join('')}
     </div>`;
@@ -4957,7 +5334,7 @@ function renderJournal(){
   if(!entries.length){
     return formHtml + oneYearAgoHtml + filterHtml + (
       state.journal.length
-        ? `<div class="empty-note">No entries match this filter.</div>`
+        ? `<div class="empty-note">${q ? 'No entries match that search.' : 'No entries match this filter.'}</div>`
         : emptyState('notebook', 'No journal entries yet — write down what you sense, pray, or receive as you read, and it\'ll show up here.')
     );
   }
@@ -5009,14 +5386,28 @@ function renderMemorize(){
   const mastered = state.memorization.filter(m=>m.status==='mastered');
   const cardHtml = m => `
     <div class="card" style="--cat-color:${m.status==='mastered' ? '#3f7a4f' : '#7a4b2e'}; margin-bottom:12px;">
-      <div class="cat-name">${m.reference}</div>
-      ${m.text ? `<div style="font-size:0.88rem; color:var(--ink-soft); margin:6px 0;">${m.text}</div>` : ''}
-      <div class="meta">${m.status==='mastered' ? 'Mastered' : `Reviewed ${m.reviewCount||0} time${m.reviewCount===1?'':'s'}${m.lastReviewed ? ' · last on ' + fmtDate(m.lastReviewed) : ''}`}</div>
-      <div class="actions">
-        ${m.status!=='mastered' ? `<button class="btn primary small" data-mem-review="${m.id}">Reviewed today</button>` : ''}
-        <button class="btn small" data-mem-toggle="${m.id}">${m.status==='mastered' ? 'Move back to learning' : 'Mark mastered'}</button>
-        <button class="btn small danger" data-mem-delete="${m.id}">Remove</button>
-      </div>
+      <div class="cat-name">${m.reference}${m.status!=='mastered' ? (verseIsDue(m) ? ' <span class="status-pill skipped" style="margin:0; font-size:0.68rem;">Due for review</span>' : ` <span style="font-size:0.72rem; color:var(--ink-soft); font-weight:500;">next in ${verseDueInDays(m)} day${verseDueInDays(m)===1?'':'s'}</span>`) : ''}</div>
+      ${memTestId === m.id ? `
+        <div class="mem-test">
+          ${m.text ? `
+            <div style="font-size:0.92rem; line-height:1.7; margin:8px 0;">${memTestRevealed ? escapeHtml(m.text) : escapeHtml(blankVerseText(m.text))}</div>
+            <p style="font-size:0.78rem; color:var(--ink-soft); margin:0 0 10px;">${memTestRevealed ? 'How did you do?' : 'Say the missing words out loud (or in your heart), then reveal.'}</p>` : `
+            <p style="font-size:0.88rem; margin:8px 0 10px;">${memTestRevealed ? 'How did you do?' : `Recite <strong>${m.reference}</strong> from memory, then reveal to check yourself.`}</p>`}
+          <div class="actions">
+            ${memTestRevealed ? `
+              <button class="btn primary small" data-mem-got="${m.id}">${icon('check',13)} Got it</button>
+              <button class="btn small" data-mem-missed="${m.id}">Missed some</button>` : `
+              <button class="btn primary small" data-mem-reveal="${m.id}">Reveal</button>
+              <button class="btn small" data-mem-cancel="${m.id}">Not now</button>`}
+          </div>
+        </div>` : `
+        ${m.text ? `<div style="font-size:0.88rem; color:var(--ink-soft); margin:6px 0;">${m.text}</div>` : ''}
+        <div class="meta">${m.status==='mastered' ? 'Mastered' : `Level ${(m.srsLevel||0)+1}/${SRS_INTERVALS.length} &middot; reviewed ${m.reviewCount||0} time${m.reviewCount===1?'':'s'}${m.lastReviewed ? ' · last on ' + fmtDate(m.lastReviewed) : ''}`}</div>
+        <div class="actions">
+          ${m.status!=='mastered' ? `<button class="btn primary small" data-mem-test="${m.id}">${verseIsDue(m) ? 'Review now' : 'Review early'}</button>` : ''}
+          <button class="btn small" data-mem-toggle="${m.id}">${m.status==='mastered' ? 'Move back to learning' : 'Mark mastered'}</button>
+          <button class="btn small danger" data-mem-delete="${m.id}">Remove</button>
+        </div>`}
     </div>`;
   if(!state.memorization.length){
     return formHtml + emptyState('bookmark', 'No verses yet — add one above to start memorizing, and it\'ll show up here to track your review streak.');
@@ -5026,6 +5417,150 @@ function renderMemorize(){
     ${learning.length ? learning.map(cardHtml).join('') : `<div class="empty-note">Nothing in progress — add a verse above.</div>`}
     ${mastered.length ? `<h3 style="margin-top:24px;">Mastered (${mastered.length})</h3>${mastered.map(cardHtml).join('')}` : ''}
   `;
+}
+
+/* ---------------- Direct messages (friends only) ----------------
+   One thread per friend pair at dmThreads/{uidA_uidB} (uids sorted — the SAME id format as
+   friendLinks, which is what lets the rules check friendship with a single get() on the matching
+   friendLinks doc: no accepted link, no thread, no messages, ever — server-enforced, not just UI).
+   The thread doc carries lastMessage/lastSenderUid/updatedAt plus a per-user reads map and a
+   names map (each sender refreshes their own display name on send), so the inbox list renders
+   with zero extra lookups. Unread = updatedAt newer than my read stamp and someone else sent. */
+let dmThreads = [];
+let dmThreadsUnsub = null;
+let activeDmUid = null;
+let activeDmMessages = [];
+let dmMessagesUnsub = null;
+let dmSendBusy = false;
+function dmThreadIdFor(a, b){ return [a,b].sort().join('_'); }
+function subscribeDmThreads(){
+  if(!fbDb || !currentUser) return;
+  if(dmThreadsUnsub){ dmThreadsUnsub(); dmThreadsUnsub = null; }
+  dmThreadsUnsub = fbDb.collection('dmThreads').where('userIds','array-contains', currentUser.uid)
+    .onSnapshot(snap=>{
+      dmThreads = snap.docs.map(d=>({ id:d.id, ...d.data() }))
+        .sort((a,b)=> (b.updatedAt||0)-(a.updatedAt||0));
+      render();
+    }, ()=>{ /* rules not deployed yet — Messages section just stays empty */ });
+}
+function dmUnreadCount(){
+  if(!currentUser) return 0;
+  return dmThreads.filter(t=>
+    t.lastSenderUid && t.lastSenderUid !== currentUser.uid &&
+    (t.updatedAt||0) > ((t.reads && t.reads[currentUser.uid]) || 0)
+  ).length;
+}
+function markDmRead(threadId){
+  if(!fbDb || !currentUser) return;
+  fbDb.collection('dmThreads').doc(threadId).set({ reads: { [currentUser.uid]: Date.now() } }, { merge:true }).catch(()=>{});
+}
+function openDmWith(uid){
+  if(!currentUser || uid === currentUser.uid) return;
+  closeDm();
+  activeDmUid = uid;
+  scrollAppToTop();
+  render();
+  if(!fbDb) return;
+  const threadId = dmThreadIdFor(currentUser.uid, uid);
+  dmMessagesUnsub = fbDb.collection('dmThreads').doc(threadId).collection('messages')
+    .orderBy('createdAt','asc').limitToLast(100)
+    .onSnapshot(snap=>{
+      activeDmMessages = snap.docs.map(d=>({ id:d.id, ...d.data() }));
+      markDmRead(threadId);
+      render();
+      const box = document.getElementById('dmScrollBox');
+      if(box) box.scrollTop = box.scrollHeight;
+    }, ()=>{ activeDmMessages = []; render(); });
+}
+function closeDm(){
+  if(dmMessagesUnsub){ dmMessagesUnsub(); dmMessagesUnsub = null; }
+  activeDmUid = null; activeDmMessages = [];
+}
+function sendDm(text){
+  const trimmed = (text||'').trim();
+  if(!trimmed || !fbDb || !currentUser || !activeDmUid || dmSendBusy) return;
+  dmSendBusy = true;
+  const me = currentUser.uid, other = activeDmUid;
+  const threadId = dmThreadIdFor(me, other);
+  const threadRef = fbDb.collection('dmThreads').doc(threadId);
+  const now = Date.now();
+  threadRef.set({
+    userIds: [me, other].sort(),
+    lastMessage: trimmed.slice(0,140),
+    lastSenderUid: me,
+    updatedAt: now,
+    reads: { [me]: now },
+    names: { [me]: displayNameOr(currentUser.email.split('@')[0]) }
+  }, { merge:true })
+  .then(()=> threadRef.collection('messages').add({ senderUid: me, text: trimmed.slice(0,2000), createdAt: now }))
+  .then(()=>{
+    dmSendBusy = false;
+    const inputEl = document.getElementById('dmInput');
+    if(inputEl){ inputEl.blur(); }
+    dmDraftText = '';
+    render();
+  })
+  .catch(err=>{
+    dmSendBusy = false;
+    showToast((err && err.code === 'permission-denied')
+      ? 'You can only message accepted friends.'
+      : "Couldn't send that message — try again.", { tone:'bad' });
+    render();
+  });
+}
+let dmDraftText = '';
+function dmOtherName(t){
+  if(!currentUser) return 'Friend';
+  const otherUid = (t.userIds||[]).find(u=>u!==currentUser.uid);
+  return (t.names && t.names[otherUid]) || (friendActivityCache[otherUid] && friendActivityCache[otherUid].displayName) || 'Friend';
+}
+function renderDmThreadList(){
+  if(!currentUser || !dmThreads.length) return '';
+  const rows = dmThreads.map(t=>{
+    const otherUid = (t.userIds||[]).find(u=>u!==currentUser.uid);
+    const name = dmOtherName(t);
+    const unread = t.lastSenderUid !== currentUser.uid && (t.updatedAt||0) > ((t.reads && t.reads[currentUser.uid]) || 0);
+    return `
+      <button type="button" class="dm-thread-row ${unread?'unread':''}" data-dm-uid="${otherUid}">
+        ${renderAvatarHtml({displayName:name, color:colorForName(name)}, 38)}
+        <span class="dm-thread-text">
+          <span class="dm-thread-name">${escapeHtml(name)}${unread ? ' <span class="dm-unread-dot"></span>' : ''}</span>
+          <span class="dm-thread-preview">${t.lastSenderUid===currentUser.uid ? 'You: ' : ''}${escapeHtml(t.lastMessage||'')}</span>
+        </span>
+        <span class="dm-thread-time">${t.updatedAt ? timeAgo(t.updatedAt) : ''}</span>
+      </button>`;
+  }).join('');
+  return `
+    <div class="settings-box">
+      <h3>${icon('chat',16)} Messages${dmUnreadCount() ? ` <span class="notif-badge" style="position:static; margin-left:4px;">${dmUnreadCount()}</span>` : ''}</h3>
+      <div class="dm-thread-list">${rows}</div>
+    </div>`;
+}
+function renderDmConversation(){
+  const name = (function(){
+    const t = dmThreads.find(x=>x.id === dmThreadIdFor(currentUser.uid, activeDmUid));
+    if(t) return dmOtherName(t);
+    return (friendActivityCache[activeDmUid] && friendActivityCache[activeDmUid].displayName) || 'Friend';
+  })();
+  const msgs = activeDmMessages.map(m=>`
+    <div class="dm-bubble-row ${m.senderUid===currentUser.uid?'mine':''}">
+      <div class="dm-bubble">${escapeHtml(m.text||'')}<span class="dm-bubble-time">${m.createdAt ? new Date(m.createdAt).toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'}) : ''}</span></div>
+    </div>`).join('');
+  return `
+    <div class="settings-box" style="max-width:none;">
+      <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
+        <button class="btn small back-btn" id="dmBackBtn">${icon('back',16)} Back</button>
+        ${renderAvatarHtml({displayName:name, color:colorForName(name)}, 34)}
+        <strong>${escapeHtml(name)}</strong>
+      </div>
+      <div id="dmScrollBox" class="dm-scroll">
+        ${msgs || `<div class="empty-note" style="text-align:center;">No messages yet — say hello.</div>`}
+      </div>
+      <div style="display:flex; gap:8px; margin-top:10px;">
+        <input type="text" id="dmInput" placeholder="Message ${escapeHtml(name)}…" value="${escapeHtml(dmDraftText)}" style="flex:1; padding:9px 10px; border:1px solid var(--line); border-radius:999px; font-size:0.9rem; font-family:inherit;">
+        <button class="btn primary" id="dmSendBtn" ${dmSendBusy?'disabled':''}>Send</button>
+      </div>
+    </div>`;
 }
 
 /* ---------------- Community (Friends + Groups, unified tab) ----------------
@@ -5121,8 +5656,9 @@ function renderCommunity(){
       <button class="${!showingGroups?'active':''}" data-community-subtab="friends">${icon('userPlus',14)} Friends</button>
       <button class="${showingGroups?'active':''}" data-community-subtab="groups">${icon('users',14)} Groups</button>
     </div>`;
+  if(activeDmUid) return renderDmConversation();
   if(showingGroups) return subtabsHtml + renderGroups();
-  return subtabsHtml + renderCommunityFeed() + renderFriends() + renderPostComposerSheet();
+  return subtabsHtml + renderDmThreadList() + renderCommunityFeed() + renderFriends() + renderPostComposerSheet();
 }
 
 function renderCommunityFeed(){
@@ -5157,34 +5693,36 @@ function renderCommunityPostCard(p){
       ${p.photo ? `<img src="${p.photo}" class="community-post-photo" alt="">` : ''}
     </div>`;
 }
+// Centered modal (was a bottom sheet) — same front-and-center placement as the app's dialogs,
+// with its entrance animation gated to the render where it actually opens.
+let lastRenderedComposerOpen = false;
 function renderPostComposerSheet(){
+  if(!postComposerOpen){ lastRenderedComposerOpen = false; return ''; }
+  const composerIsNew = !lastRenderedComposerOpen;
+  lastRenderedComposerOpen = true;
   return `
-    <div id="postComposerBackdrop" class="sheet-backdrop ${postComposerOpen?'open':''}"></div>
-    <div class="sheet-panel ${postComposerOpen?'open':''}">
-      <div class="sheet-handle"></div>
-      ${postComposerOpen ? `
-        <div class="sheet-body">
-          <div class="sheet-header">
-            <h3>${icon('plus',16)} New update</h3>
-            <button type="button" class="sheet-close-btn" id="closePostComposerBtn" aria-label="Close">${icon('close',18)}</button>
-          </div>
-          ${postCreateError ? `<div class="auth-error">${escapeHtml(postCreateError)}</div>` : ''}
-          <p style="font-size:0.82rem; color:var(--ink-soft); margin-top:-6px;">${state.profile.visibility==='public' ? 'Your profile is public, so this will be visible to everyone.' : 'Only your friends will see this.'}</p>
-          <div class="auth-field">
-            <textarea id="postComposerText" rows="4" placeholder="Share a quick update…" style="width:100%; padding:9px 10px; border:1px solid var(--line); border-radius:8px; font-size:0.9rem; font-family:inherit; resize:vertical;">${escapeHtml(postDraftText)}</textarea>
-          </div>
-          ${postPhotoError ? `<div class="auth-error">${escapeHtml(postPhotoError)}</div>` : ''}
-          ${postDraftPhoto ? `
-            <div style="position:relative; display:inline-block; margin-bottom:10px;">
-              <img src="${postDraftPhoto}" style="max-width:100%; max-height:220px; border-radius:10px; display:block;" alt="">
-              <button type="button" class="sheet-close-btn" id="removePostPhotoBtn" style="position:absolute; top:6px; right:6px;" aria-label="Remove photo">${icon('close',14)}</button>
-            </div>` : `
-            <div style="margin-bottom:10px;">
-              <button type="button" class="btn small" id="addPostPhotoBtn">Add a photo</button>
-              <input type="file" id="postPhotoInput" accept="image/*" style="display:none;">
-            </div>`}
-          <button class="btn primary" id="submitPostBtn" ${postCreateBusy?'disabled':''} style="width:100%;">${postCreateBusy?'Posting…':'Post'}</button>
-        </div>` : ''}
+    <div id="postComposerBackdrop" class="dialog-backdrop ${composerIsNew?'overlay-animate':''}"></div>
+    <div class="dialog-card ${composerIsNew?'overlay-animate':''}" role="dialog" aria-modal="true" style="width:min(440px, calc(100vw - 48px)); text-align:left;">
+      <div class="sheet-header" style="margin-bottom:10px;">
+        <h3 style="margin:0;">${icon('plus',16)} New update</h3>
+        <button type="button" class="sheet-close-btn" id="closePostComposerBtn" aria-label="Close">${icon('close',18)}</button>
+      </div>
+      ${postCreateError ? `<div class="auth-error">${escapeHtml(postCreateError)}</div>` : ''}
+      <p style="font-size:0.82rem; color:var(--ink-soft); margin:0 0 10px;">${state.profile.visibility==='public' ? 'Your profile is public, so this will be visible to everyone.' : 'Only your friends will see this.'}</p>
+      <div class="auth-field">
+        <textarea id="postComposerText" rows="4" placeholder="Share a quick update…" style="width:100%; padding:9px 10px; border:1px solid var(--line); border-radius:8px; font-size:0.9rem; font-family:inherit; resize:vertical;">${escapeHtml(postDraftText)}</textarea>
+      </div>
+      ${postPhotoError ? `<div class="auth-error">${escapeHtml(postPhotoError)}</div>` : ''}
+      ${postDraftPhoto ? `
+        <div style="position:relative; display:inline-block; margin-bottom:10px;">
+          <img src="${postDraftPhoto}" style="max-width:100%; max-height:220px; border-radius:10px; display:block;" alt="">
+          <button type="button" class="sheet-close-btn" id="removePostPhotoBtn" style="position:absolute; top:6px; right:6px;" aria-label="Remove photo">${icon('close',14)}</button>
+        </div>` : `
+        <div style="margin-bottom:10px;">
+          <button type="button" class="btn small" id="addPostPhotoBtn">Add a photo</button>
+          <input type="file" id="postPhotoInput" accept="image/*" style="display:none;">
+        </div>`}
+      <button class="btn primary" id="submitPostBtn" ${postCreateBusy?'disabled':''} style="width:100%;">${postCreateBusy?'Posting…':'Post'}</button>
     </div>`;
 }
 
@@ -5269,6 +5807,7 @@ function renderFriends(){
             <div style="font-weight:700;">${act ? act.displayName : skeletonLine('120px')}</div>
             ${act ? `<div style="font-size:0.82rem; color:var(--ink-soft);">${act.planName ? act.planName + ' &middot; ' : ''}${act.activeDaysLast30||0} of the last 30 days active${act.lastActiveDate ? ' &middot; last read ' + fmtDate(act.lastActiveDate) : ''}</div>` : `<div style="margin-top:6px;">${skeletonLine('180px')}</div>`}
             <div style="display:flex; gap:6px; margin-top:6px;">
+              <button class="btn small primary" data-dm-uid="${otherUid}">${icon('chat',13)} Message</button>
               <button class="btn small" data-view-profile="${otherUid}">View profile</button>
               <button class="btn small danger" data-friend-decline="${l.id}">Remove</button>
             </div>
@@ -5370,6 +5909,20 @@ function renderGroupWizardStepBody(stepId){
       <div class="auth-field">
         <label for="wizardGroupDescription">Description (optional)</label>
         <input type="text" id="wizardGroupDescription" placeholder="What's this group about?" value="${escapeHtml(groupDraftDescription)}">
+      </div>
+      <div class="auth-field">
+        <label>Banner image (optional)</label>
+        ${groupBannerError ? `<div class="auth-error">${escapeHtml(groupBannerError)}</div>` : ''}
+        ${groupDraftBanner ? `
+          <div style="position:relative; margin-top:4px;">
+            <img src="${groupDraftBanner}" style="width:100%; height:110px; object-fit:cover; border-radius:12px; display:block;" alt="">
+            <button type="button" class="sheet-close-btn" id="removeGroupBannerBtn" style="position:absolute; top:6px; right:6px;" aria-label="Remove banner">${icon('close',14)}</button>
+          </div>` : `
+          <div style="margin-top:4px;">
+            <button type="button" class="btn small" id="addGroupBannerBtn">Add a banner</button>
+            <input type="file" id="groupBannerInput" accept="image/*" style="display:none;">
+            <span style="font-size:0.75rem; color:var(--ink-soft); margin-left:8px;">Gives your group's page a hub feel.</span>
+          </div>`}
       </div>`;
   }
   if(stepId === 'pace'){
@@ -5589,13 +6142,14 @@ function renderGroupDetail(){
   else if(activeGroupTab === 'requests') body = renderGroupRequests();
 
   return `
-    <div class="settings-box">
+    <div class="settings-box ${g.banner ? 'has-banner' : ''}">
+      ${g.banner ? `<img class="group-banner" src="${g.banner}" alt="">` : ''}
       <button class="btn small back-btn" id="backToGroupsBtn" style="margin-bottom:12px;">${icon('back',16)} All groups</button>
       <div class="group-detail-head">
         <div>
           <h3 style="margin-bottom:2px;">${escapeHtml(g.name)}</h3>
           ${g.description ? `<p style="font-size:0.85rem; color:var(--ink-soft); margin:0 0 4px;">${escapeHtml(g.description)}</p>` : ''}
-          <div style="font-size:0.8rem; color:var(--ink-soft);">${g.memberCount||1} member${g.memberCount===1?'':'s'} &middot; ${g.planMode==='paced' ? 'Paced schedule' : 'Free pace'}</div>
+          <div style="font-size:0.8rem; color:var(--ink-soft);">${g.memberCount||1} member${g.memberCount===1?'':'s'} &middot; ${g.planMode==='sessions' ? 'Guided study' : g.planMode==='paced' ? 'Paced schedule' : 'Free pace'}</div>
         </div>
       </div>
       <details ${keepOpenAttrs('groupInviteLink')}>
@@ -5795,6 +6349,20 @@ function renderMonthlySummaries(){
   return `<h3 style="margin-top:6px;">Month by month</h3><div class="dash-summary">${cards}</div>`;
 }
 
+// A little visual flavor per Bible category — icon chosen by name keywords, colored circle from
+// the category's own color. Falls back to the bookmark for anything unrecognized.
+function catIcon(name){
+  const n = (name||'').toLowerCase();
+  if(/law|torah|pentateuch|genesis|moses/.test(n)) return 'scroll';
+  if(/psalm|poetry|wisdom|proverb|song/.test(n)) return 'sun';
+  if(/prophet|isaiah|jeremiah/.test(n)) return 'flame';
+  if(/gospel|matthew|mark|luke|john|jesus/.test(n)) return 'cross';
+  if(/epistle|letter|paul|acts|church/.test(n)) return 'mail';
+  if(/history|kings|chronicles/.test(n)) return 'calendar';
+  if(/revelation|apocalyp/.test(n)) return 'moon';
+  return 'bookmark';
+}
+
 // ---- Reading streaks + consistency heatmap (v31 "beyond basic" dashboard) ----
 // A "reading day" = any completed plan chapter OR any outside-plan chapter logged for that date.
 // The current streak forgives an unread TODAY (you haven't fallen behind until the day is over),
@@ -5855,14 +6423,25 @@ function renderDashboard(){
   // Guided-study sessions you've checked off across all your groups (mirrored into state by
   // toggleSessionDone, so this needs no live group listeners to count).
   const groupSessionsTotal = Object.values(state.groupSessionsDone||{}).reduce((s,n)=>s+(Number(n)||0),0);
-  const streaks = readingStreaks();
+  // Honest habit insights (v32 — replacing the streak-pressure tiles): what you actually read
+  // this month, on how many days, at what average, and where your reading gravitates.
+  const monthPrefix = todayStr().slice(0,7);
+  const monthChapters = state.log.filter(e=>e.status==='complete' && e.date.startsWith(monthPrefix)).length
+    + state.extraLog.filter(e=>e.date.startsWith(monthPrefix)).length;
+  const monthReadingDays = Array.from(readingDaySet()).filter(d=>d.startsWith(monthPrefix)).length;
+  const avgPerReadingDay = monthReadingDays ? (monthChapters / monthReadingDays).toFixed(1) : '0';
+  const bookCounts = {};
+  state.log.filter(e=>e.status==='complete').forEach(e=>{ bookCounts[e.book]=(bookCounts[e.book]||0)+1; });
+  const mostReadBook = Object.keys(bookCounts).sort((a,b)=>bookCounts[b]-bookCounts[a])[0] || null;
   // data-count-key/data-count-to feed animateDashboardMetrics() (see JS above) — it compares the
   // target against whatever value it last saw for that key and, if it actually changed, plays a
   // quick count-up instead of the number just silently being different on the next render.
   const summary = `
     <div class="dash-summary">
-      <div class="stat"><div class="num"><span data-count-key="currentStreak" data-count-to="${streaks.current}">${streaks.current}</span> day${streaks.current===1?'':'s'}</div><div class="label">Current reading streak</div></div>
-      <div class="stat"><div class="num"><span data-count-key="longestStreak" data-count-to="${streaks.longest}">${streaks.longest}</span> day${streaks.longest===1?'':'s'}</div><div class="label">Longest streak ever</div></div>
+      <div class="stat"><div class="num"><span data-count-key="monthChapters" data-count-to="${monthChapters}">${monthChapters}</span></div><div class="label">Chapters read this month</div></div>
+      <div class="stat"><div class="num"><span data-count-key="monthDays" data-count-to="${monthReadingDays}">${monthReadingDays}</span></div><div class="label">Reading days this month</div></div>
+      <div class="stat"><div class="num">${avgPerReadingDay}</div><div class="label">Avg chapters per reading day</div></div>
+      ${mostReadBook ? `<div class="stat"><div class="num" style="font-size:1.15rem; line-height:1.9;">${mostReadBook}</div><div class="label">Most-read book (${bookCounts[mostReadBook]}&times;)</div></div>` : ''}
       <div class="stat"><div class="num"><span data-count-key="uniqueChapters" data-count-to="${uniqueChapters.size}">${uniqueChapters.size}</span> / ${BIBLE_TOTAL_CHAPTERS}</div><div class="label">Unique chapters read at least once</div></div>
       <div class="stat"><div class="num"><span data-count-key="coveragePct" data-count-to="${coveragePct}">${coveragePct}</span>%</div><div class="label">Whole-Bible coverage</div></div>
       <div class="stat"><div class="num" data-count-key="totalCycles" data-count-to="${totalPassesAcrossAll}">${totalPassesAcrossAll}</div><div class="label">Total category cycles completed</div></div>
@@ -5888,8 +6467,11 @@ function renderDashboard(){
     return `
       <details class="cat-block dash-collapse" data-dash-section="${cat.id}" ${dashOpenSections.has(cat.id)?'open':''}>
         <summary>
-          <h3><span class="swatch" style="background:${cat.color}"></span>${cat.name}</h3>
-          <span class="cat-sub">Cycle ${catCycle+1} &middot; ${catPct}% through current pass</span>
+          <span class="cat-icon-circle" style="background:${cat.color}26; color:${cat.color};">${icon(catIcon(cat.name),18)}</span>
+          <span class="cat-head-text">
+            <span class="cat-head-name">${cat.name}</span>
+            <span class="cat-head-sub">Cycle ${catCycle+1} &middot; ${catPct}% through this pass &middot; ${cat.total} chapters</span>
+          </span>
           <span class="dash-collapse-chevron">${icon('back',14)}</span>
         </summary>
         ${rows}
@@ -6047,6 +6629,28 @@ function renderAccountTab(){
         ${currentPlanName() ? `${currentPlanName()} plan &middot; ` : ''}${ACTIVE_CATEGORIES.length} categories &middot; ${chaptersLoggedAllTime} chapters logged all-time
       </p>
     </div>`;
+  // Only the owner account ever sees this (and only the v21 rules make it actually readable).
+  const ownerInboxBox = !isOwner() ? '' : `
+    <div class="settings-box">
+      <h3>${icon('mail',16)} Owner inbox &mdash; user submissions</h3>
+      <p style="font-size:0.82rem; color:var(--ink-soft);">Bug reports and suggestions submitted from the Feedback form, newest first.</p>
+      <button class="btn small" id="loadOwnerFeedbackBtn" ${ownerFeedbackLoading?'disabled':''}>${ownerFeedbackLoading?'Loading…':(ownerFeedbackLoaded?'Refresh':'Load submissions')}</button>
+      ${ownerFeedbackError ? `<p style="font-size:0.82rem; color:var(--bad); margin-top:8px;">${escapeHtml(ownerFeedbackError)}</p>` : ''}
+      ${ownerFeedbackLoaded && !ownerFeedbackItems.length ? `<p style="font-size:0.85rem; color:var(--ink-soft); margin-top:10px;">No submissions yet.</p>` : ''}
+      ${ownerFeedbackItems.length ? `
+        <div style="display:flex; flex-direction:column; gap:10px; margin-top:12px;">
+          ${ownerFeedbackItems.map(f=>`
+            <div style="border:1px solid var(--line); border-radius:10px; padding:10px 12px;">
+              <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
+                <span class="status-pill ${f.type==='bug'?'skipped':'complete'}" style="margin:0;">${f.type==='bug'?'Bug':'Suggestion'}</span>
+                <span style="font-size:0.75rem; color:var(--ink-soft);">${f.createdAt ? new Date(f.createdAt).toLocaleString() : ''}</span>
+                <button type="button" class="msg-action-btn" data-delete-feedback="${f.id}" style="margin-left:auto;" aria-label="Delete">${icon('trash',13)}</button>
+              </div>
+              <div style="font-size:0.88rem; white-space:pre-wrap;">${escapeHtml(f.message||'')}</div>
+              ${f.email ? `<div style="font-size:0.75rem; color:var(--ink-soft); margin-top:4px;">From: ${escapeHtml(f.email)}</div>` : ''}
+            </div>`).join('')}
+        </div>` : ''}
+    </div>`;
   const appearanceBox = `
     <div class="settings-box">
       <h3>${icon('sun',16)} Appearance</h3>
@@ -6058,6 +6662,24 @@ function renderAccountTab(){
       <h3>Reading plan</h3>
       <p style="font-size:0.85rem; color:var(--ink-soft);">Currently: <strong>${state.plan && PRESET_PLANS[state.plan.presetId] ? PRESET_PLANS[state.plan.presetId].name : 'Custom plan'}</strong> (${ACTIVE_CATEGORIES.length} categories).</p>
       <button class="btn primary" id="changePlanBtn">Change plan</button>
+    </div>`;
+  const dr = state.dailyReminder || { enabled:false, hour:7 };
+  const isNativeApp = !!capacitorPlugin('LocalNotifications');
+  const dailyReminderBox = `
+    <div class="settings-box">
+      <h3>${icon('bell',16)} Daily devotion reminder</h3>
+      <p style="font-size:0.85rem; color:var(--ink-soft);">A gentle "your devotion is ready" at the time you choose.${isNativeApp ? '' : ' On the web this fires while Cultivate is open in a tab — the iOS app delivers it like any other notification.'}</p>
+      <label style="display:flex; align-items:center; gap:8px; font-size:0.9rem; cursor:pointer; margin-bottom:10px;">
+        <input type="checkbox" id="dailyReminderToggle" ${dr.enabled?'checked':''}> Remind me daily
+      </label>
+      ${dr.enabled ? `
+        <label style="font-size:0.85rem; display:flex; align-items:center; gap:8px;">At
+          <select id="dailyReminderHour" style="padding:6px 8px; border:1px solid var(--line); border-radius:8px; font-family:inherit;">
+            ${[5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22].map(h=>`<option value="${h}" ${dr.hour===h?'selected':''}>${h===12?'12:00 pm':h<12?h+':00 am':(h-12)+':00 pm'}</option>`).join('')}
+          </select>
+        </label>` : ''}
+      ${dr.enabled && !isNativeApp && (typeof Notification !== 'undefined') && Notification.permission !== 'granted' ? `
+        <button class="btn small" id="dailyReminderPermBtn" style="margin-top:10px;">Allow notifications</button>` : ''}
     </div>`;
   const notifBox = `
     <div class="settings-box">
@@ -6118,15 +6740,21 @@ function renderAccountTab(){
       <h3>Account</h3>
       <p style="font-size:0.85rem; color:var(--ink-soft);">Signed in as <strong>${currentUser.email}</strong>. Your progress syncs automatically across every device you log into.</p>
       <p>${syncPillHtml()}</p>
-      <button class="btn danger" id="logoutBtn">Log out</button>
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <button class="btn danger" id="logoutBtn">Log out</button>
+        <button class="btn danger" id="deleteAccountBtn" ${accountDeleteBusy?'disabled':''}>${accountDeleteBusy?'Deleting…':'Delete my account'}</button>
+      </div>
+      <p style="font-size:0.75rem; color:var(--ink-soft); margin-top:8px; margin-bottom:0;">Deleting your account permanently erases your reading history, journal, profile, friendships, and any groups you own.</p>
     </div>
     ${appearanceBox}
     ${planBox}
     ${readingAppBox}
+    ${dailyReminderBox}
     ${notifBox}
     ${exportBox}
     ${inviteAppBox}
-    ${feedbackBox}`;
+    ${feedbackBox}
+    ${ownerInboxBox}`;
   }
   return `
     ${appInfoBox}
@@ -6172,6 +6800,7 @@ function switchToTab(tabId){
   activeTab = tabId;
   sidebarOpen = false;
   ownProfileOpen = false;
+  closeDm();
   if(viewedProfileUid) closeViewedProfile();
   // Warm both sub-tabs' caches the moment Community opens, so switching between Friends/Groups
   // (or typing in either one's search box) feels instant rather than waiting on a fetch.
@@ -6250,9 +6879,31 @@ function attachEvents(){
   if(openCommandPaletteBtn) openCommandPaletteBtn.addEventListener('click', openCommandPalette);
   document.querySelectorAll('[data-read-book]').forEach(btn=>{
     btn.addEventListener('click', ()=>{
+      if(state.readingApp === 'cultivate'){
+        openInAppReader(btn.dataset.readBook, Number(btn.dataset.readChapter));
+        return;
+      }
       const url = buildReadingLink(state.readingApp, btn.dataset.readBook, Number(btn.dataset.readChapter));
       if(url) window.open(url, '_blank');
     });
+  });
+  const readerCloseBtn = document.getElementById('readerCloseBtn');
+  if(readerCloseBtn) readerCloseBtn.addEventListener('click', ()=>{ readerOpen = false; render(); });
+  const readerBackdropEl = document.getElementById('readerBackdrop');
+  if(readerBackdropEl) readerBackdropEl.addEventListener('click', ()=>{ readerOpen = false; render(); });
+  const readerPrevBtn = document.getElementById('readerPrevBtn');
+  if(readerPrevBtn) readerPrevBtn.addEventListener('click', ()=> openInAppReader(readerBook, readerChapter - 1));
+  const readerNextBtn = document.getElementById('readerNextBtn');
+  if(readerNextBtn) readerNextBtn.addEventListener('click', ()=> openInAppReader(readerBook, readerChapter + 1));
+  const readerRetryBtn = document.getElementById('readerRetryBtn');
+  if(readerRetryBtn) readerRetryBtn.addEventListener('click', ()=> openInAppReader(readerBook, readerChapter));
+  const readerCompleteBtn = document.getElementById('readerCompleteBtn');
+  if(readerCompleteBtn) readerCompleteBtn.addEventListener('click', ()=>{
+    const catId = readerCompleteBtn.dataset.cat;
+    readerOpen = false;
+    justCompletedCat = catId;
+    completeReading(catId, selectedDate);
+    setTimeout(()=>{ justCompletedCat = null; render(); }, 700);
   });
   document.querySelectorAll('[data-action="complete"],[data-action="skip"],[data-action="undo"]').forEach(btn=>{
     btn.addEventListener('click', ()=>{
@@ -6322,6 +6973,31 @@ function attachEvents(){
     });
   });
 
+  const deleteAccountBtn = document.getElementById('deleteAccountBtn');
+  if(deleteAccountBtn) deleteAccountBtn.addEventListener('click', deleteMyAccount);
+  const dailyReminderToggle = document.getElementById('dailyReminderToggle');
+  if(dailyReminderToggle) dailyReminderToggle.addEventListener('change', (e)=>{
+    if(!state.dailyReminder) state.dailyReminder = { enabled:false, hour:7 };
+    state.dailyReminder.enabled = e.target.checked;
+    saveState();
+    applyDailyReminderSchedule();
+    if(e.target.checked && !capacitorPlugin('LocalNotifications') && typeof Notification !== 'undefined' && Notification.permission === 'default'){
+      Notification.requestPermission().then(()=> render());
+    }
+    render();
+  });
+  const dailyReminderHour = document.getElementById('dailyReminderHour');
+  if(dailyReminderHour) dailyReminderHour.addEventListener('change', (e)=>{
+    if(!state.dailyReminder) state.dailyReminder = { enabled:true, hour:7 };
+    state.dailyReminder.hour = Number(e.target.value) || 7;
+    saveState();
+    applyDailyReminderSchedule();
+    render();
+  });
+  const dailyReminderPermBtn = document.getElementById('dailyReminderPermBtn');
+  if(dailyReminderPermBtn) dailyReminderPermBtn.addEventListener('click', ()=>{
+    if(typeof Notification !== 'undefined') Notification.requestPermission().then(()=> render());
+  });
   const logoutBtn = document.getElementById('logoutBtn');
   if(logoutBtn){
     logoutBtn.addEventListener('click', ()=>{
@@ -6343,6 +7019,11 @@ function attachEvents(){
   });
   document.querySelectorAll('input[name="feedbackType"]').forEach(radio=>{
     radio.addEventListener('change', ()=>{ if(radio.checked){ feedbackType = radio.value; render(); } });
+  });
+  const loadOwnerFeedbackBtn = document.getElementById('loadOwnerFeedbackBtn');
+  if(loadOwnerFeedbackBtn) loadOwnerFeedbackBtn.addEventListener('click', ()=> loadOwnerFeedback(true));
+  document.querySelectorAll('[data-delete-feedback]').forEach(btn=>{
+    btn.addEventListener('click', ()=> deleteOwnerFeedback(btn.dataset.deleteFeedback));
   });
   const submitFeedbackBtn = document.getElementById('submitFeedbackBtn');
   if(submitFeedbackBtn){
@@ -6367,6 +7048,15 @@ function attachEvents(){
       addMemoryVerse(refEl.value, textEl ? textEl.value : '');
     });
   }
+  const journalSearchInput = document.getElementById('journalSearchInput');
+  if(journalSearchInput) journalSearchInput.addEventListener('input', (e)=>{ journalSearchQuery = e.target.value; render(); });
+  const clearJournalSearchBtn = document.getElementById('clearJournalSearchBtn');
+  if(clearJournalSearchBtn) clearJournalSearchBtn.addEventListener('click', ()=>{ journalSearchQuery = ''; render(); });
+  document.querySelectorAll('[data-mem-test]').forEach(btn=> btn.addEventListener('click', ()=> startMemTest(btn.dataset.memTest)));
+  document.querySelectorAll('[data-mem-reveal]').forEach(btn=> btn.addEventListener('click', ()=>{ memTestRevealed = true; render(); }));
+  document.querySelectorAll('[data-mem-cancel]').forEach(btn=> btn.addEventListener('click', ()=>{ memTestId = null; memTestRevealed = false; render(); }));
+  document.querySelectorAll('[data-mem-got]').forEach(btn=> btn.addEventListener('click', ()=> finishMemTest(btn.dataset.memGot, true)));
+  document.querySelectorAll('[data-mem-missed]').forEach(btn=> btn.addEventListener('click', ()=> finishMemTest(btn.dataset.memMissed, false)));
   document.querySelectorAll('[data-mem-review]').forEach(btn=> btn.addEventListener('click', ()=> reviewMemoryVerse(btn.dataset.memReview)));
   document.querySelectorAll('[data-mem-toggle]').forEach(btn=> btn.addEventListener('click', ()=> toggleMemoryMastered(btn.dataset.memToggle)));
   document.querySelectorAll('[data-mem-delete]').forEach(btn=> btn.addEventListener('click', ()=>{
@@ -6539,6 +7229,16 @@ function attachEvents(){
     customConfirm('Remove this connection?', { confirmLabel:'Remove', danger:true }).then(ok=>{ if(ok) declineFriendRequest(btn.dataset.friendDecline); });
   }));
   document.querySelectorAll('[data-view-profile]').forEach(btn=> btn.addEventListener('click', ()=> viewProfile(btn.dataset.viewProfile)));
+  document.querySelectorAll('[data-dm-uid]').forEach(btn=> btn.addEventListener('click', ()=> openDmWith(btn.dataset.dmUid)));
+  const dmBackBtn = document.getElementById('dmBackBtn');
+  if(dmBackBtn) dmBackBtn.addEventListener('click', ()=>{ closeDm(); render(); });
+  const dmSendBtn = document.getElementById('dmSendBtn');
+  const dmInput = document.getElementById('dmInput');
+  if(dmInput){
+    dmInput.addEventListener('input', (e)=>{ dmDraftText = e.target.value; });
+    dmInput.addEventListener('keydown', (e)=>{ if(e.key === 'Enter'){ e.preventDefault(); sendDm(dmInput.value); } });
+  }
+  if(dmSendBtn) dmSendBtn.addEventListener('click', ()=> sendDm(dmInput ? dmInput.value : dmDraftText));
   const closeViewedProfileBtn = document.getElementById('closeViewedProfileBtn');
   if(closeViewedProfileBtn) closeViewedProfileBtn.addEventListener('click', closeViewedProfile);
   const guestBannerCreateAccountBtn = document.getElementById('guestBannerCreateAccountBtn');
@@ -6676,6 +7376,39 @@ function attachEvents(){
   if(wizardGroupName) wizardGroupName.addEventListener('input', (e)=>{ groupDraftName = e.target.value; saveGroupWizardDraft(); });
   const wizardGroupDescription = document.getElementById('wizardGroupDescription');
   if(wizardGroupDescription) wizardGroupDescription.addEventListener('input', (e)=>{ groupDraftDescription = e.target.value; saveGroupWizardDraft(); });
+  const addGroupBannerBtn = document.getElementById('addGroupBannerBtn');
+  const groupBannerInput = document.getElementById('groupBannerInput');
+  if(addGroupBannerBtn && groupBannerInput) addGroupBannerBtn.addEventListener('click', ()=> groupBannerInput.click());
+  if(groupBannerInput){
+    groupBannerInput.addEventListener('change', (e)=>{
+      const file = e.target.files && e.target.files[0];
+      if(!file) return;
+      groupBannerError = '';
+      if(!file.type.startsWith('image/')){ groupBannerError = "That doesn't look like an image file."; render(); return; }
+      const reader = new FileReader();
+      reader.onload = (evt)=>{
+        const img = new Image();
+        img.onload = ()=>{
+          // Wide crop-friendly downscale: banners render ~130px tall full-width, so 1200px wide
+          // is plenty; JPEG 0.65 keeps it well under the doc-size cap.
+          const MAX_W = 1200, MAX_H = 500;
+          const scale = Math.min(1, MAX_W / img.width, MAX_H / img.height);
+          const w = Math.round(img.width * scale), h = Math.round(img.height * scale);
+          const canvas = document.createElement('canvas');
+          canvas.width = w; canvas.height = h;
+          canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.65);
+          if(dataUrl.length > GROUP_BANNER_MAX_LEN){ groupBannerError = 'That image is too large even after compressing — try a smaller one.'; }
+          else groupDraftBanner = dataUrl;
+          render();
+        };
+        img.src = evt.target.result;
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+  const removeGroupBannerBtn = document.getElementById('removeGroupBannerBtn');
+  if(removeGroupBannerBtn) removeGroupBannerBtn.addEventListener('click', ()=>{ groupDraftBanner = ''; render(); });
   document.querySelectorAll('input[name="wizardPlanMode"]').forEach(radio=>{
     radio.addEventListener('change', (e)=>{ groupDraftPlanMode = e.target.value; saveGroupWizardDraft(); render(); });
   });
@@ -6940,6 +7673,8 @@ if(typeof document !== 'undefined' && document.addEventListener){
       if(shouldShowGate() && authView === 'signup'){ forceShowGate = false; authView = 'login'; authError=''; authWizardError=''; render(); return; }
       if(notifPanelOpen){ notifPanelOpen = false; render(); return; }
       if(extraReadingSheetOpen){ extraReadingSheetOpen = false; render(); return; }
+      if(readerOpen){ readerOpen = false; render(); return; }
+      if(activeDmUid){ closeDm(); render(); return; }
       if(ownProfileOpen){ ownProfileOpen = false; profileEditMode = false; render(); return; }
       if(sidebarOpen){ sidebarOpen = false; render(); return; }
     }
