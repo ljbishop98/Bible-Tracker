@@ -87,6 +87,33 @@
      that isn't also the thing carrying overscroll-behavior, so there's no ambiguity for the
      browser to get confused about. */
   html{width:100%; background:var(--bg);}
+  /* ---- Static launch splash — pure HTML/CSS, present before the app script even parses ---- */
+  .app-splash{
+    position:fixed; inset:0; z-index:9999; background:var(--bg);
+    display:flex; align-items:center; justify-content:center;
+    transition:opacity .35s ease;
+  }
+  .app-splash.hide{ opacity:0; pointer-events:none; }
+  .app-splash-inner{
+    display:flex; flex-direction:column; align-items:center; gap:14px;
+    animation:splashPop .5s cubic-bezier(.25,.8,.4,1);
+  }
+  .app-splash-logo{ width:96px; height:96px; border-radius:24px; box-shadow:0 10px 30px rgba(0,0,0,0.18); }
+  .app-splash-name{ font-size:1.3rem; font-weight:800; color:var(--ink); letter-spacing:0.01em; }
+  .app-splash-dots{ display:flex; gap:6px; margin-top:2px; }
+  .app-splash-dots span{
+    width:6px; height:6px; border-radius:50%; background:var(--accent); opacity:0.3;
+    animation:splashDot 1.1s ease-in-out infinite;
+  }
+  .app-splash-dots span:nth-child(2){ animation-delay:.15s; }
+  .app-splash-dots span:nth-child(3){ animation-delay:.3s; }
+  @keyframes splashPop{ from{opacity:0; transform:scale(0.92);} to{opacity:1; transform:scale(1);} }
+  @keyframes splashDot{ 0%,80%,100%{opacity:0.25; transform:translateY(0);} 40%{opacity:1; transform:translateY(-4px);} }
+  @media (prefers-reduced-motion: reduce){
+    .app-splash{ transition:none; }
+    .app-splash-inner{ animation:none; }
+    .app-splash-dots span{ animation:none; opacity:0.6; }
+  }
   body{
     margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
     background:var(--bg); color:var(--ink); line-height:1.4;
@@ -144,9 +171,9 @@
     padding:7px 10px; border:1px solid var(--line); border-radius:8px; font-size:0.9rem; background:var(--card);
   }
   .btn{
-    padding:7px 14px; border-radius:8px; border:1px solid var(--line); background:var(--card);
+    padding:7px 14px; border-radius:10px; border:1px solid var(--line); background:var(--card);
     cursor:pointer; font-size:0.85rem; font-weight:600; color:var(--ink);
-    transition:transform .08s ease, background .12s ease;
+    transition:transform .18s cubic-bezier(.34,1.56,.64,1), background .12s ease, box-shadow .12s ease;
   }
   .btn:hover{background:var(--accent-soft);}
   .btn.primary{background:var(--accent); color:#fff; border-color:var(--accent);}
@@ -157,9 +184,14 @@
   .btn.small{padding:4px 10px; font-size:0.78rem;}
   .grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(min(300px,100%),1fr)); gap:14px;}
   .card{
-    background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px;
+    background:var(--card); border:1px solid var(--line); border-radius:16px; padding:16px;
     box-shadow:var(--shadow); border-left:5px solid var(--cat-color, var(--accent));
     transition:transform .15s ease, box-shadow .15s ease;
+  }
+  @media (hover:hover) and (pointer:fine){
+    .card:hover, .plan-card:hover, .group-card:hover, .settings-box:hover, .dash-summary .stat:hover{
+      transform:translateY(-2px); box-shadow:0 10px 26px rgba(0,0,0,0.12);
+    }
   }
   .card .cat-name{font-weight:700; font-size:0.95rem; margin-bottom:4px;}
   .card .due{font-size:1.15rem; font-weight:700; margin:6px 0 2px;}
@@ -182,7 +214,7 @@
      See animateRemoval() in JS: the row is given this class and left on screen briefly before the
      underlying data actually changes and render() rebuilds everything, so deleting something reads
      as a piece of UI leaving the screen rather than an instant, jarring disappearance. */
-  .journal-entry, .extra-log-row{ transition:transform .2s ease, opacity .2s ease; }
+  .journal-entry, .extra-log-row{ transition:transform .2s ease, opacity .2s ease, box-shadow .2s ease; }
   .row-leaving{ transform:translateX(24px); opacity:0; pointer-events:none; }
   @media (prefers-reduced-motion: reduce){ .journal-entry, .extra-log-row{ transition:none; } .row-leaving{ display:none; } }
   /* ---- Tactile press feedback ----
@@ -198,8 +230,8 @@
   table.logtable th{background:var(--accent-soft); position:sticky; top:0;}
   table.logtable td.cell-complete{color:var(--good); font-weight:600;}
   table.logtable td.cell-skipped{color:var(--skip); font-weight:600;}
-  .log-scroll{overflow-x:auto; border:1px solid var(--line); border-radius:10px;}
-  details.month-group{margin-bottom:12px; background:var(--card); border:1px solid var(--line); border-radius:10px; padding:0 0 4px;}
+  .log-scroll{overflow-x:auto; border:1px solid var(--line); border-radius:14px;}
+  details.month-group{margin-bottom:12px; background:var(--card); border:1px solid var(--line); border-radius:14px; padding:0 0 4px; box-shadow:var(--shadow);}
   details.month-group summary{
     cursor:pointer; font-weight:700; padding:12px 16px; list-style:none; display:flex; justify-content:space-between;
   }
@@ -239,7 +271,11 @@
   }
   .empty-state-message{margin:0; font-size:0.88rem; max-width:340px; line-height:1.5;}
   input[type=file]{display:none;}
-  .settings-box{background:var(--card); border:1px solid var(--line); border-radius:12px; padding:20px; max-width:640px; box-shadow:var(--shadow); margin-bottom:20px;}
+  .settings-box{
+    background:var(--card); border:1px solid var(--line); border-radius:16px; padding:20px;
+    max-width:640px; box-shadow:var(--shadow); margin-bottom:20px;
+    transition:transform .15s ease, box-shadow .15s ease;
+  }
   .settings-box h3{margin-top:0;}
   .settings-box ol{padding-left:20px; font-size:0.88rem; color:var(--ink-soft);}
   .settings-box ol li{margin-bottom:6px;}
@@ -314,7 +350,7 @@
   .group-card-list{display:flex; flex-direction:column; gap:10px;}
   .group-card{
     display:flex; align-items:center; gap:12px; padding:12px 14px; border:1px solid var(--line);
-    border-radius:12px; background:var(--bg); transition:transform .15s ease, box-shadow .15s ease, border-color .15s ease;
+    border-radius:16px; background:var(--bg); transition:transform .15s ease, box-shadow .15s ease, border-color .15s ease;
   }
   .group-card .group-icon{flex-shrink:0;}
   .group-card .group-info{flex:1; min-width:0;}
@@ -324,15 +360,15 @@
   .group-card .pending-note{font-size:0.78rem; color:var(--ink-soft); white-space:nowrap;}
   .group-detail-head{display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap; margin-bottom:6px;}
   .group-detail-actions{display:flex; gap:8px; flex-wrap:wrap; margin-top:12px;}
-  .group-message{padding:10px 0; border-bottom:1px solid var(--line);}
-  .group-message:last-child{border-bottom:none;}
+  .group-message{background:var(--accent-soft); border-radius:14px; padding:10px 14px; margin-bottom:8px;}
+  .group-message:last-child{margin-bottom:0;}
   .group-message .who{font-size:0.78rem; color:var(--ink-soft); margin-bottom:3px;}
   .group-message .who strong{color:var(--ink);}
   .group-message .body{font-size:0.92rem; line-height:1.5;}
   .group-member-row{display:flex; align-items:center; gap:10px; padding:9px 0; border-bottom:1px solid var(--line);}
   .group-member-row:last-child{border-bottom:none;}
   .group-member-row .name{flex:1; cursor:pointer;}
-  .group-week-card{background:var(--accent-soft); border:1px solid var(--accent); border-radius:10px; padding:14px 16px; margin-bottom:16px;}
+  .group-week-card{background:var(--accent-soft); border:1px solid var(--accent); border-radius:14px; padding:14px 16px; margin-bottom:16px;}
   .group-week-card .week-label{font-weight:700; margin-bottom:4px;}
   .invite-link-row{display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:8px;}
   .invite-link-row input{flex:1; min-width:180px; padding:8px 10px; border:1px solid var(--line); border-radius:8px; font-size:0.78rem; background:var(--bg);}
@@ -352,7 +388,7 @@
   .auth-links a.muted{color:var(--ink-soft);}
   .onboard-wrap{max-width:900px; margin:0 auto;}
   .plan-grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(min(260px,100%),1fr)); gap:16px; margin:20px 0;}
-  .plan-card{background:var(--card); border:1px solid var(--line); border-radius:14px; padding:18px; box-shadow:var(--shadow); display:flex; flex-direction:column; gap:10px; transition:transform .15s ease, box-shadow .15s ease;}
+  .plan-card{background:var(--card); border:1px solid var(--line); border-radius:18px; padding:18px; box-shadow:var(--shadow); display:flex; flex-direction:column; gap:10px; transition:transform .15s ease, box-shadow .15s ease;}
   .plan-card h4{margin:0; font-size:1.05rem;}
   .plan-card p{margin:0; font-size:0.82rem; color:var(--ink-soft); flex-grow:1;}
   .plan-card .swatches{display:flex; gap:4px; flex-wrap:wrap;}
@@ -377,8 +413,16 @@
   .journal-tag{
     display:inline-flex; padding:3px 10px; border-radius:999px; font-size:0.72rem; font-weight:700;
   }
-  .journal-entry{border-bottom:1px solid var(--line); padding:12px 0;}
-  .journal-entry:last-child{border-bottom:none;}
+  /* Each entry reads as its own card in a deck rather than a row in a flat divided list — matching
+     the same rounded, bordered, shadowed treatment as .card/.settings-box elsewhere. */
+  .journal-entry{
+    background:var(--card); border:1px solid var(--line); border-radius:14px;
+    padding:14px 16px; margin-bottom:10px; box-shadow:var(--shadow);
+  }
+  .journal-entry:last-child{margin-bottom:0;}
+  @media (hover:hover) and (pointer:fine){
+    .journal-entry:hover{transform:translateY(-2px); box-shadow:0 10px 26px rgba(0,0,0,0.12);}
+  }
   .journal-entry-head{display:flex; align-items:center; gap:10px; margin-bottom:6px;}
   .journal-date{font-size:0.8rem; color:var(--ink-soft); font-weight:600;}
   .journal-title{font-weight:700; margin-bottom:4px;}
@@ -454,6 +498,66 @@
   @media (prefers-reduced-motion: reduce){ .toast{ animation:none; } }
   @media (min-width:761px){
     .toast-stack{ left:auto; right:24px; bottom:auto; top:24px; align-items:flex-end; }
+  }
+
+  /* ---- Top strip (bell + theme toggle) — all that's left of the old full header, see
+     renderTopStrip(). The title/stats/sync content that used to live here now lives in the
+     Account tab instead. ---- */
+  .top-strip{
+    display:flex; align-items:center; justify-content:flex-end; gap:10px;
+    padding:14px 0 4px; position:relative;
+  }
+  .notif-bell{
+    position:relative; display:inline-flex; align-items:center; justify-content:center;
+    width:38px; height:38px; border-radius:50%; border:1px solid var(--line); background:var(--card);
+    color:var(--ink-soft); cursor:pointer; padding:0; transition:transform .08s ease, border-color .12s ease, color .12s ease;
+  }
+  .notif-bell:active{transform:scale(0.94);}
+  @media (hover:hover) and (pointer:fine){
+    .notif-bell:hover{border-color:var(--accent); color:var(--accent);}
+  }
+  .notif-badge{
+    position:absolute; top:-3px; right:-3px; min-width:17px; height:17px; padding:0 3px;
+    border-radius:999px; background:var(--bad); color:#fff; font-size:0.62rem; font-weight:800;
+    display:flex; align-items:center; justify-content:center; line-height:1; box-shadow:0 0 0 2px var(--card);
+  }
+  .notif-backdrop{
+    position:fixed; inset:0; background:rgba(20,15,8,0.35); z-index:74;
+    animation:dialogBackdropIn .15s ease-out;
+  }
+  .notif-panel{
+    position:fixed; top:0; right:0; left:0; z-index:75; background:var(--card);
+    border-radius:0 0 18px 18px; box-shadow:0 12px 40px rgba(0,0,0,0.25);
+    max-height:70vh; overflow-y:auto; -webkit-overflow-scrolling:touch;
+    padding:calc(14px + env(safe-area-inset-top)) 4px 10px;
+    animation:notifPanelIn .2s cubic-bezier(.25,.8,.4,1);
+  }
+  @keyframes notifPanelIn{ from{opacity:0; transform:translateY(-10px);} to{opacity:1; transform:translateY(0);} }
+  .notif-panel-header{display:flex; align-items:center; justify-content:space-between; padding:0 16px 10px;}
+  .notif-panel-header h3{margin:0; font-size:1rem;}
+  .notif-panel-list{display:flex; flex-direction:column;}
+  .notif-item{
+    display:flex; align-items:flex-start; gap:12px; width:100%; text-align:left;
+    background:none; border:none; border-top:1px solid var(--line); padding:12px 16px; cursor:pointer;
+    transition:background .12s ease;
+  }
+  .notif-item:first-child{border-top:none;}
+  @media (hover:hover) and (pointer:fine){
+    .notif-item:hover{background:var(--accent-soft);}
+  }
+  .notif-item-icon{
+    flex-shrink:0; width:34px; height:34px; border-radius:50%; background:var(--accent-soft); color:var(--accent);
+    display:flex; align-items:center; justify-content:center;
+  }
+  .notif-item-text{display:flex; flex-direction:column; gap:2px; min-width:0;}
+  .notif-item-title{font-weight:700; font-size:0.88rem;}
+  .notif-item-sub{font-size:0.78rem; color:var(--ink-soft);}
+  @media (prefers-reduced-motion: reduce){ .notif-panel, .notif-backdrop{ animation:none; } }
+  @media (min-width:761px){
+    .notif-panel{
+      top:64px; right:24px; left:auto; bottom:auto; width:360px; max-width:calc(100vw - 48px);
+      border-radius:16px; padding-top:10px;
+    }
   }
 
   /* ---- Skeleton loading placeholders ---- */
@@ -635,6 +739,18 @@
 </style>
 </head>
 <body>
+<!-- Static, JS-free splash: painted from the very first frame (before the app script has even
+     parsed), so the first thing anyone sees is a finished, branded screen instead of a blank page
+     or a half-built layout. hideAppSplash() (see bootstrap section) fades this out once the first
+     real screen (auth gate / onboarding / main app) is ready to show, with a hard fallback timeout
+     in case anything upstream hangs. -->
+<div id="appSplash" class="app-splash" aria-hidden="true">
+  <div class="app-splash-inner">
+    <img src="./icon-512.png" alt="" class="app-splash-logo">
+    <div class="app-splash-name">Cultivate</div>
+    <div class="app-splash-dots"><span></span><span></span><span></span></div>
+  </div>
+</div>
 <div id="app"></div>
 
 <script>
@@ -737,6 +853,7 @@ function icon(name, size){
     auto: '<circle cx="12" cy="12" r="8.5"/><path d="M12 3.5v17" stroke-dasharray="0"/><path d="M12 3.5A8.5 8.5 0 0 1 12 20.5z" fill="currentColor" stroke="none"/>',
     check: '<path d="M5 12.5l4.5 4.5L19 7"/>',
     plus: '<path d="M12 5v14M5 12h14"/>',
+    bell: '<path d="M12 3.5c-3 0-5 2.3-5 5.4v2.6c0 1-.4 2-1.1 2.7L5 15h14l-.9-.8a3.7 3.7 0 0 1-1.1-2.7V8.9c0-3.1-2-5.4-5-5.4z"/><path d="M9.8 18.5a2.3 2.3 0 0 0 4.4 0"/>',
   };
   const d = paths[name] || '';
   return `<svg class="icon-svg" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
@@ -990,6 +1107,7 @@ let checkinEditing = false; // lets you reopen the mood picker after already ans
 let justCompletedCat = null; // category id that was JUST marked complete — plays a checkmark pop on its status pill, then clears itself
 let commandPaletteOpen = false; // desktop quick-jump palette (Cmd/Ctrl+K) — see renderCommandPalette()
 let commandPaletteQuery = '';
+let notifPanelOpen = false; // the bell/inbox dropdown — see renderNotifBellButton/renderNotifPanel/notifItems
 let lastRenderedViewKey = null; // used to only play the view-enter animation when the view actually changes
 
 /* ---------------- Native-style dialogs (replaces window.confirm/alert) ----------------
@@ -1037,15 +1155,14 @@ function renderDialogOverlay(){
 }
 
 /* ---------------- Command palette (desktop quick-jump, Cmd/Ctrl+K) ----------------
-   A short list of "commands" — jump to a tab, toggle the theme, export a backup — filtered as you
-   type and run with Enter or a click. Purely a desktop power-user affordance (there's no physical
-   keyboard shortcut to trigger it from a touch-only device), opened via the global keydown listener
-   below or the "Quick jump" hint in the desktop sidebar nav. */
+   A short list of "commands" — jump to a tab, toggle the theme — filtered as you type and run
+   with Enter or a click. Purely a desktop power-user affordance (there's no physical keyboard
+   shortcut to trigger it from a touch-only device), opened via the global keydown listener below
+   or the "Quick jump" hint in the desktop sidebar nav. */
 function commandList(){
   return [
     ...ALL_TABS.map(([id,label,iconName])=>({ id:'tab:'+id, label:'Go to '+label, iconName, run: ()=> switchToTab(id) })),
     { id:'theme', label:'Toggle light/dark theme', iconName:'auto', run: ()=> cycleThemeMode() },
-    { id:'export', label:'Export backup', iconName:'notebook', run: ()=>{ const btn=document.getElementById('exportBtn'); if(btn) btn.click(); } },
   ];
 }
 function filteredCommands(){
@@ -1585,6 +1702,7 @@ function doLogOut(){
     if(friendsUnsub){ friendsUnsub(); friendsUnsub = null; }
     if(myGroupsUnsub){ myGroupsUnsub(); myGroupsUnsub = null; }
     closeGroup();
+    teardownAdminJoinRequestSubs();
     friendLinksData = []; friendActivityCache = {};
     myGroupIds = []; groupsDirectory = []; groupsDirectoryLoaded = false;
     localStorage.removeItem(AUTH_CHOICE_KEY);
@@ -1612,13 +1730,29 @@ const FIREBASE_CONFIG = {
 };
 const FCM_VAPID_KEY = "BHph7TlqbyUtT7cuszwNskGl93JR_yXNwgTxKp31Cxz-_Vg4zz9ykalolX21_7ga0BVx1swm_Q-cN5nndxUy20M";
 
+// The splash (see the static markup right before #app) stays up until the app actually knows
+// what to show — signed-in, guest, or the auth gate — rather than a fixed timer, so it never
+// covers content that's already ready or hides a screen that's still resolving. splashHidden
+// guards against acting twice (onAuthStateChanged can fire more than once); the fallback timeout
+// is a safety net in case Firebase itself never calls back (e.g. a network that blocks it outright).
+let splashHidden = false;
+function hideAppSplash(){
+  if(splashHidden) return;
+  splashHidden = true;
+  const el = document.getElementById('appSplash');
+  if(!el) return;
+  el.classList.add('hide');
+  setTimeout(()=>{ if(el.parentNode) el.parentNode.removeChild(el); }, 400);
+}
 function initFirebase(){
   if(typeof firebase === 'undefined'){
     syncStatus='offline'; syncMessage='No internet connection to load sync library.';
     render();
+    hideAppSplash();
     return;
   }
   if(!FIREBASE_CONFIG.apiKey || FIREBASE_CONFIG.apiKey.indexOf('PASTE_') === 0){
+    hideAppSplash();
     return;
   }
   try{
@@ -1651,10 +1785,12 @@ function initFirebase(){
         if(myGroupsUnsub){ myGroupsUnsub(); myGroupsUnsub = null; }
       }
       render();
+      hideAppSplash();
     });
     render();
   }catch(err){
     syncStatus='error'; syncMessage=err.message; render();
+    hideAppSplash();
   }
 }
 
@@ -2169,11 +2305,16 @@ function loadGroupsDirectory(force){
   return fbDb.collection('groups').limit(200).get().then(snap=>{
     groupsDirectory = snap.docs.map(d=>({ id:d.id, ...d.data() }));
     groupsDirectoryLoaded = true; groupsDirectoryLoading = false;
+    // This bulk query is a wholesale replace, not a merge — if it's the one that's incomplete
+    // (the exact gap ensureMyGroupsInDirectory exists to patch), re-run that patch immediately
+    // afterward so a genuine membership never has even a brief window of being missing.
+    ensureMyGroupsInDirectory();
     render();
   }).catch(()=>{ groupsDirectoryLoading = false; });
 }
 
 let myGroupIds = [];
+let myGroupRoles = {}; // groupId -> my role in that group ('owner'|'admin'|'member'), from the same query below — lets the notification bell know which groups' join requests are actually mine to review.
 let myGroupsUnsub = null;
 // "My groups" is derived directly from the members subcollections via a collectionGroup query,
 // rather than a separate denormalized userGroups doc. The denormalized-doc version had a real
@@ -2188,9 +2329,125 @@ function subscribeMyGroups(){
   if(myGroupsUnsub) myGroupsUnsub();
   myGroupsUnsub = fbDb.collectionGroup('members').where('uid','==',currentUser.uid).onSnapshot(snap=>{
     myGroupIds = snap.docs.map(d=> d.ref.parent.parent.id);
+    myGroupRoles = {};
+    snap.docs.forEach(d=>{ myGroupRoles[d.ref.parent.parent.id] = d.data().role; });
     if(!groupDirTabAutoSet && myGroupIds.length){ groupDirTab = 'mine'; groupDirTabAutoSet = true; }
+    ensureMyGroupsInDirectory();
+    syncAdminJoinRequestSubs();
     render();
   }, ()=>{});
+}
+// ---- Notification bell: aggregated group join requests ----
+// Only groups where I'm owner/admin ever have join requests worth surfacing here. Rather than
+// tracking "which groups am I admin of" separately, this just reacts to myGroupRoles (populated
+// above) and keeps one live joinRequests subscription per administered group, tearing down any
+// that no longer apply (left the group, demoted, etc.) and adding new ones as they appear.
+let adminJoinRequestSubs = {}; // groupId -> unsubscribe function
+let adminJoinRequests = {}; // groupId -> array of {id, groupId, ...doc data}
+function syncAdminJoinRequestSubs(){
+  if(!fbDb) return;
+  const adminIds = myGroupIds.filter(id => myGroupRoles[id]==='owner' || myGroupRoles[id]==='admin');
+  const adminSet = new Set(adminIds);
+  Object.keys(adminJoinRequestSubs).forEach(gid=>{
+    if(!adminSet.has(gid)){
+      try{ adminJoinRequestSubs[gid](); }catch(e){}
+      delete adminJoinRequestSubs[gid];
+      delete adminJoinRequests[gid];
+    }
+  });
+  adminIds.forEach(gid=>{
+    if(adminJoinRequestSubs[gid]) return;
+    adminJoinRequestSubs[gid] = fbDb.collection('groups').doc(gid).collection('joinRequests').onSnapshot(snap=>{
+      adminJoinRequests[gid] = snap.docs.map(d=>({ id:d.id, groupId:gid, ...d.data() }));
+      render();
+    }, ()=>{ adminJoinRequests[gid] = []; });
+  });
+}
+function teardownAdminJoinRequestSubs(){
+  Object.keys(adminJoinRequestSubs).forEach(gid=>{ try{ adminJoinRequestSubs[gid](); }catch(e){} });
+  adminJoinRequestSubs = {};
+  adminJoinRequests = {};
+  myGroupRoles = {};
+}
+// Aggregates everything the bell/inbox surfaces, newest-first: incoming friend requests, group
+// join requests waiting on my approval, the check-in nudge, and today's "one year ago" memory.
+// Each item carries its own `action()` so renderNotifPanel/attachEvents stay dumb dispatchers.
+function notifItems(){
+  if(!currentUser) return [];
+  const myUid = currentUser.uid;
+  const items = [];
+  friendLinksData.filter(l=>l.status==='pending' && l.requestedBy!==myUid).forEach(l=>{
+    items.push({
+      id:'friend:'+l.id, iconName:'userPlus', text:'New friend request', sub:'Tap to view in Friends',
+      time:l.createdAt||0,
+      action:()=>{ notifPanelOpen=false; switchToTab('friends'); }
+    });
+  });
+  Object.keys(adminJoinRequests).forEach(gid=>{
+    (adminJoinRequests[gid]||[]).forEach(r=>{
+      const g = groupsDirectory.find(x=>x.id===gid);
+      items.push({
+        id:'joinreq:'+gid+':'+r.id, iconName:'users', text:'Group join request',
+        sub:(g ? g.name : 'A group you manage') + ' — tap to review', time:r.createdAt||0,
+        action:()=>{ notifPanelOpen=false; activeTab='groups'; openGroup(gid); activeGroupTab='requests'; render(); }
+      });
+    });
+  });
+  const last = lastActivityDate();
+  if(last){
+    const gap = daysBetween(last, todayStr());
+    if(gap >= 3){
+      items.push({
+        id:'checkin', iconName:'calendar', text:"Haven't logged a reading in "+gap+' days',
+        sub:'No pressure — tap to open Today', time:0,
+        action:()=>{ notifPanelOpen=false; switchToTab('today'); }
+      });
+    }
+  }
+  const oya = oneYearAgoEntries();
+  if((oya.journal && oya.journal.length) || (oya.log && oya.log.length)){
+    items.push({
+      id:'onthisday', iconName:'bookmark', text:'On this day, one year ago', sub:'A memory resurfaced in your Journal',
+      time:0,
+      action:()=>{ notifPanelOpen=false; switchToTab('journal'); }
+    });
+  }
+  items.sort((a,b)=> (b.time||0)-(a.time||0));
+  return items;
+}
+function toggleNotifPanel(){
+  notifPanelOpen = !notifPanelOpen;
+  render();
+}
+function runNotifItem(id){
+  const item = notifItems().find(i=>i.id===id);
+  if(item) item.action();
+}
+// "My Groups" is rendered by filtering `groupsDirectory` down to ids in `myGroupIds` (see
+// renderGroupsDirectory) — but groupsDirectory itself comes from ONE broad collection-wide list()
+// query, capped at 200 docs and cached after the first load. That query can miss a group you
+// genuinely belong to: Firestore rules commonly allow reading a single group doc by ID more
+// readily than an unrestricted list() across the whole collection, and even when both are allowed
+// identically, a group you were just added to may simply postdate the last list() snapshot this
+// session took. Either way, the result was the exact bug reported: a brand-new group is visible
+// right after creation (openGroup() reads it directly, doc-by-doc, nothing to do with this list),
+// but "disappears" the moment you navigate back to the plain directory view. Fix: whenever
+// myGroupIds changes, fetch any group it names that isn't already in groupsDirectory, directly by
+// ID — a plain get(), the least restrictive read there is — and merge it in.
+function ensureMyGroupsInDirectory(){
+  if(!fbDb) return;
+  const known = new Set(groupsDirectory.map(g=>g.id));
+  const missing = myGroupIds.filter(id=> !known.has(id));
+  if(!missing.length) return;
+  Promise.all(missing.map(id=>
+    fbDb.collection('groups').doc(id).get().then(doc=> doc.exists ? { id:doc.id, ...doc.data() } : null).catch(()=>null)
+  )).then(results=>{
+    const found = results.filter(Boolean);
+    if(!found.length) return;
+    const known2 = new Set(groupsDirectory.map(g=>g.id));
+    found.forEach(g=>{ if(!known2.has(g.id)){ groupsDirectory.push(g); known2.add(g.id); } });
+    render();
+  });
 }
 let groupDirTabAutoSet = false; // flips the directory to "My Groups" the first time membership loads, once only
 
@@ -2282,6 +2539,11 @@ function createGroup(fields){
     })
   ).then(()=>{
     groupCreateBusy = false; groupCreateOpen = false; groupDraftBooks = [];
+    // Add it to groupsDirectory immediately from the object already in hand, rather than only
+    // waiting on loadGroupsDirectory(true)'s round trip — this is the exact data the bulk list()
+    // query would eventually return anyway, so there's nothing to gain from waiting for it, and
+    // it means "My Groups" is correct even in the window before that request resolves.
+    if(!groupsDirectory.some(g=>g.id===groupRef.id)) groupsDirectory.push({ id: groupRef.id, ...groupDoc });
     loadGroupsDirectory(true);
     openGroup(groupRef.id);
   }).catch(err=>{
@@ -2498,7 +2760,7 @@ function render(){
   app.innerHTML = `
     ${renderDesktopNav()}
     <div class="app-main">
-      ${renderHeader()}
+      ${renderTopStrip()}
       ${renderGroupInviteBanner()}
       ${renderCheckinBanner()}
       ${renderInstallBanner()}
@@ -2507,10 +2769,10 @@ function render(){
     </div>
     ${renderBottomNav()}
     ${renderSidebar()}
+    ${renderNotifPanel()}
     ${renderDialogOverlay()}
     ${renderCommandPalette()}
     ${renderToastStack()}
-    <input type="file" id="importFile" accept="application/json">
   `;
   attachEvents();
   restoreFocus();
@@ -2771,22 +3033,49 @@ function syncPillHtml(){
   return `<span class="sync-pill ${cls}">&#9679; ${label}</span>`;
 }
 
-function renderHeader(){
-  const totalComplete = state.log.filter(e=>e.status==='complete').length;
-  const planName = state.plan ? (PRESET_PLANS[state.plan.presetId] ? PRESET_PLANS[state.plan.presetId].name : 'Custom plan') : '';
+// The old header carried the app title, a stats subtitle, the sync pill, and the backup buttons —
+// all of that "jumbo" now lives in the Account tab instead (see renderAccountTab), where it reads
+// naturally as account/app info rather than sitting permanently above every single screen. All
+// that's left here is the two bits of chrome that genuinely need to be reachable from anywhere:
+// the notification bell and the theme toggle — a single slim row, not a header.
+function renderTopStrip(){
+  return `<div class="top-strip">
+    ${renderNotifBellButton()}
+    ${themeToggleHtml()}
+  </div>`;
+}
+
+function renderNotifBellButton(){
+  if(!currentUser) return '';
+  const count = notifItems().length;
+  return `<button type="button" class="notif-bell" id="notifBellBtn" aria-label="Notifications">
+    ${icon('bell', 20)}
+    ${count > 0 ? `<span class="notif-badge">${count > 9 ? '9+' : count}</span>` : ''}
+  </button>`;
+}
+
+function renderNotifPanel(){
+  if(!notifPanelOpen) return '';
+  const items = notifItems();
+  const list = items.length
+    ? items.map(i=>`
+      <button type="button" class="notif-item" data-notif-id="${i.id}">
+        <span class="notif-item-icon">${icon(i.iconName, 18)}</span>
+        <span class="notif-item-text">
+          <span class="notif-item-title">${i.text}</span>
+          <span class="notif-item-sub">${i.sub}</span>
+        </span>
+      </button>`).join('')
+    : emptyState('bell', "You're all caught up — nothing waiting on you right now.");
   return `
-  <header class="top">
-    <div>
-      <h1>Cultivate</h1>
-      <div class="sub">${planName} &middot; ${ACTIVE_CATEGORIES.length} categories &middot; ${totalComplete} chapters logged all-time${currentUser ? ' &middot; ' + currentUser.email : ''}</div>
-      <div>${syncPillHtml()}</div>
-    </div>
-    <div class="toolbar">
-      ${themeToggleHtml()}
-      <button class="btn" id="exportBtn">Export backup</button>
-      <button class="btn" id="importBtn">Import backup</button>
-    </div>
-  </header>`;
+    <div class="notif-backdrop" id="notifBackdrop"></div>
+    <div class="notif-panel">
+      <div class="notif-panel-header">
+        <h3>Notifications</h3>
+        <button type="button" class="sheet-close-btn" id="notifCloseBtn" aria-label="Close">${icon('close', 16)}</button>
+      </div>
+      <div class="notif-panel-list">${list}</div>
+    </div>`;
 }
 
 // All 8 tabs, in one place — the desktop sidebar nav shows all of them (icon + label, stacked);
@@ -2917,7 +3206,33 @@ function renderToday(){
     </div>
     <div class="grid">${cards}</div>
     ${extraReadingHtml}
+    ${renderTodayNotifStrip()}
   `;
+}
+
+// A compact preview of the same inbox the top-strip bell opens (see notifItems()/renderNotifPanel)
+// — keeps "notifications" one of the plain few things the home screen is actually about, per the
+// minimalist Today-tab brief, without duplicating the full panel's markup or its click wiring
+// (both reuse the same [data-notif-id] buttons attachEvents() already listens for).
+function renderTodayNotifStrip(){
+  const items = notifItems();
+  if(!items.length) return '';
+  const shown = items.slice(0, 3);
+  return `
+    <div class="settings-box" style="max-width:none;">
+      <h3>Notifications</h3>
+      <div class="notif-panel-list">
+        ${shown.map(i=>`
+          <button type="button" class="notif-item" data-notif-id="${i.id}">
+            <span class="notif-item-icon">${icon(i.iconName, 18)}</span>
+            <span class="notif-item-text">
+              <span class="notif-item-title">${i.text}</span>
+              <span class="notif-item-sub">${i.sub}</span>
+            </span>
+          </button>`).join('')}
+      </div>
+      ${items.length > shown.length ? `<button type="button" class="btn small" id="seeAllNotifsBtn" style="margin-top:10px;">See all (${items.length})</button>` : ''}
+    </div>`;
 }
 
 function renderLog(){
@@ -3574,6 +3889,16 @@ function renderDashboard(){
 }
 
 function renderAccountTab(){
+  // The app title + at-a-glance stats used to sit permanently in a header above every screen —
+  // now that the top strip is just the bell + theme toggle, this is where that "jumbo" lives instead.
+  const chaptersLoggedAllTime = state.log.filter(e=>e.status==='complete').length;
+  const appInfoBox = `
+    <div class="settings-box" style="text-align:center;">
+      <h3 style="margin-bottom:2px;">Cultivate</h3>
+      <p style="font-size:0.82rem; color:var(--ink-soft); margin:0;">
+        ${currentPlanName() ? `${currentPlanName()} plan &middot; ` : ''}${ACTIVE_CATEGORIES.length} categories &middot; ${chaptersLoggedAllTime} chapters logged all-time
+      </p>
+    </div>`;
   const planBox = `
     <div class="settings-box">
       <h3>Reading plan</h3>
@@ -3689,7 +4014,7 @@ function renderAccountTab(){
   const exportBox = `
     <div class="settings-box">
       <h3>Export journal &amp; log</h3>
-      <p style="font-size:0.85rem; color:var(--ink-soft);">A readable text file of just your journal entries and reading history &mdash; separate from the full backup file above.</p>
+      <p style="font-size:0.85rem; color:var(--ink-soft);">Download a readable text file of your journal entries and reading history.</p>
       <button class="btn" id="exportJournalLogBtn">Export journal + log</button>
     </div>`;
   const readingAppBox = `
@@ -3721,6 +4046,7 @@ function renderAccountTab(){
     </div>`;
   if(currentUser){
     return `
+    ${appInfoBox}
     <div class="settings-box">
       <h3>Account</h3>
       <p style="font-size:0.85rem; color:var(--ink-soft);">Signed in as <strong>${currentUser.email}</strong>. Your progress syncs automatically across every device you log into.</p>
@@ -3736,6 +4062,7 @@ function renderAccountTab(){
     ${feedbackBox}`;
   }
   return `
+    ${appInfoBox}
     <div class="settings-box">
       <h3>Account</h3>
       <p style="font-size:0.85rem; color:var(--ink-soft);">You're using guest mode &mdash; your progress is only saved on this device. Create a free account to sync across your phone and laptop.</p>
@@ -3779,6 +4106,17 @@ function attachEvents(){
   if(sidebarBackdrop) sidebarBackdrop.addEventListener('click', ()=>{ sidebarOpen = false; render(); });
   const sidebarCloseBtn = document.getElementById('sidebarCloseBtn');
   if(sidebarCloseBtn) sidebarCloseBtn.addEventListener('click', ()=>{ sidebarOpen = false; render(); });
+  const notifBellBtn = document.getElementById('notifBellBtn');
+  if(notifBellBtn) notifBellBtn.addEventListener('click', (e)=>{ e.stopPropagation(); toggleNotifPanel(); });
+  const notifBackdrop = document.getElementById('notifBackdrop');
+  if(notifBackdrop) notifBackdrop.addEventListener('click', ()=>{ notifPanelOpen = false; render(); });
+  const notifCloseBtn = document.getElementById('notifCloseBtn');
+  if(notifCloseBtn) notifCloseBtn.addEventListener('click', ()=>{ notifPanelOpen = false; render(); });
+  document.querySelectorAll('[data-notif-id]').forEach(btn=>{
+    btn.addEventListener('click', ()=> runNotifItem(btn.dataset.notifId));
+  });
+  const seeAllNotifsBtn = document.getElementById('seeAllNotifsBtn');
+  if(seeAllNotifsBtn) seeAllNotifsBtn.addEventListener('click', ()=> toggleNotifPanel());
   document.querySelectorAll('[data-set-theme]').forEach(btn=>{
     btn.addEventListener('click', ()=> cycleThemeMode());
   });
@@ -3881,55 +4219,6 @@ function attachEvents(){
     });
   });
 
-  const exportBtn = document.getElementById('exportBtn');
-  if(exportBtn){
-    exportBtn.addEventListener('click', ()=>{
-      const blob = new Blob([JSON.stringify(state, null, 2)], {type:'application/json'});
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'bible-reading-tracker-backup-'+todayStr()+'.json';
-      document.body.appendChild(a); a.click(); document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      showToast('Backup downloaded.', { tone:'good' });
-    });
-  }
-  const importBtn = document.getElementById('importBtn');
-  const importFile = document.getElementById('importFile');
-  if(importBtn && importFile){
-    importBtn.addEventListener('click', ()=> importFile.click());
-    importFile.addEventListener('change', (ev)=>{
-      const file = ev.target.files[0];
-      if(!file) return;
-      const reader = new FileReader();
-      reader.onload = (e)=>{
-        let parsed;
-        try{
-          parsed = JSON.parse(e.target.result);
-          if(!parsed.cursors || !parsed.cycles || !Array.isArray(parsed.log)) throw new Error('bad file');
-        }catch(err){ customAlert('Could not read that file as a valid backup.'); return; }
-        customConfirm('Import this backup and replace your current progress?', { confirmLabel:'Import', danger:true }).then(ok=>{
-          if(!ok) return;
-          state = {
-            cursors: parsed.cursors || {},
-            cycles: parsed.cycles || {},
-            log: parsed.log,
-            plan: parsed.plan || null,
-            journal: Array.isArray(parsed.journal) ? parsed.journal : [],
-            readingApp: READING_APPS[parsed.readingApp] ? parsed.readingApp : 'biblegateway',
-            memorization: Array.isArray(parsed.memorization) ? parsed.memorization : [],
-            extraLog: Array.isArray(parsed.extraLog) ? parsed.extraLog : [],
-            checkins: Array.isArray(parsed.checkins) ? parsed.checkins : [],
-            profile: sanitizeProfile(parsed.profile)
-          };
-          saveState(); render();
-          showToast('Backup imported.', { tone:'good' });
-        });
-      };
-      reader.readAsText(file);
-      importFile.value = '';
-    });
-  }
   const logoutBtn = document.getElementById('logoutBtn');
   if(logoutBtn){
     logoutBtn.addEventListener('click', ()=>{
@@ -4291,8 +4580,9 @@ let pendingGroupInvite = null;
 // Registered exactly once here (NOT inside attachEvents(), which reruns on every render() call —
 // adding a document-level listener there would stack a fresh duplicate on every single render).
 // Cmd/Ctrl+K opens the quick-jump command palette from anywhere; Escape backs out of whichever
-// overlay is currently on top (palette, then dialog, then the group-create sheet, then the mobile
-// "More" sidebar), matching how these layers actually stack visually (see their z-index values).
+// overlay is currently on top (palette, then dialog, then the group-create sheet, then the
+// notification panel, then the mobile "More" sidebar), matching how these layers actually stack
+// visually (see their z-index values).
 if(typeof document !== 'undefined' && document.addEventListener){
   document.addEventListener('keydown', (e)=>{
     if((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')){
@@ -4304,6 +4594,7 @@ if(typeof document !== 'undefined' && document.addEventListener){
       if(commandPaletteOpen){ closeCommandPalette(); return; }
       if(activeDialog){ closeDialog(activeDialog.mode==='confirm' ? false : null); return; }
       if(groupCreateOpen){ groupCreateOpen = false; render(); return; }
+      if(notifPanelOpen){ notifPanelOpen = false; render(); return; }
       if(sidebarOpen){ sidebarOpen = false; render(); return; }
     }
   });
@@ -4316,6 +4607,10 @@ initFirebase();
 // fires, so the very first thing a person sees on iOS is a finished screen, not a half-built one —
 // a no-op on GitHub Pages/any regular browser since capacitorPlugin() finds nothing there.
 hideCapacitorSplash();
+// Safety net for the web splash (see hideAppSplash): every real code path already clears it —
+// firebase missing, a placeholder config, an init error, or a normal auth-state callback — but if
+// something upstream hangs entirely, don't leave the app stuck behind the splash forever.
+setTimeout(hideAppSplash, 4000);
 
 /* ---------------- Service worker registration (installable + offline) ---------------- */
 if('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')){
