@@ -2997,7 +2997,10 @@ function notifItems(){
     items.push({
       id:'friend:'+l.id, iconName:'userPlus', text:'New friend request', sub:'Tap to view in Friends',
       time:l.createdAt||0,
-      action:()=>{ notifPanelOpen=false; switchToTab('friends'); }
+      // 'friends' was its own tab when this was written; Friends/Groups merged into one 'community'
+      // tab with a sub-tab switcher since then (see communitySubTab) — this now points at the right
+      // sub-tab instead of a tab id that no longer exists.
+      action:()=>{ notifPanelOpen=false; communitySubTab='friends'; switchToTab('community'); }
     });
   });
   Object.keys(adminJoinRequests).forEach(gid=>{
@@ -3588,11 +3591,25 @@ function renderGroupInviteBanner(){
     <button class="btn primary small" id="acceptGroupInviteBtn">Create account</button>
   </div>`;
 }
+// Dismissing this banner used to only hide the DOM node directly (el.style.display='none') —
+// nothing was ever persisted, so the very next render() (any unrelated re-render, and certainly a
+// page refresh) rebuilt it from scratch and showed it again. Fixed the same way the bell/inbox's
+// own checkin nudge already works: dismissal is scoped to today's date and saved to localStorage,
+// so it stays dismissed for the rest of today but comes back on its own if the gap is still there
+// (or grows) tomorrow — "dismissed for now," not "silenced forever."
+const CHECKIN_BANNER_DISMISS_KEY = 'cultivateCheckinBannerDismissedDate';
+let checkinBannerDismissedDate = null;
+try{ checkinBannerDismissedDate = localStorage.getItem(CHECKIN_BANNER_DISMISS_KEY); }catch(e){}
+function dismissCheckinBannerForToday(){
+  checkinBannerDismissedDate = todayStr();
+  try{ localStorage.setItem(CHECKIN_BANNER_DISMISS_KEY, checkinBannerDismissedDate); }catch(e){}
+}
 function renderCheckinBanner(){
   const last = lastActivityDate();
   if(!last) return '';
   const gap = daysBetween(last, todayStr());
   if(gap < 3) return '';
+  if(checkinBannerDismissedDate === todayStr()) return '';
   return `<div class="checkin-banner">
     <span>&#128075; Haven't seen a reading logged in ${gap} days. No pressure — pick back up whenever you're ready.</span>
     <button class="btn small" data-action="dismiss-checkin">Dismiss</button>
@@ -5272,6 +5289,7 @@ function attachEvents(){
   });
   const dismissCheckin = document.querySelector('[data-action="dismiss-checkin"]');
   if(dismissCheckin) dismissCheckin.addEventListener('click', ()=>{
+    dismissCheckinBannerForToday();
     const el = dismissCheckin.closest('.checkin-banner');
     if(el) el.style.display = 'none';
   });
