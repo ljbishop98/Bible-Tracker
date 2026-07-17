@@ -79,17 +79,27 @@
      works against either background. */
   :root[data-theme="dark"] .book-tile{ background:rgba(255,255,255,0.06); }
   *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
-  html{overflow-x:hidden; width:100%; background:var(--bg);}
+  /* IMPORTANT: overflow-x:hidden on <html>/<body> themselves is a known trap — combined with
+     overscroll-behavior on the same element, some WebKit/Safari versions lose track of which
+     element is the page's actual scrolling root and the whole page stops scrolling vertically,
+     not just sideways (this is what broke scrolling in v21). html/body are left as plain
+     scrollable elements; the horizontal-overflow clip instead lives on #app, a single wrapper
+     that isn't also the thing carrying overscroll-behavior, so there's no ambiguity for the
+     browser to get confused about. */
+  html{width:100%; background:var(--bg);}
   body{
     margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
     background:var(--bg); color:var(--ink); line-height:1.4;
     padding-top:env(safe-area-inset-top); padding-bottom:env(safe-area-inset-bottom);
-    overflow-x:hidden; width:100%;
+    width:100%; min-height:100%;
     transition:background .15s ease, color .15s ease;
     /* Native apps don't let a bounce/rubber-band scroll reveal a mismatched white flash behind
        the content — matching html's background to the theme (above) covers the overscroll area
        on iOS; overscroll-behavior-y stops the browser's own pull-to-refresh/navigation gestures
-       from firing on top of the app's own gestures. */
+       from firing on top of the app's own gestures. overflow-y:auto is stated explicitly (rather
+       than left as the implicit default) so this stays paired with overscroll-behavior without
+       reintroducing the html/body ambiguity described above. */
+    overflow-y:auto;
     overscroll-behavior-y: contain;
     -webkit-font-smoothing: antialiased;
   }
@@ -97,19 +107,24 @@
      selection highlighting on things that are controls rather than readable content — gets turned
      off for interactive chrome, while normal text (journal entries, profile bios, verses) stays
      selectable as expected. */
-  button, nav, .bottom-nav, .sidebar-panel, .tabs, .group-tabs{ -webkit-user-select:none; user-select:none; }
+  button, .bottom-nav, .sidebar-panel, .tabs, .group-tabs{ -webkit-user-select:none; user-select:none; }
   button{ -webkit-tap-highlight-color:transparent; }
   /* Internal scroll containers keep working exactly the same, they just don't show the browser's
      own scrollbar chrome — this is what makes something like the sidebar or a long checkbox list
      read as part of the app's own surface instead of an embedded web widget. */
-  .sidebar-panel, .book-picker, .log-scroll{ scrollbar-width:none; -ms-overflow-style:none; }
+  .sidebar-panel, .book-picker, .log-scroll{ scrollbar-width:none; -ms-overflow-style:none; -webkit-overflow-scrolling:touch; }
   .sidebar-panel::-webkit-scrollbar, .book-picker::-webkit-scrollbar, .log-scroll::-webkit-scrollbar{ display:none; }
   /* Anything that can legitimately overflow (long unbroken tokens, wide inline-blocks) should
      scroll within itself rather than pushing the whole page wider than the viewport — this is
      what caused sideways-scrolling on mobile before, since a single wide element anywhere on the
-     page stretches <body> along with it. */
+     page stretches <body> along with it. The clip now lives here (not on html/body — see above). */
   img, svg, video{max-width:100%;}
-  #app{max-width:1180px; margin:0 auto; width:100%; padding:24px 20px 96px;}
+  /* #app itself is just a plain full-width host now — the desktop sidebar nav (fixed, see below)
+     and .app-main (the actual centered/padded content column, same box the old #app used to be)
+     live inside it as two independent pieces, so the sidebar can sit flush against the real edge
+     of the window instead of being squeezed inside a max-width/padded wrapper. */
+  #app{overflow-x:hidden;}
+  .app-main{max-width:1180px; margin:0 auto; width:100%; padding:24px 20px 96px;}
   header.top{display:flex; align-items:flex-start; justify-content:space-between; flex-wrap:wrap; gap:10px; margin-bottom:18px;}
   header.top h1{font-size:1.5rem; margin:0; font-weight:700;}
   header.top .sub{color:var(--ink-soft); font-size:0.9rem;}
@@ -124,12 +139,6 @@
     background:var(--skip-soft); border:1px solid var(--skip); border-radius:10px; padding:14px 16px;
     font-size:0.88rem; margin-bottom:18px; display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap;
   }
-  nav.tabs{display:flex; gap:6px; margin-bottom:22px; border-bottom:1px solid var(--line); flex-wrap:wrap;}
-  nav.tabs button{
-    background:none; border:none; padding:10px 16px; font-size:0.95rem; cursor:pointer;
-    color:var(--ink-soft); border-bottom:2px solid transparent; font-weight:600;
-  }
-  nav.tabs button.active{color:var(--accent); border-bottom-color:var(--accent);}
   .toolbar{display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:18px;}
   .toolbar input[type=date]{
     padding:7px 10px; border:1px solid var(--line); border-radius:8px; font-size:0.9rem; background:var(--card);
@@ -137,6 +146,7 @@
   .btn{
     padding:7px 14px; border-radius:8px; border:1px solid var(--line); background:var(--card);
     cursor:pointer; font-size:0.85rem; font-weight:600; color:var(--ink);
+    transition:transform .08s ease, background .12s ease;
   }
   .btn:hover{background:var(--accent-soft);}
   .btn.primary{background:var(--accent); color:#fff; border-color:var(--accent);}
@@ -149,6 +159,7 @@
   .card{
     background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px;
     box-shadow:var(--shadow); border-left:5px solid var(--cat-color, var(--accent));
+    transition:transform .15s ease, box-shadow .15s ease;
   }
   .card .cat-name{font-weight:700; font-size:0.95rem; margin-bottom:4px;}
   .card .due{font-size:1.15rem; font-weight:700; margin:6px 0 2px;}
@@ -160,8 +171,26 @@
   }
   .status-pill.complete{background:var(--good-soft); color:var(--good);}
   .status-pill.skipped{background:var(--skip-soft); color:var(--skip);}
+  /* A quick overshoot-and-settle pop the instant a reading is marked complete — physical feedback
+     that something actually happened, instead of the pill just silently appearing on next render. */
+  @keyframes pillPop{ 0%{transform:scale(0.4); opacity:0;} 60%{transform:scale(1.12); opacity:1;} 100%{transform:scale(1);} }
+  .pill-pop{ animation:pillPop .35s cubic-bezier(.34,1.56,.64,1); }
+  @media (prefers-reduced-motion: reduce){ .pill-pop{ animation:none; } }
   .today-log-list{font-size:0.78rem; color:var(--ink-soft); margin-top:8px;}
   .today-log-list div{margin-bottom:2px;}
+  /* ---- Removing a row (delete journal entry / extra reading) ----
+     See animateRemoval() in JS: the row is given this class and left on screen briefly before the
+     underlying data actually changes and render() rebuilds everything, so deleting something reads
+     as a piece of UI leaving the screen rather than an instant, jarring disappearance. */
+  .journal-entry, .extra-log-row{ transition:transform .2s ease, opacity .2s ease; }
+  .row-leaving{ transform:translateX(24px); opacity:0; pointer-events:none; }
+  @media (prefers-reduced-motion: reduce){ .journal-entry, .extra-log-row{ transition:none; } .row-leaving{ display:none; } }
+  /* ---- Tactile press feedback ----
+     A slight scale-down the instant you press something (works identically for mouse and touch,
+     unlike :hover) is one of the simplest, cheapest things that makes tapping a button feel like
+     pressing a physical control instead of clicking a link. */
+  .btn:active{ transform:scale(0.96); }
+  .card:active, .group-card:active, .plan-card:active{ transform:scale(0.99); }
   table.logtable{width:100%; border-collapse:collapse; font-size:0.82rem;}
   table.logtable th, table.logtable td{
     border:1px solid var(--line); padding:6px 8px; text-align:left; white-space:nowrap;
@@ -176,7 +205,7 @@
   }
   details.month-group summary::-webkit-details-marker{display:none;}
   .dash-summary{display:grid; grid-template-columns:repeat(auto-fill, minmax(min(220px,100%),1fr)); gap:12px; margin-bottom:26px;}
-  .dash-summary .stat{background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px; box-shadow:var(--shadow);}
+  .dash-summary .stat{background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px; box-shadow:var(--shadow); transition:transform .15s ease, box-shadow .15s ease;}
   .dash-summary .stat .num{font-size:1.6rem; font-weight:800; color:var(--accent);}
   .dash-summary .stat .label{font-size:0.78rem; color:var(--ink-soft); font-weight:600;}
   .cat-block{margin-bottom:26px;}
@@ -192,13 +221,23 @@
   .book-row:last-child{border-bottom:none;}
   .book-row > div:first-child{overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
   .bar-track{background:var(--line); border-radius:6px; height:10px; overflow:hidden;}
-  .bar-fill{height:100%; border-radius:6px;}
+  .bar-fill{height:100%; border-radius:6px; transition:width .6s cubic-bezier(.25,.8,.4,1);}
+  @media (prefers-reduced-motion: reduce){ .bar-fill{ transition:none; } }
   .passes-badge{
     background:var(--accent-soft); color:var(--accent); font-weight:700; font-size:0.72rem;
     padding:2px 8px; border-radius:999px; text-align:center;
   }
   footer.app-footer{margin-top:40px; padding-top:16px; border-top:1px solid var(--line); color:var(--ink-soft); font-size:0.78rem; display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px;}
   .empty-note{color:var(--ink-soft); font-size:0.85rem; padding:20px; text-align:center;}
+  .empty-state{
+    display:flex; flex-direction:column; align-items:center; gap:10px;
+    padding:36px 20px; text-align:center; color:var(--ink-soft);
+  }
+  .empty-state-icon{
+    width:56px; height:56px; border-radius:50%; background:var(--accent-soft); color:var(--accent);
+    display:flex; align-items:center; justify-content:center;
+  }
+  .empty-state-message{margin:0; font-size:0.88rem; max-width:340px; line-height:1.5;}
   input[type=file]{display:none;}
   .settings-box{background:var(--card); border:1px solid var(--line); border-radius:12px; padding:20px; max-width:640px; box-shadow:var(--shadow); margin-bottom:20px;}
   .settings-box h3{margin-top:0;}
@@ -275,7 +314,7 @@
   .group-card-list{display:flex; flex-direction:column; gap:10px;}
   .group-card{
     display:flex; align-items:center; gap:12px; padding:12px 14px; border:1px solid var(--line);
-    border-radius:12px; background:var(--bg);
+    border-radius:12px; background:var(--bg); transition:transform .15s ease, box-shadow .15s ease, border-color .15s ease;
   }
   .group-card .group-icon{flex-shrink:0;}
   .group-card .group-info{flex:1; min-width:0;}
@@ -313,7 +352,7 @@
   .auth-links a.muted{color:var(--ink-soft);}
   .onboard-wrap{max-width:900px; margin:0 auto;}
   .plan-grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(min(260px,100%),1fr)); gap:16px; margin:20px 0;}
-  .plan-card{background:var(--card); border:1px solid var(--line); border-radius:14px; padding:18px; box-shadow:var(--shadow); display:flex; flex-direction:column; gap:10px;}
+  .plan-card{background:var(--card); border:1px solid var(--line); border-radius:14px; padding:18px; box-shadow:var(--shadow); display:flex; flex-direction:column; gap:10px; transition:transform .15s ease, box-shadow .15s ease;}
   .plan-card h4{margin:0; font-size:1.05rem;}
   .plan-card p{margin:0; font-size:0.82rem; color:var(--ink-soft); flex-grow:1;}
   .plan-card .swatches{display:flex; gap:4px; flex-wrap:wrap;}
@@ -357,11 +396,15 @@
   .sheet-panel{
     position:fixed; left:0; right:0; bottom:0; z-index:71; background:var(--card);
     border-radius:20px 20px 0 0; box-shadow:0 -8px 30px rgba(0,0,0,0.22);
-    max-height:88vh; overflow-y:auto; transform:translateY(100%); transition:transform .28s cubic-bezier(.25,.8,.4,1);
+    max-height:88vh; overflow-y:auto; -webkit-overflow-scrolling:touch;
+    transform:translateY(100%); transition:transform .28s cubic-bezier(.25,.8,.4,1);
     padding:10px 20px calc(20px + env(safe-area-inset-bottom));
     max-width:640px; margin:0 auto;
+    /* Belt-and-suspenders alongside the off-screen transform above: a closed sheet should never
+       be able to intercept scroll/touch input on the page underneath it, full stop. */
+    pointer-events:none;
   }
-  .sheet-panel.open{ transform:translateY(0); }
+  .sheet-panel.open{ transform:translateY(0); pointer-events:auto; }
   .sheet-handle{ width:36px; height:4px; border-radius:3px; background:var(--line); margin:6px auto 14px; }
   .sheet-header{ display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
   .sheet-header h3{ margin:0; }
@@ -388,6 +431,30 @@
   .dialog-actions{display:flex; gap:10px; justify-content:center;}
   .dialog-actions .btn{flex:1;}
   @media (prefers-reduced-motion: reduce){ .dialog-card, .dialog-backdrop{ animation:none; } }
+
+  /* ---- Toasts (transient feedback) ----
+     Bottom-center, stacked above the bottom nav on phone; top-right corner on desktop, next to
+     where the eye naturally lands after clicking something in the sidebar/header. The stack itself
+     ignores clicks (so it never blocks the page underneath) but each toast is clickable to dismiss. */
+  .toast-stack{
+    position:fixed; left:0; right:0; bottom:calc(78px + env(safe-area-inset-bottom)); z-index:90;
+    display:flex; flex-direction:column; align-items:center; gap:8px; padding:0 16px;
+    pointer-events:none;
+  }
+  .toast{
+    background:var(--ink); color:var(--bg); padding:10px 18px; border-radius:999px;
+    font-size:0.85rem; font-weight:600; box-shadow:0 6px 20px rgba(0,0,0,0.25);
+    max-width:90vw; text-align:center; cursor:pointer; pointer-events:auto;
+    animation:toastIn .2s ease-out, toastOut .3s ease-in 2.5s forwards;
+  }
+  .toast-good{background:var(--good); color:#fff;}
+  .toast-bad{background:var(--bad); color:#fff;}
+  @keyframes toastIn{ from{opacity:0; transform:translateY(10px);} to{opacity:1; transform:translateY(0);} }
+  @keyframes toastOut{ to{opacity:0; transform:translateY(-6px);} }
+  @media (prefers-reduced-motion: reduce){ .toast{ animation:none; } }
+  @media (min-width:761px){
+    .toast-stack{ left:auto; right:24px; bottom:auto; top:24px; align-items:flex-end; }
+  }
 
   /* ---- Skeleton loading placeholders ---- */
   @keyframes skeletonPulse{ 0%,100%{ opacity:0.5; } 50%{ opacity:1; } }
@@ -463,9 +530,12 @@
     position:fixed; top:0; left:0; bottom:0; width:78%; max-width:300px; background:var(--card-glass);
     z-index:60; transform:translateX(-100%); transition:transform .25s ease; padding:20px 16px;
     padding-top:calc(20px + env(safe-area-inset-top)); box-shadow:2px 0 16px rgba(0,0,0,0.18);
-    overflow-y:auto; backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px);
+    overflow-y:auto; -webkit-overflow-scrolling:touch; backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px);
+    /* Belt-and-suspenders alongside the off-screen transform above: a closed sidebar should never
+       be able to intercept scroll/touch input on the page underneath it, full stop. */
+    pointer-events:none;
   }
-  .sidebar-panel.open{transform:translateX(0);}
+  .sidebar-panel.open{transform:translateX(0); pointer-events:auto;}
   .sidebar-panel h2{font-size:1.1rem; margin:0 0 16px;}
   .sidebar-nav-item{
     display:flex; align-items:center; gap:12px; padding:12px 8px; border-radius:10px; width:100%;
@@ -478,9 +548,77 @@
     color:var(--ink-soft); cursor:pointer; line-height:1; padding:4px;
   }
 
-  /* ---- Phone-width layout: bottom nav + sidebar replace the top tabs, everything tightens up ---- */
+  /* ---- Desktop persistent left nav (replaces the old flat top text-tab row) ----
+     Fixed to the real left edge of the window — not nested inside .app-main's max-width column —
+     so it reads as a permanent piece of the app's shell rather than part of the scrolling page,
+     the same way a sidebar in Slack/Notion/Mail behaves. Hidden below the phone breakpoint, where
+     the bottom nav + slide-in "More" sidebar take over navigation instead. */
+  .desktop-nav{
+    position:fixed; top:0; left:0; bottom:0; width:220px; z-index:20;
+    background:var(--card); border-right:1px solid var(--line);
+    padding:22px 14px; overflow-y:auto;
+    display:flex; flex-direction:column; gap:2px;
+  }
+  .desktop-nav-brand{font-weight:800; font-size:1.15rem; padding:0 10px; margin-bottom:18px; color:var(--ink);}
+  .desktop-nav-quickjump{
+    display:flex; align-items:center; justify-content:space-between; width:100%; text-align:left;
+    background:var(--bg); border:1px solid var(--line); border-radius:8px; padding:8px 10px;
+    font-size:0.8rem; font-weight:600; color:var(--ink-soft); cursor:pointer; margin-bottom:14px;
+  }
+  .desktop-nav-quickjump .kbd{
+    font-size:0.7rem; font-weight:700; background:var(--card); border:1px solid var(--line);
+    border-radius:4px; padding:1px 5px; color:var(--ink-soft);
+  }
+  /* ---- Command palette (Cmd/Ctrl+K quick jump) ---- */
+  .command-palette{
+    position:fixed; top:15%; left:50%; transform:translateX(-50%); z-index:85;
+    width:min(480px, calc(100vw - 48px)); background:var(--card); border-radius:16px;
+    box-shadow:0 20px 60px rgba(0,0,0,0.3); overflow:hidden;
+    animation:dialogPop .18s cubic-bezier(.25,.8,.4,1);
+  }
+  .command-palette input{
+    width:100%; border:none; border-bottom:1px solid var(--line); padding:16px 18px; font-size:1rem;
+    font-family:inherit; background:transparent; color:var(--ink); outline:none;
+  }
+  .command-palette-list{ max-height:320px; overflow-y:auto; padding:6px; }
+  .command-palette-item{
+    display:flex; align-items:center; gap:10px; width:100%; text-align:left;
+    background:none; border:none; padding:10px 12px; border-radius:8px; font-size:0.9rem;
+    color:var(--ink); cursor:pointer;
+  }
+  .command-palette-item:hover, .command-palette-item:focus{ background:var(--accent-soft); }
+  .command-palette-empty{ padding:20px; text-align:center; color:var(--ink-soft); font-size:0.85rem; }
+  @media (prefers-reduced-motion: reduce){ .command-palette{ animation:none; } }
+  @media (max-width:760px){ .command-palette{ top:8%; width:calc(100vw - 32px); } }
+  .desktop-nav-item{
+    display:flex; align-items:center; gap:12px; width:100%; text-align:left;
+    background:none; border:none; border-radius:10px; padding:11px 12px;
+    font-size:0.92rem; font-weight:600; color:var(--ink-soft); cursor:pointer;
+    transition:background .12s ease, color .12s ease;
+  }
+  .desktop-nav-item .icon{flex-shrink:0; display:flex;}
+  .desktop-nav-item.active{background:var(--accent-soft); color:var(--accent);}
+  @media (hover:hover) and (pointer:fine){
+    .desktop-nav-item:not(.active):hover{background:var(--accent-soft); color:var(--ink);}
+    /* A card that lifts slightly and deepens its shadow under the cursor reads as something you
+       can act on, the way a real app's clickable surfaces do — gated to hover:hover/pointer:fine
+       so a phone/tablet tap never gets stuck showing a "hover" state after the finger lifts. */
+    .card:hover, .dash-summary .stat:hover, .plan-card:hover{
+      transform:translateY(-2px); box-shadow:0 6px 18px rgba(40,30,10,0.12);
+    }
+    .group-card:hover{ border-color:var(--accent); transform:translateY(-1px); }
+    :root[data-theme="dark"] .card:hover, :root[data-theme="dark"] .dash-summary .stat:hover, :root[data-theme="dark"] .plan-card:hover{
+      box-shadow:0 6px 18px rgba(0,0,0,0.4);
+    }
+  }
+
+  /* ---- Phone-width layout: bottom nav + sidebar replace the desktop nav, everything tightens up ---- */
+  @media (min-width:761px){
+    .app-main{margin-left:220px; margin-right:auto;}
+  }
   @media (max-width:760px){
-    #app{padding:14px 14px 88px;}
+    .desktop-nav{display:none;}
+    .app-main{padding:14px 14px 88px;}
     header.top{
       position:sticky; top:0; z-index:30; background:var(--card-glass);
       margin:-14px -14px 14px; padding:12px 14px 10px; border-bottom:1px solid var(--line);
@@ -488,7 +626,6 @@
     }
     header.top h1{font-size:1.2rem;}
     header.top .sub{font-size:0.72rem;}
-    nav.tabs{display:none;}
     .bottom-nav{display:block;}
     .sidebar-backdrop{display:block;}
     .sidebar-panel{display:block;}
@@ -603,6 +740,19 @@ function icon(name, size){
   };
   const d = paths[name] || '';
   return `<svg class="icon-svg" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+}
+
+// A bare sentence sitting alone in a card reads as an unfinished screen — pairing it with a small
+// icon and, where there's an obvious single next step, an actual button gives an empty list
+// something to look at and something to do, instead of just a gap where content usually goes.
+// `message` is inserted as-is (callers pass their own literal copy, nothing user-supplied).
+function emptyState(iconName, message, opts){
+  opts = opts || {};
+  return `<div class="empty-state">
+    <div class="empty-state-icon">${icon(iconName, 30)}</div>
+    <p class="empty-state-message">${message}</p>
+    ${opts.actionLabel && opts.actionId ? `<button type="button" class="btn primary small" id="${opts.actionId}">${opts.actionLabel}</button>` : ''}
+  </div>`;
 }
 
 /* ---------------- Deep links to Bible apps/sites (verified URL formats) ---------------- */
@@ -837,6 +987,9 @@ let journalDraftTag = JOURNAL_TAGS[0];
 let feedbackType = 'suggestion'; // 'suggestion' | 'bug'
 let sidebarOpen = false; // mobile "More" slide-in panel (Journal/Memorize/Friends)
 let checkinEditing = false; // lets you reopen the mood picker after already answering for the date
+let justCompletedCat = null; // category id that was JUST marked complete — plays a checkmark pop on its status pill, then clears itself
+let commandPaletteOpen = false; // desktop quick-jump palette (Cmd/Ctrl+K) — see renderCommandPalette()
+let commandPaletteQuery = '';
 let lastRenderedViewKey = null; // used to only play the view-enter animation when the view actually changes
 
 /* ---------------- Native-style dialogs (replaces window.confirm/alert) ----------------
@@ -881,6 +1034,140 @@ function renderDialogOverlay(){
       <button class="btn primary ${d.danger?'danger':''}" id="dialogConfirmBtn">${escapeHtml(d.confirmLabel)}</button>
     </div>
   </div>`;
+}
+
+/* ---------------- Command palette (desktop quick-jump, Cmd/Ctrl+K) ----------------
+   A short list of "commands" — jump to a tab, toggle the theme, export a backup — filtered as you
+   type and run with Enter or a click. Purely a desktop power-user affordance (there's no physical
+   keyboard shortcut to trigger it from a touch-only device), opened via the global keydown listener
+   below or the "Quick jump" hint in the desktop sidebar nav. */
+function commandList(){
+  return [
+    ...ALL_TABS.map(([id,label,iconName])=>({ id:'tab:'+id, label:'Go to '+label, iconName, run: ()=> switchToTab(id) })),
+    { id:'theme', label:'Toggle light/dark theme', iconName:'auto', run: ()=> cycleThemeMode() },
+    { id:'export', label:'Export backup', iconName:'notebook', run: ()=>{ const btn=document.getElementById('exportBtn'); if(btn) btn.click(); } },
+  ];
+}
+function filteredCommands(){
+  const q = commandPaletteQuery.trim().toLowerCase();
+  const all = commandList();
+  if(!q) return all;
+  return all.filter(c=> c.label.toLowerCase().includes(q));
+}
+function openCommandPalette(){
+  commandPaletteOpen = true; commandPaletteQuery = '';
+  render();
+  const input = document.getElementById('commandPaletteInput');
+  if(input) input.focus();
+}
+function closeCommandPalette(){
+  commandPaletteOpen = false;
+  render();
+}
+function runCommand(cmdId){
+  const cmd = commandList().find(c=>c.id===cmdId);
+  closeCommandPalette();
+  if(cmd) cmd.run();
+}
+function renderCommandPalette(){
+  if(!commandPaletteOpen) return '';
+  const results = filteredCommands();
+  return `
+  <div id="commandPaletteBackdrop" class="dialog-backdrop"></div>
+  <div class="command-palette" role="dialog" aria-modal="true" aria-label="Quick jump">
+    <input type="text" id="commandPaletteInput" placeholder="Jump to a tab or run a command…" value="${escapeHtml(commandPaletteQuery)}" autocomplete="off">
+    <div class="command-palette-list">
+      ${results.length ? results.map(c=>`
+        <button type="button" class="command-palette-item" data-command-id="${c.id}">
+          <span class="icon">${icon(c.iconName,18)}</span>${escapeHtml(c.label)}
+        </button>`).join('') : `<div class="command-palette-empty">No matching commands.</div>`}
+    </div>
+  </div>`;
+}
+
+/* ---------------- Toasts (transient feedback) ----------------
+   Replaces the old scattered feedback pattern — a little "✓ Copied" line tucked under one
+   particular button, a button's own label swapping to "Copied!" for a second, each button call
+   site inventing its own version of the same idea — with one consistent transient notification:
+   auto-dismissing, stacked bottom-center on phone / top-right on desktop (see CSS), used for things
+   like "Friend request sent," "Entry saved," "Invite link copied." */
+let toasts = []; // { id, message, tone: 'default'|'good'|'bad' }
+let toastCounter = 0;
+function showToast(message, opts){
+  opts = opts || {};
+  const id = ++toastCounter;
+  toasts.push({ id, message, tone: opts.tone || 'default' });
+  render();
+  setTimeout(()=> dismissToast(id), opts.duration || 2800);
+}
+function dismissToast(id){
+  const before = toasts.length;
+  toasts = toasts.filter(t=>t.id!==id);
+  if(toasts.length !== before) render();
+}
+function renderToastStack(){
+  if(!toasts.length) return '';
+  return `<div class="toast-stack">${toasts.map(t=>`
+    <div class="toast toast-${t.tone}" data-toast-id="${t.id}">${escapeHtml(t.message)}</div>
+  `).join('')}</div>`;
+}
+
+/* ---------------- Micro-interaction: animated row removal ----------------
+   render() rebuilds the whole tab's markup from scratch, so a deleted journal entry or extra
+   reading would normally just vanish the instant the underlying array shrinks — there's no DOM
+   diffing to animate against. This plays a quick slide-and-fade on the ACTUAL row still in the
+   live DOM first, then runs the real deletion (+ render()) once that's finished, so removing
+   something reads as a piece of UI leaving the screen rather than a page abruptly re-rendering. */
+function animateRemoval(el, onDone){
+  const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if(!el || reduceMotion){ onDone(); return; }
+  el.classList.add('row-leaving');
+  setTimeout(onDone, 200);
+}
+
+/* ---------------- Micro-interaction: animated dashboard numbers + progress bars ----------------
+   Every render() rebuilds the dashboard's markup from scratch, so a stat that goes from 46 to 47
+   would normally just silently BE 47 on the next paint — there's no previous DOM value to animate
+   away from. This keeps its own separate memory of the last value seen per stat/bar (independent
+   of render()'s own state), so it can tell a genuine change from a re-render that didn't actually
+   move the number, and only plays the count-up/fill-in animation for real changes. Runs as a
+   small post-render enhancement step (called from render(), see below) rather than being part of
+   the render() output itself, since it needs to read/write actual DOM node properties over time. */
+let lastDashMetrics = {};
+function animateDashboardMetrics(){
+  if(activeTab !== 'dashboard') return;
+  const app = document.getElementById('app');
+  if(!app || !app.querySelectorAll) return;
+  const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const raf = (typeof requestAnimationFrame === 'function') ? requestAnimationFrame : (fn)=> setTimeout(fn, 16);
+  const now = ()=> (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+
+  app.querySelectorAll('[data-count-to]').forEach(el=>{
+    const key = el.dataset.countKey;
+    const target = Number(el.dataset.countTo);
+    if(!key || isNaN(target)) return;
+    const prev = lastDashMetrics[key];
+    lastDashMetrics[key] = target;
+    if(reduceMotion || prev === undefined || prev === target){ el.textContent = target.toLocaleString(); return; }
+    const start = prev, delta = target - start, duration = 500, startTime = now();
+    (function tick(){
+      const p = Math.min(1, (now() - startTime) / duration);
+      const eased = 1 - Math.pow(1 - p, 3); // ease-out cubic — quick start, gentle settle
+      el.textContent = Math.round(start + delta * eased).toLocaleString();
+      if(p < 1) raf(tick);
+    })();
+  });
+
+  app.querySelectorAll('[data-bar-key]').forEach(el=>{
+    const key = el.dataset.barKey;
+    const target = el.style.width; // render() already set the true final width, e.g. "42%"
+    const prev = lastDashMetrics['bar:'+key];
+    lastDashMetrics['bar:'+key] = target;
+    if(reduceMotion || prev === target) return; // no real change (or motion is off) — leave it as rendered
+    el.style.width = '0%';
+    void el.offsetWidth; // force a reflow so the browser registers 0% before the next line, otherwise both writes collapse into one and there's nothing to transition from
+    el.style.width = target;
+  });
 }
 
 /* ---------------- Light/Dark theme ---------------- */
@@ -1101,7 +1388,6 @@ function deleteExtraReading(id){
 /* ---------------- Custom profile ---------------- */
 let profilePhotoError = '';
 let profileEditMode = false;
-let appShareCopied = false;
 // Takes a partial object and merges it into the existing profile — spreading the current
 // profile first means saving any subset of fields (e.g. just the photo, or just the bio form)
 // never wipes out whatever else was already set.
@@ -1606,6 +1892,7 @@ function sendFriendRequest(email){
     return createFriendLink(doc.data().uid);
   }).then(()=>{
     friendRequestBusy = false; friendRequestEmail = ''; friendRequestSent = true; render();
+    showToast('Friend request sent.', { tone:'good' });
   }).catch(err=>{
     friendRequestError = (err && err.message) || 'Something went wrong sending that request — check your connection and try again.';
     friendRequestBusy = false; render();
@@ -1615,6 +1902,7 @@ function sendFriendRequestToUid(targetUid){
   friendRequestError = ''; friendRequestSent = false; render();
   createFriendLink(targetUid).then(()=>{
     friendRequestSent = true; render();
+    showToast('Friend request sent.', { tone:'good' });
   }).catch(err=>{
     friendRequestError = (err && err.message) || 'Something went wrong sending that request.';
     render();
@@ -2169,15 +2457,18 @@ function render(){
     }
   }
 
+  // These two early-exit screens render before the main app shell (desktop nav / bottom nav) ever
+  // appears, so they're wrapped in .app-main directly rather than the full render() layout below —
+  // that's the same box that used to be #app itself, so they keep the identical centered/padded look.
   if(shouldShowGate()){
-    app.innerHTML = renderAuthGate();
+    app.innerHTML = `<div class="app-main">${renderAuthGate()}</div>`;
     attachAuthGateEvents();
     restoreFocus();
     return;
   }
   const forced = needsPlanOnboarding();
   if(forced || planChooserOpen){
-    app.innerHTML = `<div class="onboard-wrap">${onboardingStep==='custom' ? renderCustomBuilder(!forced) : renderPlanChoose(!forced)}</div>`;
+    app.innerHTML = `<div class="app-main"><div class="onboard-wrap">${onboardingStep==='custom' ? renderCustomBuilder(!forced) : renderPlanChoose(!forced)}</div></div>`;
     attachPlanChooserEvents();
     restoreFocus();
     return;
@@ -2205,20 +2496,25 @@ function render(){
   lastRenderedViewKey = viewKey;
   const viewAnimClass = viewChanged ? (isDrillIn ? 'view-enter-slide' : 'view-enter-fade') : '';
   app.innerHTML = `
-    ${renderHeader()}
-    ${renderGroupInviteBanner()}
-    ${renderCheckinBanner()}
-    ${renderInstallBanner()}
-    ${renderTabs()}
-    <div class="view-root ${viewAnimClass}">${tabContent}</div>
-    ${renderFooter()}
+    ${renderDesktopNav()}
+    <div class="app-main">
+      ${renderHeader()}
+      ${renderGroupInviteBanner()}
+      ${renderCheckinBanner()}
+      ${renderInstallBanner()}
+      <div class="view-root ${viewAnimClass}">${tabContent}</div>
+      ${renderFooter()}
+    </div>
     ${renderBottomNav()}
     ${renderSidebar()}
     ${renderDialogOverlay()}
+    ${renderCommandPalette()}
+    ${renderToastStack()}
     <input type="file" id="importFile" accept="application/json">
   `;
   attachEvents();
   restoreFocus();
+  animateDashboardMetrics();
 }
 
 function renderGroupInviteBanner(){
@@ -2493,16 +2789,27 @@ function renderHeader(){
   </header>`;
 }
 
-// All 8 tabs, in one place — the desktop top nav shows all of them; the mobile bottom nav shows
-// only the first 5 (plus a "More" button), and the mobile sidebar shows whatever's left over.
-// Icon names reference the icon() helper above (a small inline-SVG set) instead of emoji.
+// All 8 tabs, in one place — the desktop sidebar nav shows all of them (icon + label, stacked);
+// the mobile bottom nav shows only the first 5 (plus a "More" button), and the mobile slide-in
+// sidebar shows whatever's left over. Icon names reference the icon() helper above (a small
+// inline-SVG set) instead of emoji. ALL_TABS carries the same icon per id as MAIN_TABS/MORE_TABS
+// so the desktop sidebar can render every tab from one list without a separate lookup.
 const MAIN_TABS = [['today','Today','home'],['log','Log','calendar'],['dashboard','Dashboard','chart'],['groups','Groups','users'],['account','Account','person']];
 const MORE_TABS = [['journal','Journal','notebook'],['memorize','Memorize','bookmark'],['friends','Friends','userPlus']];
-const ALL_TABS = [['today','Today'],['log','Log'],['journal','Journal'],['memorize','Memorize'],['dashboard','Dashboard'],['friends','Friends'],['groups','Groups'],['account','Account']];
+const ALL_TABS = [['today','Today','home'],['log','Log','calendar'],['journal','Journal','notebook'],['memorize','Memorize','bookmark'],['dashboard','Dashboard','chart'],['friends','Friends','userPlus'],['groups','Groups','users'],['account','Account','person']];
 
-function renderTabs(){
-  return `<nav class="tabs">
-    ${ALL_TABS.map(([id,label])=>`<button data-tab="${id}" class="${activeTab===id?'active':''}">${label}</button>`).join('')}
+// Desktop's persistent left nav — replaces the old flat top text-tab row. Fixed to the left edge
+// above the mobile breakpoint (see the .desktop-nav media queries), with #app shifted over to make
+// room. Below the mobile breakpoint this renders nothing (display:none takes over) and the bottom
+// nav / slide-in "More" sidebar handle navigation instead, exactly as before.
+function renderDesktopNav(){
+  return `<nav class="desktop-nav">
+    <div class="desktop-nav-brand">Cultivate</div>
+    <button type="button" class="desktop-nav-quickjump" id="openCommandPaletteBtn">Quick jump <span class="kbd">&#8984;K</span></button>
+    ${ALL_TABS.map(([id,label,iconName])=>`
+      <button class="desktop-nav-item ${activeTab===id?'active':''}" data-tab="${id}">
+        <span class="icon">${icon(iconName,20)}</span><span class="label">${label}</span>
+      </button>`).join('')}
   </nav>`;
 }
 
@@ -2544,7 +2851,7 @@ function renderToday(){
     let statusHtml = '';
     if(lastEntry){
       if(lastEntry.status==='complete'){
-        statusHtml = `<span class="status-pill complete">&#10003; Completed today</span>`;
+        statusHtml = `<span class="status-pill complete ${cat.id===justCompletedCat?'pill-pop':''}">&#10003; Completed today</span>`;
       } else {
         statusHtml = `<span class="status-pill skipped">&#8631; Skipped &mdash; pushed to next time</span>`;
       }
@@ -2597,7 +2904,7 @@ function renderToday(){
         <input type="number" id="extraChapter" placeholder="Chapter" min="1" style="width:90px; padding:7px 10px; border:1px solid var(--line); border-radius:8px; font-size:0.85rem; font-family:inherit;">
         <button class="btn" id="addExtraBtn">Log it</button>
       </div>
-      ${extraTodayEntries.length ? `<div class="today-log-list">${extraTodayEntries.map(e=>`<div>${e.book} ${e.chapter||''} <button class="btn small danger" data-delete-extra="${e.id}" style="margin-left:6px;">Remove</button></div>`).join('')}</div>` : ''}
+      ${extraTodayEntries.length ? `<div class="today-log-list">${extraTodayEntries.map(e=>`<div class="extra-log-row">${e.book} ${e.chapter||''} <button class="btn small danger" data-delete-extra="${e.id}" style="margin-left:6px;">Remove</button></div>`).join('')}</div>` : ''}
     </div>`;
 
   return `
@@ -2616,7 +2923,7 @@ function renderToday(){
 function renderLog(){
   const dates = Array.from(new Set(state.log.map(e=>e.date))).sort().reverse();
   if(!dates.length){
-    return `<div class="empty-note">No readings logged yet. Head to the Today tab to get started.</div>`;
+    return emptyState('calendar', "No readings logged yet — once you mark a chapter complete on the Today tab, it'll show up here.");
   }
   const groups = {};
   dates.forEach(d=>{
@@ -2709,7 +3016,11 @@ function renderJournal(){
     </div>`;
 
   if(!entries.length){
-    return formHtml + oneYearAgoHtml + filterHtml + `<div class="empty-note">${state.journal.length ? 'No entries match this filter.' : 'No journal entries yet — add your first one above.'}</div>`;
+    return formHtml + oneYearAgoHtml + filterHtml + (
+      state.journal.length
+        ? `<div class="empty-note">No entries match this filter.</div>`
+        : emptyState('notebook', 'No journal entries yet — write down what you sense, pray, or receive as you read, and it\'ll show up here.')
+    );
   }
 
   const groups = {};
@@ -2769,7 +3080,7 @@ function renderMemorize(){
       </div>
     </div>`;
   if(!state.memorization.length){
-    return formHtml + `<div class="empty-note">No verses yet — add one above to start memorizing.</div>`;
+    return formHtml + emptyState('bookmark', 'No verses yet — add one above to start memorizing, and it\'ll show up here to track your review streak.');
   }
   return formHtml + `
     <h3 style="margin-top:24px;">Learning (${learning.length})</h3>
@@ -2806,7 +3117,6 @@ function renderFriends(){
       <h3>Add a friend &mdash; ${accepted.length} connection${accepted.length===1?'':'s'}</h3>
       <p style="font-size:0.85rem; color:var(--ink-soft);">Search by name or their exact email. We only ever share your name, last-active date, and current plan &mdash; never your journal or reading log.</p>
       ${friendRequestError ? `<div class="auth-error">${friendRequestError}</div>` : ''}
-      ${friendRequestSent ? `<p style="font-size:0.85rem; color:var(--good);">&#10003; Request sent.</p>` : ''}
       <input type="text" id="friendSearchInput" placeholder="Search by name or email…" value="${friendSearchQuery}" style="width:100%; padding:9px 10px; border:1px solid var(--line); border-radius:8px; font-size:0.9rem; font-family:inherit;">
       <div style="margin-top:10px;">
         ${friendSearchBusy ? `<div style="font-size:0.82rem; color:var(--ink-soft);">Searching…</div>` : ''}
@@ -2866,7 +3176,7 @@ function renderFriends(){
           </div>
         </div>`;
       }).join('')}
-    </div>` : `<div class="empty-note">No connections yet — search for a friend or family member above. This is meant to feel like company, not a leaderboard: no percentages, no comparisons, just knowing someone else is walking with you.</div>`;
+    </div>` : emptyState('userPlus', 'No connections yet — search for a friend or family member above. This is meant to feel like company, not a leaderboard: no percentages, no comparisons, just knowing someone else is walking with you.');
 
   // A plain, on-screen troubleshooting panel — so if requests aren't showing up, what's actually
   // happening can be checked right here instead of needing to open browser dev tools. Shows exactly
@@ -2942,11 +3252,13 @@ function renderGroupsDirectory(){
   let listHtml;
   if(groupDirTab === 'mine'){
     listHtml = mine.length ? `<div class="group-card-list">${mine.map(groupCard).join('')}</div>`
-      : `<div class="empty-note">${q ? 'No groups match that search.' : "You haven't joined a group yet — switch to Discover to browse or search."}</div>`;
+      : (q ? `<div class="empty-note">No groups match that search.</div>`
+        : emptyState('users', "You haven't joined a group yet — switch to Discover to browse or search, or create your own."));
   } else {
     listHtml = groupsDirectoryLoading ? `<div class="group-card-list">${skeletonCardListHtml(3)}</div>`
       : (discover.length ? `<div class="group-card-list">${discover.map(groupCard).join('')}</div>`
-        : `<div class="empty-note">${q ? 'No groups match that search.' : 'No groups yet — be the first to create one.'}</div>`);
+        : (q ? `<div class="empty-note">No groups match that search.</div>`
+          : emptyState('users', 'No groups yet — be the first to create one.', { actionLabel:'+ Create a group', actionId:'emptyStateCreateGroupBtn' })));
   }
 
   return `
@@ -3120,7 +3432,7 @@ function renderGroupDiscussion(){
   return `
     <div class="settings-box">
       <div style="max-height:420px; overflow-y:auto; margin-bottom:12px;">
-        ${messages || `<div class="empty-note">No messages yet — say hello, or share what stood out from this week's reading.</div>`}
+        ${messages || emptyState('notebook', "No messages yet — say hello, or share what stood out from this week's reading.")}
       </div>
       <div style="display:flex; gap:8px;">
         <input type="text" id="groupMessageInput" placeholder="Message the group… use @name to mention someone" value="${escapeHtml(groupMessageText)}" style="flex:1; padding:9px 10px; border:1px solid var(--line); border-radius:8px; font-size:0.9rem; font-family:inherit;">
@@ -3226,12 +3538,17 @@ function renderDashboard(){
   const totalPassesAcrossAll = ACTIVE_CATEGORIES.reduce((s,c)=>s+(state.cycles[c.id]||0),0);
   const yearInReview = renderYearInReview();
   const monthlySummaries = renderMonthlySummaries();
+  const totalCompleteCount = state.log.filter(e=>e.status==='complete').length;
+  const coveragePct = Math.round(uniqueChapters.size/BIBLE_TOTAL_CHAPTERS*100);
+  // data-count-key/data-count-to feed animateDashboardMetrics() (see JS above) — it compares the
+  // target against whatever value it last saw for that key and, if it actually changed, plays a
+  // quick count-up instead of the number just silently being different on the next render.
   const summary = `
     <div class="dash-summary">
-      <div class="stat"><div class="num">${uniqueChapters.size} / ${BIBLE_TOTAL_CHAPTERS}</div><div class="label">Unique chapters read at least once</div></div>
-      <div class="stat"><div class="num">${Math.round(uniqueChapters.size/BIBLE_TOTAL_CHAPTERS*100)}%</div><div class="label">Whole-Bible coverage</div></div>
-      <div class="stat"><div class="num">${totalPassesAcrossAll}</div><div class="label">Total category cycles completed</div></div>
-      <div class="stat"><div class="num">${state.log.filter(e=>e.status==='complete').length}</div><div class="label">Chapters logged complete (all-time)</div></div>
+      <div class="stat"><div class="num"><span data-count-key="uniqueChapters" data-count-to="${uniqueChapters.size}">${uniqueChapters.size}</span> / ${BIBLE_TOTAL_CHAPTERS}</div><div class="label">Unique chapters read at least once</div></div>
+      <div class="stat"><div class="num"><span data-count-key="coveragePct" data-count-to="${coveragePct}">${coveragePct}</span>%</div><div class="label">Whole-Bible coverage</div></div>
+      <div class="stat"><div class="num" data-count-key="totalCycles" data-count-to="${totalPassesAcrossAll}">${totalPassesAcrossAll}</div><div class="label">Total category cycles completed</div></div>
+      <div class="stat"><div class="num" data-count-key="totalComplete" data-count-to="${totalCompleteCount}">${totalCompleteCount}</div><div class="label">Chapters logged complete (all-time)</div></div>
     </div>`;
 
   const blocks = ACTIVE_CATEGORIES.map(cat=>{
@@ -3241,7 +3558,7 @@ function renderDashboard(){
     const rows = stats.map(b=>`
       <div class="book-row">
         <div>${b.name}</div>
-        <div class="bar-track"><div class="bar-fill" style="width:${b.progress}%; background:${cat.color};"></div></div>
+        <div class="bar-track"><div class="bar-fill" data-bar-key="${cat.id}:${b.name}" style="width:${b.progress}%; background:${cat.color};"></div></div>
         <div class="passes-badge" title="Times fully completed this cycle count">${b.passes}&times; read</div>
         <div style="text-align:right; color:var(--ink-soft);">${b.progress}%</div>
       </div>`).join('');
@@ -3368,7 +3685,6 @@ function renderAccountTab(){
         <input type="text" readonly value="${window.location.origin}${window.location.pathname}" style="flex:1; min-width:200px; padding:8px; border:1px solid var(--line); border-radius:8px; font-size:0.8rem;" onclick="this.select()">
         <button class="btn primary small" id="shareAppBtn">Share</button>
       </div>
-      ${appShareCopied ? `<p style="font-size:0.8rem; color:var(--good); margin-top:6px;">&#10003; Link copied.</p>` : ''}
     </div>`;
   const exportBox = `
     <div class="settings-box">
@@ -3454,7 +3770,7 @@ function switchToTab(tabId){
   render();
 }
 function attachEvents(){
-  document.querySelectorAll('nav.tabs button, .bottom-nav-item[data-tab], .sidebar-nav-item[data-tab]').forEach(btn=>{
+  document.querySelectorAll('.desktop-nav-item[data-tab], .bottom-nav-item[data-tab], .sidebar-nav-item[data-tab]').forEach(btn=>{
     btn.addEventListener('click', ()=> switchToTab(btn.dataset.tab));
   });
   const hamburgerBtn = document.getElementById('openSidebarBtn');
@@ -3472,6 +3788,26 @@ function attachEvents(){
   if(dialogCancelBtn) dialogCancelBtn.addEventListener('click', ()=> closeDialog(false));
   const dialogBackdrop = document.getElementById('dialogBackdrop');
   if(dialogBackdrop) dialogBackdrop.addEventListener('click', ()=> closeDialog(false));
+  document.querySelectorAll('[data-toast-id]').forEach(el=>{
+    el.addEventListener('click', ()=> dismissToast(Number(el.dataset.toastId)));
+  });
+  const commandPaletteBackdrop = document.getElementById('commandPaletteBackdrop');
+  if(commandPaletteBackdrop) commandPaletteBackdrop.addEventListener('click', closeCommandPalette);
+  const commandPaletteInput = document.getElementById('commandPaletteInput');
+  if(commandPaletteInput){
+    commandPaletteInput.addEventListener('input', ()=>{ commandPaletteQuery = commandPaletteInput.value; render(); });
+    commandPaletteInput.addEventListener('keydown', (e)=>{
+      if(e.key === 'Enter'){
+        const first = filteredCommands()[0];
+        if(first) runCommand(first.id);
+      }
+    });
+  }
+  document.querySelectorAll('[data-command-id]').forEach(btn=>{
+    btn.addEventListener('click', ()=> runCommand(btn.dataset.commandId));
+  });
+  const openCommandPaletteBtn = document.getElementById('openCommandPaletteBtn');
+  if(openCommandPaletteBtn) openCommandPaletteBtn.addEventListener('click', openCommandPalette);
   document.querySelectorAll('[data-read-book]').forEach(btn=>{
     btn.addEventListener('click', ()=>{
       const url = buildReadingLink(state.readingApp, btn.dataset.readBook, Number(btn.dataset.readChapter));
@@ -3482,7 +3818,16 @@ function attachEvents(){
     btn.addEventListener('click', ()=>{
       const catId = btn.dataset.cat;
       const action = btn.dataset.action;
-      if(action==='complete'){ hapticTap('Medium'); completeReading(catId, selectedDate); }
+      if(action==='complete'){
+        hapticTap('Medium');
+        // Flag this category as "just completed" BEFORE calling completeReading() — it calls
+        // render() itself, so the very next render needs to already see the flag to play the
+        // checkmark pop on the status pill. Cleared shortly after so the animation doesn't
+        // needlessly replay on some unrelated later render while this stays set.
+        justCompletedCat = catId;
+        completeReading(catId, selectedDate);
+        setTimeout(()=>{ justCompletedCat = null; render(); }, 700);
+      }
       else if(action==='skip') skipReading(catId, selectedDate);
       else if(action==='undo') undoLast(catId);
     });
@@ -3520,6 +3865,7 @@ function attachEvents(){
       if(!content.trim() && !title.trim()){ customAlert('Add a title or some content before saving.'); return; }
       const reference = (refBookEl && refBookEl.value) ? { book: refBookEl.value, chapter: refChapterEl.value ? Number(refChapterEl.value) : null, verse: refVerseEl.value ? Number(refVerseEl.value) : null } : null;
       addJournalEntry(date, journalDraftTag, content, title, reference);
+      showToast('Entry saved.', { tone:'good' });
     });
   }
   document.querySelectorAll('[data-journal-filter]').forEach(btn=>{
@@ -3528,7 +3874,9 @@ function attachEvents(){
   document.querySelectorAll('[data-delete-journal]').forEach(btn=>{
     btn.addEventListener('click', ()=>{
       customConfirm('Delete this journal entry?', { confirmLabel:'Delete', danger:true }).then(ok=>{
-        if(ok) deleteJournalEntry(btn.dataset.deleteJournal);
+        if(!ok) return;
+        const row = btn.closest('.journal-entry');
+        animateRemoval(row, ()=> deleteJournalEntry(btn.dataset.deleteJournal));
       });
     });
   });
@@ -3543,6 +3891,7 @@ function attachEvents(){
       a.download = 'bible-reading-tracker-backup-'+todayStr()+'.json';
       document.body.appendChild(a); a.click(); document.body.removeChild(a);
       URL.revokeObjectURL(url);
+      showToast('Backup downloaded.', { tone:'good' });
     });
   }
   const importBtn = document.getElementById('importBtn');
@@ -3574,6 +3923,7 @@ function attachEvents(){
             profile: sanitizeProfile(parsed.profile)
           };
           saveState(); render();
+          showToast('Backup imported.', { tone:'good' });
         });
       };
       reader.readAsText(file);
@@ -3640,7 +3990,10 @@ function attachEvents(){
       addExtraReading(selectedDate, bookEl.value, chapterEl.value ? Number(chapterEl.value) : null, '');
     });
   }
-  document.querySelectorAll('[data-delete-extra]').forEach(btn=> btn.addEventListener('click', ()=> deleteExtraReading(btn.dataset.deleteExtra)));
+  document.querySelectorAll('[data-delete-extra]').forEach(btn=> btn.addEventListener('click', ()=>{
+    const row = btn.closest('.extra-log-row');
+    animateRemoval(row, ()=> deleteExtraReading(btn.dataset.deleteExtra));
+  }));
 
   // Spiritual temperature check-in
   document.querySelectorAll('[data-checkin-value]').forEach(btn=>{
@@ -3796,7 +4149,7 @@ function attachEvents(){
       if(navigator.share){
         navigator.share(shareData).catch(()=>{});
       } else if(navigator.clipboard && navigator.clipboard.writeText){
-        navigator.clipboard.writeText(url).then(()=>{ appShareCopied = true; render(); setTimeout(()=>{ appShareCopied = false; render(); }, 2000); });
+        navigator.clipboard.writeText(url).then(()=> showToast('Link copied.', { tone:'good' }));
       }
     });
   }
@@ -3805,8 +4158,11 @@ function attachEvents(){
   const groupSearchInput = document.getElementById('groupSearchInput');
   if(groupSearchInput) groupSearchInput.addEventListener('input', (e)=>{ groupSearchQuery = e.target.value; render(); });
 
+  function openGroupCreateSheet(){ groupCreateOpen = true; groupDraftBooks = []; groupCreateError=''; bookPickerOpen = false; bookFilterQuery = ''; render(); }
   const openGroupCreateBtn = document.getElementById('openGroupCreateBtn');
-  if(openGroupCreateBtn) openGroupCreateBtn.addEventListener('click', ()=>{ groupCreateOpen = true; groupDraftBooks = []; groupCreateError=''; bookPickerOpen = false; bookFilterQuery = ''; render(); });
+  if(openGroupCreateBtn) openGroupCreateBtn.addEventListener('click', openGroupCreateSheet);
+  const emptyStateCreateGroupBtn = document.getElementById('emptyStateCreateGroupBtn');
+  if(emptyStateCreateGroupBtn) emptyStateCreateGroupBtn.addEventListener('click', openGroupCreateSheet);
   const cancelGroupCreateBtn = document.getElementById('cancelGroupCreateBtn');
   if(cancelGroupCreateBtn) cancelGroupCreateBtn.addEventListener('click', ()=>{ groupCreateOpen = false; render(); });
   const groupSheetBackdrop = document.getElementById('groupSheetBackdrop');
@@ -3868,7 +4224,7 @@ function attachEvents(){
       const g = activeGroupData; if(!g) return;
       const url = `${window.location.origin}${window.location.pathname}?joinGroup=${g.id}&code=${g.inviteCode}`;
       if(navigator.clipboard && navigator.clipboard.writeText){
-        navigator.clipboard.writeText(url).then(()=>{ copyGroupInviteBtn.textContent = 'Copied!'; setTimeout(()=>{ copyGroupInviteBtn.textContent = 'Copy link'; }, 1500); });
+        navigator.clipboard.writeText(url).then(()=> showToast('Invite link copied.', { tone:'good' }));
       }
     });
   }
@@ -3930,6 +4286,28 @@ let pendingGroupInvite = null;
     if(gid && code) pendingGroupInvite = { groupId: gid, code };
   }catch(e){}
 })();
+
+// ---- Global keyboard shortcuts ----
+// Registered exactly once here (NOT inside attachEvents(), which reruns on every render() call —
+// adding a document-level listener there would stack a fresh duplicate on every single render).
+// Cmd/Ctrl+K opens the quick-jump command palette from anywhere; Escape backs out of whichever
+// overlay is currently on top (palette, then dialog, then the group-create sheet, then the mobile
+// "More" sidebar), matching how these layers actually stack visually (see their z-index values).
+if(typeof document !== 'undefined' && document.addEventListener){
+  document.addEventListener('keydown', (e)=>{
+    if((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')){
+      e.preventDefault();
+      openCommandPalette();
+      return;
+    }
+    if(e.key === 'Escape'){
+      if(commandPaletteOpen){ closeCommandPalette(); return; }
+      if(activeDialog){ closeDialog(activeDialog.mode==='confirm' ? false : null); return; }
+      if(groupCreateOpen){ groupCreateOpen = false; render(); return; }
+      if(sidebarOpen){ sidebarOpen = false; render(); return; }
+    }
+  });
+}
 
 refreshNotifStatus();
 render();
