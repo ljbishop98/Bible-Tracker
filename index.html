@@ -314,16 +314,20 @@
     box-shadow:var(--shadow); border-left:5px solid var(--cat-color, var(--accent));
     backdrop-filter:blur(16px); -webkit-backdrop-filter:blur(16px);
   }
-  /* ---- Unified, jitter-free hover lift ----
-     The old hover animated box-shadow directly, which repaints the shadow every single frame — on
-     top of backdrop-filter glass that read as visible stutter. Fix: the "lifted" shadow lives on a
-     ::after pseudo-element, pre-rendered once at opacity 0, and hover animates ONLY transform and
-     that opacity — both compositor-side properties, so the whole lift runs on the GPU as one
-     smooth glide. One rule set, one curve, one duration for every liftable surface. */
+  /* ---- Unified, stationary hover bloom ----
+     v29's lift still jittered at the card's edges: translating the card 3px moves it out from
+     under a cursor sitting near its boundary, which un-hovers it, drops it back under the cursor,
+     re-hovers it — an oscillation loop that reads as jitter no matter how smooth the easing is.
+     The only complete fix is that hovered surfaces DON'T MOVE (which is also the more Apple
+     behavior — macOS surfaces respond with a soft shadow/tint bloom, not travel). Hover now
+     animates only the pre-rendered ::after shadow's opacity and the border tint: zero geometry
+     change, zero oscillation, fully compositor-side. */
   .card, .plan-card, .group-card, .settings-box, .dash-summary .stat, .journal-entry{
     position:relative;
-    transition:transform var(--dur-med) var(--ease-out), border-color var(--dur-med) var(--ease-out),
-               background-color .5s ease;
+    /* transform stays in the transition list ONLY for the :active press-scale — no hover rule
+       touches transform anymore, so the moving-target oscillation can't come back. */
+    transition:border-color var(--dur-med) var(--ease-out), background-color .5s ease,
+               transform .3s var(--ease-spring);
   }
   .card::after, .plan-card::after, .group-card::after, .settings-box::after,
   .dash-summary .stat::after, .journal-entry::after{
@@ -337,13 +341,12 @@
     box-shadow:0 14px 32px rgba(0,0,0,0.5);
   }
   @media (hover:hover) and (pointer:fine){
-    .card:hover, .plan-card:hover, .group-card:hover, .settings-box:hover,
-    .dash-summary .stat:hover, .journal-entry:hover{
-      transform:translate3d(0,-3px,0);
-    }
     .card:hover::after, .plan-card:hover::after, .group-card:hover::after, .settings-box:hover::after,
     .dash-summary .stat:hover::after, .journal-entry:hover::after{
       opacity:1;
+    }
+    .card:hover, .plan-card:hover, .settings-box:hover, .dash-summary .stat:hover, .journal-entry:hover{
+      border-color:var(--accent);
     }
   }
   @media (prefers-reduced-motion: reduce){
@@ -747,6 +750,76 @@
   /* ---- Top strip (bell + theme toggle) — all that's left of the old full header, see
      renderTopStrip(). The title/stats/sync content that used to live here now lives in the
      Account tab instead. ---- */
+  /* ---- Guided-study sessions (wizard builder + group plan tab) ---- */
+  .session-num{
+    display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px;
+    border-radius:50%; background:var(--accent-soft); color:var(--accent); font-size:0.72rem;
+    font-weight:800; flex-shrink:0;
+  }
+  .wizard-session-list{ display:flex; flex-direction:column; gap:12px; }
+  .wizard-session-row{
+    border:1px solid var(--line); border-radius:14px; padding:12px; display:flex;
+    flex-direction:column; gap:8px; background:var(--card);
+  }
+  .wizard-session-head{ display:flex; align-items:center; gap:8px; }
+  .wizard-session-head input{ flex:1; }
+  .wizard-session-row input[type="text"]{
+    padding:8px 10px; border:1px solid var(--line); border-radius:8px; font-size:0.88rem; font-family:inherit; width:100%;
+  }
+  .session-passage-hint{ font-size:0.75rem; color:var(--good); display:flex; align-items:center; gap:4px; }
+  .wizard-session-preview{ margin-top:12px; display:flex; flex-direction:column; gap:6px; }
+  .wizard-session-preview-row{ font-size:0.85rem; display:flex; align-items:center; gap:8px; }
+  .session-overview{ display:flex; align-items:center; gap:10px; margin:10px 0 14px; }
+  .session-list{ display:flex; flex-direction:column; gap:10px; }
+  .session-row{
+    display:flex; gap:12px; padding:12px; border:1px solid var(--line); border-radius:14px;
+    background:var(--card); transition:opacity .3s ease, border-color .3s ease;
+  }
+  .session-row.done{ opacity:0.72; }
+  .session-row.done .session-title{ text-decoration:line-through; text-decoration-thickness:1px; }
+  .session-check{
+    width:28px; height:28px; border-radius:50%; border:2px solid var(--line); background:none;
+    cursor:pointer; flex-shrink:0; display:flex; align-items:center; justify-content:center;
+    color:#fff; margin-top:2px; transition:background-color .25s var(--ease-spring), border-color .25s ease, transform .3s var(--ease-spring);
+  }
+  .session-check:active{ transform:scale(0.85); }
+  .session-check.checked{ background:var(--accent); border-color:var(--accent); }
+  .session-info{ flex:1; min-width:0; }
+  .session-title{ font-weight:700; font-size:0.95rem; display:flex; align-items:center; gap:8px; }
+  .session-reading{ font-size:0.88rem; margin-top:2px; }
+  .session-note{ font-size:0.82rem; color:var(--ink-soft); font-style:italic; margin-top:4px; }
+  .session-meta{ display:flex; align-items:center; gap:10px; margin-top:8px; font-size:0.78rem; color:var(--ink-soft); }
+  /* Collapsible dashboard sections — <summary> is the whole header row, chevron rotates open. */
+  details.dash-collapse summary{ list-style:none; cursor:pointer; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  details.dash-collapse summary::-webkit-details-marker{ display:none; }
+  details.dash-collapse summary h3{ margin-bottom:0; }
+  details.dash-collapse summary .cat-sub{ margin-bottom:0; }
+  .dash-collapse-chevron{ margin-left:auto; line-height:0; color:var(--ink-soft); transform:rotate(180deg); transition:transform .25s var(--ease-out); }
+  details.dash-collapse[open] .dash-collapse-chevron{ transform:rotate(270deg); }
+  details.dash-collapse[open] summary{ margin-bottom:8px; }
+  /* One quiet line on Today when memory verses are waiting — deliberately not another card. */
+  .memorize-reminder{
+    display:flex; align-items:center; gap:8px; width:100%; text-align:left;
+    background:none; border:none; border-left:3px solid var(--accent2, var(--accent));
+    padding:6px 12px; margin:2px 0 10px; cursor:pointer; color:var(--ink-soft);
+    font-size:0.85rem; font-family:inherit; border-radius:0 8px 8px 0;
+    transition:background-color .2s ease, color .2s ease;
+  }
+  .memorize-reminder:hover{ background:var(--accent-soft); color:var(--ink); }
+  .memorize-reminder .mem-rem-go{ margin-left:auto; font-weight:700; color:var(--accent); white-space:nowrap; }
+  /* Tiny inline edit/delete affordances on your own group messages — quiet until hovered. */
+  .msg-action-btn{
+    background:none; border:none; cursor:pointer; color:var(--ink-soft); opacity:0.55;
+    padding:2px 4px; vertical-align:middle; line-height:0; border-radius:6px;
+    transition:opacity .2s ease, color .2s ease;
+  }
+  .msg-action-btn:hover{ opacity:1; color:var(--accent); }
+  .header-avatar-btn{
+    background:none; border:none; padding:0; cursor:pointer; border-radius:50%;
+    line-height:0; transition:box-shadow .25s ease, transform .3s var(--ease-spring);
+  }
+  .header-avatar-btn:hover{ box-shadow:0 0 0 3px var(--accent-soft); }
+  .header-avatar-btn:active{ transform:scale(0.92); }
   .top-strip{
     display:flex; align-items:center; justify-content:flex-end; gap:10px;
     padding:14px 0 4px; position:relative;
@@ -1197,11 +1270,13 @@ function icon(name, size){
     sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2.5M12 19v2.5M4.5 12H2M22 12h-2.5M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M18.4 5.6l-1.8 1.8M7.4 16.6l-1.8 1.8"/>',
     moon: '<path d="M20 14.3A8.3 8.3 0 1 1 9.7 4 6.7 6.7 0 0 0 20 14.3z"/>',
     sunrise: '<path d="M4.5 16.2h15"/><path d="M6 16.2a6 6 0 0 1 12 0"/><path d="M12 5.5v3.2M6.9 9l1.7 1.7M17.1 9l-1.7 1.7"/>',
+    gear: '<path d="M3.5 7h6.3M13.4 7h7.1M3.5 12h11.3M18.4 12h2.1M3.5 17h3.3M10.4 17h10.1"/><circle cx="11.6" cy="7" r="1.8"/><circle cx="16.6" cy="12" r="1.8"/><circle cx="8.6" cy="17" r="1.8"/>',
     auto: '<circle cx="12" cy="12" r="8.5"/><path d="M12 3.5v17" stroke-dasharray="0"/><path d="M12 3.5A8.5 8.5 0 0 1 12 20.5z" fill="currentColor" stroke="none"/>',
     check: '<path d="M5 12.5l4.5 4.5L19 7"/>',
     plus: '<path d="M12 5v14M5 12h14"/>',
     bell: '<path d="M12 3.5c-3 0-5 2.3-5 5.4v2.6c0 1-.4 2-1.1 2.7L5 15h14l-.9-.8a3.7 3.7 0 0 1-1.1-2.7V8.9c0-3.1-2-5.4-5-5.4z"/><path d="M9.8 18.5a2.3 2.3 0 0 0 4.4 0"/>',
     trash: '<path d="M5 7h14"/><path d="M9 7V4.8a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1V7"/><path d="M7 7l1 12.2a1.8 1.8 0 0 0 1.8 1.8h4.4A1.8 1.8 0 0 0 16 19.2L17 7"/><path d="M10.3 11v6M13.7 11v6"/>',
+    pencil: '<path d="M4 20l1-4L16.5 4.5a1.8 1.8 0 0 1 2.5 0l.5.5a1.8 1.8 0 0 1 0 2.5L8 19l-4 1z"/><path d="M14.5 6.5l3 3"/>',
     // Spiritual check-in mood gradient (Distant -> Dry -> Steady -> Warm -> Close), same hand-rolled
     // stroke style as the rest of the icon set, chosen so the five read as a visible progression
     // rather than five arbitrary pictures: a cloud drifting off, a cracked/thirsty drop, a steady
@@ -1380,7 +1455,7 @@ const JOURNAL_TAG_COLORS = { prophetic:'#6b4f8a', prayer:'#3d6b8a', revelation:'
 function defaultState(){
   return {
     cursors:{}, cycles:{}, log:[], plan:null, journal:[], readingApp:'biblegateway',
-    memorization:[], extraLog:[], checkins:[],
+    memorization:[], extraLog:[], checkins:[], groupSessionsDone:{},
     profile:{ displayName:'', bio:'', color: COLOR_PALETTE[0], photo:'', aboutMe:'', location:'', favoriteSong:'', lifeVerse:'', visibility:'friends' }
   };
 }
@@ -1465,6 +1540,7 @@ let justCompletedCat = null; // category id that was JUST marked complete — pl
 let commandPaletteOpen = false; // desktop quick-jump palette (Cmd/Ctrl+K) — see renderCommandPalette()
 let commandPaletteQuery = '';
 let notifPanelOpen = false; // the bell/inbox dropdown — see renderNotifBellButton/renderNotifPanel/notifItems
+let ownProfileOpen = false; // your own profile page, opened from the header avatar — view + edit lives here now (not in Settings)
 let lastRenderedViewKey = null; // used to only play the view-enter animation when the view actually changes
 
 /* ---------------- Native-style dialogs (replaces window.confirm/alert) ----------------
@@ -2490,6 +2566,7 @@ function doLogOut(){
     state = defaultState();
     saveState({skipSync:true});
     syncStatus = 'unconfigured'; lastSyncedAt = null;
+    ownProfileOpen = false; profileEditMode = false;
     resetAuthWizard();
     render();
   });
@@ -3325,6 +3402,7 @@ let activeGroupData = null;
 let activeGroupMembers = [];
 let activeGroupMessages = [];
 let activeGroupJoinRequests = [];
+let activeGroupProgress = {}; // uid -> { sessionId: completedAtMs } (guided-sessions groups only)
 let activeGroupTab = 'discussion'; // discussion | plan | members | requests
 let groupUnsubs = [];
 function myRoleInActiveGroup(){
@@ -3356,13 +3434,59 @@ function openGroup(groupId){
     activeGroupJoinRequests = snap.docs.map(d=>({ uid:d.id, ...d.data() }));
     render();
   }, ()=>{ activeGroupJoinRequests = []; }));
+  // Per-member session completion (guided-sessions groups). One doc per member; cheap to listen to.
+  groupUnsubs.push(fbDb.collection('groups').doc(groupId).collection('progress').onSnapshot(snap=>{
+    activeGroupProgress = {};
+    snap.docs.forEach(d=>{ activeGroupProgress[d.id] = (d.data() && d.data().completed) || {}; });
+    render();
+  }, ()=>{ activeGroupProgress = {}; }));
 }
 function closeGroup(){
   groupUnsubs.forEach(u=>{ try{ u(); }catch(e){} });
   groupUnsubs = [];
   activeGroupId = null; activeGroupData = null; activeGroupMembers = [];
-  activeGroupMessages = []; activeGroupJoinRequests = [];
+  activeGroupMessages = []; activeGroupJoinRequests = []; activeGroupProgress = {};
   groupMessageText = ''; mentionDropdownOpen = false; mentionQuery = '';
+}
+
+// ---- Guided sessions: completion + passage detection ----
+// Marking a session done writes ONLY into your own progress doc ({ uid, completed: {sid: ts} }),
+// and mirrors your personal completed-count into state.groupSessionsDone[groupId] so the
+// dashboard can count group study work without needing any extra listeners (state already
+// persists locally and syncs through the normal userProgress channel).
+function toggleSessionDone(groupId, sessionId){
+  if(!fbDb || !currentUser) return;
+  const mine = Object.assign({}, activeGroupProgress[currentUser.uid] || {});
+  const wasDone = !!mine[sessionId];
+  if(wasDone) delete mine[sessionId]; else mine[sessionId] = Date.now();
+  // Optimistic local update so the checkbox responds instantly; snapshot confirms right after.
+  activeGroupProgress = Object.assign({}, activeGroupProgress, { [currentUser.uid]: mine });
+  if(!state.groupSessionsDone) state.groupSessionsDone = {};
+  state.groupSessionsDone[groupId] = Object.keys(mine).length;
+  saveState();
+  if(!wasDone) hapticTap('Light');
+  render();
+  fbDb.collection('groups').doc(groupId).collection('progress').doc(currentUser.uid).set({
+    uid: currentUser.uid, completed: mine
+  }).catch(()=>{ showToast("Couldn't sync that — it'll retry next time."); });
+}
+// If a session's reading starts with a recognizable Bible book ("Philippians 1–2",
+// "1 John 3", …), surface a one-tap "Read →" deep link into the person's chosen Bible app —
+// same mechanism as Today's cards. Non-Bible readings ("Chapter 3 of Sit, Walk, Stand") simply
+// don't get a link, no configuration needed either way.
+function detectBiblePassage(reading){
+  const text = (reading||'').trim();
+  if(!text) return null;
+  const lower = text.toLowerCase();
+  let best = null;
+  BOOK_LIBRARY.forEach(b=>{
+    const n = b.name.toLowerCase();
+    if(lower.startsWith(n) && (!best || n.length > best.name.length)) best = { name:b.name, len:n.length };
+  });
+  if(!best) return null;
+  const rest = text.slice(best.len);
+  const m = rest.match(/\d+/);
+  return { book: best.name, chapter: m ? Number(m[0]) : 1 };
 }
 
 // ---- Create group (full-screen, one-question-per-step wizard) ----
@@ -3380,22 +3504,32 @@ let groupWizardStep = 0;
 let groupWizardError = '';
 let groupDraftName = '';
 let groupDraftDescription = '';
-let groupDraftPlanMode = 'free';
+let groupDraftPlanMode = 'free'; // 'free' | 'paced' | 'sessions'
 let groupDraftChaptersPerWeek = 5;
+// Guided-sessions drafts: the ordered study guide being built (each session = a reading, an
+// optional title, an optional leader note/discussion prompt), plus an optional "what are we
+// studying" line for studies built around a book beyond the Bible (e.g. Sit, Walk, Stand).
+let groupDraftSessions = [];
+let groupDraftStudyBook = '';
+function blankDraftSession(){ return { title:'', reading:'', note:'' }; }
 const GROUP_WIZARD_DRAFT_KEY = 'cultivateGroupWizardDraft';
-// The step order is dynamic: "paceDetail" (chapters/week) only exists at all when Paced is chosen,
-// so every place that moves between steps re-derives this list rather than assuming a fixed count.
+// The step order is dynamic: "paceDetail" (chapters/week) only exists when Paced is chosen, and
+// choosing Guided Sessions swaps the book-picker step for the session builder — so every place
+// that moves between steps re-derives this list rather than assuming a fixed count.
 function groupWizardSteps(){
   const steps = ['basics','pace'];
   if(groupDraftPlanMode === 'paced') steps.push('paceDetail');
-  steps.push('reading','review');
+  if(groupDraftPlanMode === 'sessions') steps.push('sessions');
+  else steps.push('reading');
+  steps.push('review');
   return steps;
 }
 function saveGroupWizardDraft(){
   try{
     localStorage.setItem(GROUP_WIZARD_DRAFT_KEY, JSON.stringify({
       name: groupDraftName, description: groupDraftDescription, planMode: groupDraftPlanMode,
-      chaptersPerWeek: groupDraftChaptersPerWeek, books: groupDraftBooks, step: groupWizardStep
+      chaptersPerWeek: groupDraftChaptersPerWeek, books: groupDraftBooks, step: groupWizardStep,
+      sessions: groupDraftSessions, studyBook: groupDraftStudyBook
     }));
   }catch(e){}
 }
@@ -3410,9 +3544,11 @@ function restoreGroupWizardDraft(){
     if(!d || typeof d !== 'object') return false;
     groupDraftName = d.name || '';
     groupDraftDescription = d.description || '';
-    groupDraftPlanMode = d.planMode === 'paced' ? 'paced' : 'free';
+    groupDraftPlanMode = (d.planMode === 'paced' || d.planMode === 'sessions') ? d.planMode : 'free';
     groupDraftChaptersPerWeek = Number(d.chaptersPerWeek) || 5;
     groupDraftBooks = Array.isArray(d.books) ? d.books : [];
+    groupDraftSessions = Array.isArray(d.sessions) ? d.sessions.map(s=>({ title:s.title||'', reading:s.reading||'', note:s.note||'' })) : [];
+    groupDraftStudyBook = d.studyBook || '';
     const steps = groupWizardSteps();
     groupWizardStep = Math.min(Math.max(0, Number(d.step)||0), steps.length-1);
     return true;
@@ -3435,9 +3571,24 @@ function createGroup(fields){
   if(!fbDb || !currentUser) return Promise.reject({message:'You need an account to create a group.'});
   const name = (fields.name||'').trim();
   if(!name) return Promise.reject({message:'Give your group a name.'});
-  if(!groupDraftBooks.length) return Promise.reject({message:'Pick at least one book for the group to read.'});
+  const isSessions = fields.planMode === 'sessions';
+  if(isSessions){
+    if(!groupDraftSessions.some(s=>(s.reading||'').trim())) return Promise.reject({message:'Add at least one session with a reading.'});
+  } else {
+    if(!groupDraftBooks.length) return Promise.reject({message:'Pick at least one book for the group to read.'});
+  }
   groupCreateBusy = true; groupCreateError = ''; render();
-  const outline = groupDraftBooks.map(b=>({ book:b, chapters: chaptersFor(b) }));
+  const outline = isSessions ? [] : groupDraftBooks.map(b=>({ book:b, chapters: chaptersFor(b) }));
+  // Sessions get stable ids at creation time — completion tracking keys off them forever after.
+  const sessions = isSessions ? groupDraftSessions
+    .filter(s=>(s.reading||'').trim())
+    .slice(0,52)
+    .map((s,i)=>({
+      id: 's'+(i+1),
+      title: (s.title||'').trim().slice(0,80) || ('Session '+(i+1)),
+      reading: (s.reading||'').trim().slice(0,160),
+      note: (s.note||'').trim().slice(0,500)
+    })) : null;
   const groupRef = fbDb.collection('groups').doc();
   const groupDoc = {
     name: name.slice(0,80),
@@ -3445,8 +3596,10 @@ function createGroup(fields){
     ownerUid: currentUser.uid,
     memberCount: 1,
     createdAt: Date.now(),
-    planMode: fields.planMode === 'paced' ? 'paced' : 'free',
+    planMode: isSessions ? 'sessions' : (fields.planMode === 'paced' ? 'paced' : 'free'),
     outline,
+    sessions,
+    studyBook: isSessions ? (groupDraftStudyBook||'').trim().slice(0,120) || null : null,
     chaptersPerWeek: fields.planMode === 'paced' ? Math.max(1, Number(fields.chaptersPerWeek)||5) : null,
     startDate: fields.planMode === 'paced' ? todayStr() : null,
     inviteCode: generateInviteCode()
@@ -3459,6 +3612,7 @@ function createGroup(fields){
     groupCreateBusy = false; groupCreateOpen = false; groupDraftBooks = [];
     groupWizardStep = 0; groupWizardError = '';
     groupDraftName = ''; groupDraftDescription = ''; groupDraftPlanMode = 'free'; groupDraftChaptersPerWeek = 5;
+    groupDraftSessions = []; groupDraftStudyBook = '';
     clearGroupWizardDraft();
     // Add it to groupsDirectory immediately from the object already in hand, rather than only
     // waiting on loadGroupsDirectory(true)'s round trip — this is the exact data the bulk list()
@@ -3583,7 +3737,8 @@ function deleteGroup(groupId){
     return Promise.all(others.map(d=> d.ref.delete())).then(()=> mine ? mine.ref.delete() : null);
   }).then(()=> Promise.all([
     deleteAllInSubcollection(groupRef, 'messages'),
-    deleteAllInSubcollection(groupRef, 'joinRequests')
+    deleteAllInSubcollection(groupRef, 'joinRequests'),
+    deleteAllInSubcollection(groupRef, 'progress')
   ])).then(()=> groupRef.delete());
 }
 
@@ -3636,6 +3791,49 @@ function selectMention(uid){
     const pos = atIndex + inserted.length;
     if(newEl.setSelectionRange) newEl.setSelectionRange(pos, pos);
   }
+}
+// ---- Editing/deleting your own messages ----
+// Author-only, enforced both in UI (buttons only on your own messages) and in Firestore rules
+// (v19: update/delete allowed where resource.data.authorUid == request.auth.uid). Edits re-parse
+// @mentions and stamp editedAt, which the message row surfaces as a small "(edited)" tag.
+let editingMessageId = null;
+let editingMessageText = '';
+function startEditGroupMessage(messageId){
+  const m = activeGroupMessages.find(x=>x.id===messageId);
+  if(!m) return;
+  editingMessageId = messageId;
+  editingMessageText = m.text || '';
+  render();
+  const el = document.getElementById('msgEditInput');
+  if(el){ el.focus(); if(el.setSelectionRange) el.setSelectionRange(el.value.length, el.value.length); }
+}
+function cancelEditGroupMessage(){
+  editingMessageId = null; editingMessageText = '';
+  const el = document.getElementById('msgEditInput');
+  if(el) el.blur();
+  render();
+}
+function saveEditedGroupMessage(groupId){
+  const el = document.getElementById('msgEditInput');
+  const trimmed = ((el && el.value) || '').trim();
+  if(!trimmed || !fbDb || !currentUser || !editingMessageId) return;
+  const { mentionedUids } = parseMentions(trimmed, activeGroupMembers);
+  const msgId = editingMessageId;
+  if(el) el.blur();
+  fbDb.collection('groups').doc(groupId).collection('messages').doc(msgId).update({
+    text: trimmed.slice(0,2000), mentionedUids, editedAt: Date.now()
+  }).then(()=>{
+    editingMessageId = null; editingMessageText = '';
+    render();
+  }).catch(()=>{ showToast("Couldn't save that edit — try again."); });
+}
+function deleteGroupMessage(groupId, messageId){
+  if(!fbDb || !currentUser) return;
+  customConfirm('Delete this message? This can’t be undone.', { confirmLabel:'Delete', danger:true }).then(ok=>{
+    if(!ok) return;
+    fbDb.collection('groups').doc(groupId).collection('messages').doc(messageId).delete()
+      .catch(()=>{ showToast("Couldn't delete that message — try again."); });
+  });
 }
 function sendGroupMessage(groupId, text){
   const trimmed = (text||'').trim();
@@ -3778,7 +3976,7 @@ function render(){
     restoreFocus();
     return;
   }
-  const tabContent = viewedProfileUid ? renderProfilePage() : (
+  const tabContent = ownProfileOpen ? renderOwnProfilePage() : viewedProfileUid ? renderProfilePage() : (
     activeTab==='today' ? renderToday() :
     activeTab==='log' ? renderLog() :
     activeTab==='journal' ? renderJournal() :
@@ -3794,8 +3992,8 @@ function render(){
   // group) slides in from the right like a native navigation push; switching between top-level
   // tabs just cross-fades. Anything that re-renders the same view (typing, a background sync
   // completing) gets no animation class at all, so it stays instant as before.
-  const isDrillIn = !!viewedProfileUid || (activeTab==='community' && !!activeGroupId);
-  const viewKey = activeTab + (viewedProfileUid ? ':profile:'+viewedProfileUid : '') + (activeTab==='community' && activeGroupId ? ':group:'+activeGroupId : '');
+  const isDrillIn = ownProfileOpen || !!viewedProfileUid || (activeTab==='community' && !!activeGroupId);
+  const viewKey = activeTab + (ownProfileOpen ? ':ownprofile' : '') + (viewedProfileUid ? ':profile:'+viewedProfileUid : '') + (activeTab==='community' && activeGroupId ? ':group:'+activeGroupId : '');
   const viewChanged = viewKey !== lastRenderedViewKey;
   lastRenderedViewKey = viewKey;
   const viewAnimClass = viewChanged ? (isDrillIn ? 'view-enter-slide' : 'view-enter-fade') : '';
@@ -3816,8 +4014,10 @@ function render(){
     ${renderDialogOverlay()}
     ${renderCommandPalette()}
     ${renderToastStack()}
-    ${(currentUser && activeTab==='community' && communitySubTab!=='groups' && !activeGroupId) ? `
+    ${(currentUser && !ownProfileOpen && activeTab==='community' && communitySubTab!=='groups' && !activeGroupId) ? `
       <button type="button" class="fab-add-post" id="openPostComposerBtn" aria-label="New update">${icon('plus',24)}</button>` : ''}
+    ${(!ownProfileOpen && activeTab==='today') ? `
+      <button type="button" class="fab-add-post" id="openExtraSheetBtn" aria-label="Log extra reading" title="Log reading outside your plan">${icon('plus',24)}</button>` : ''}
   `;
   attachEvents();
   restoreFocus();
@@ -4107,15 +4307,18 @@ function syncPillHtml(){
   return `<span class="sync-pill ${cls}">&#9679; ${label}</span>`;
 }
 
-// The old header carried the app title, a stats subtitle, the sync pill, and the backup buttons —
-// all of that "jumbo" now lives in the Account tab instead (see renderAccountTab), where it reads
-// naturally as account/app info rather than sitting permanently above every single screen. All
-// that's left here is the two bits of chrome that genuinely need to be reachable from anywhere:
-// the notification bell and the theme toggle — a single slim row, not a header.
+// The slim always-there chrome row: the notification bell and your profile avatar, top-right —
+// the standard app pattern (Gmail, App Store, etc.). The theme toggle used to float here too, but
+// with Auto mode doing the daily work, manually pinning a period is a rare, considered action —
+// it now lives in Settings > Appearance where that kind of control belongs. Tapping the avatar
+// opens your own profile page (view + edit), which also moved out of Settings.
 function renderTopStrip(){
+  const p = state.profile;
   return `<div class="top-strip">
     ${renderNotifBellButton()}
-    ${themeToggleHtml()}
+    <button type="button" class="header-avatar-btn" id="ownProfileBtn" aria-label="Your profile" title="Your profile">
+      ${renderAvatarHtml(p, 34)}
+    </button>
   </div>`;
 }
 
@@ -4163,9 +4366,11 @@ function renderNotifPanel(){
 // Nav layout (reorganized per user request): Journal is promoted onto the main bottom nav, while
 // Log and Account move into the "More" sidebar — the main row now carries the four everyday
 // destinations (Today, Journal, Dashboard, Community) plus More.
+// The 'account' tab id is kept for stability, but it's labeled Settings now — profile editing
+// moved out of it (behind the header avatar), leaving pure app configuration behind.
 const MAIN_TABS = [['today','Today','home'],['journal','Journal','notebook'],['dashboard','Dashboard','chart'],['community','Community','users']];
-const MORE_TABS = [['log','Log','calendar'],['memorize','Memorize','bookmark'],['account','Account','person']];
-const ALL_TABS = [['today','Today','home'],['journal','Journal','notebook'],['dashboard','Dashboard','chart'],['community','Community','users'],['log','Log','calendar'],['memorize','Memorize','bookmark'],['account','Account','person']];
+const MORE_TABS = [['log','Log','calendar'],['memorize','Memorize','bookmark'],['account','Settings','gear']];
+const ALL_TABS = [['today','Today','home'],['journal','Journal','notebook'],['dashboard','Dashboard','chart'],['community','Community','users'],['log','Log','calendar'],['memorize','Memorize','bookmark'],['account','Settings','gear']];
 
 // Desktop's persistent left nav — replaces the old flat top text-tab row. Fixed to the left edge
 // above the mobile breakpoint (see the .desktop-nav media queries), with #app shifted over to make
@@ -4332,23 +4537,21 @@ function renderToday(){
       </div>
     </div>`;
 
-  const bookOptions = BOOK_LIBRARY.map(b=>`<option value="${b.name}">${b.name}</option>`).join('');
+  // "Reading outside your plan" used to be a full form crammed at the bottom of the page — the
+  // form now lives in a bottom sheet behind the floating + button (see renderExtraReadingSheet /
+  // the fab-add-extra in render()). Anything already logged for this date still shows here as a
+  // quiet list, since that's information, not chrome.
   const extraTodayEntries = state.extraLog.filter(e=>e.date===selectedDate);
-  const extraReadingHtml = `
+  const extraLoggedHtml = extraTodayEntries.length ? `
     <div class="settings-box" style="max-width:none;">
-      <h3>${icon('bookmark',16)} Reading outside your plan</h3>
-      <p style="font-size:0.82rem; color:var(--ink-soft); margin-top:-6px;">Read something today that wasn't on today's cards? Log it here.</p>
-      <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;">
-        <select id="extraBook" style="padding:7px 10px; border:1px solid var(--line); border-radius:8px; font-size:0.85rem; font-family:inherit;">${bookOptions}</select>
-        <input type="number" id="extraChapter" placeholder="Chapter" min="1" style="width:90px; padding:7px 10px; border:1px solid var(--line); border-radius:8px; font-size:0.85rem; font-family:inherit;">
-        <button class="btn" id="addExtraBtn">Log it</button>
-      </div>
-      ${extraTodayEntries.length ? `<div class="today-log-list">${extraTodayEntries.map(e=>`<div class="extra-log-row">${e.book} ${e.chapter||''} <button class="btn small danger" data-delete-extra="${e.id}" style="margin-left:6px;">Remove</button></div>`).join('')}</div>` : ''}
-    </div>`;
+      <h3>${icon('bookmark',16)} Outside your plan</h3>
+      <div class="today-log-list">${extraTodayEntries.map(e=>`<div class="extra-log-row">${e.book} ${e.chapter||''} <button class="btn small danger" data-delete-extra="${e.id}" style="margin-left:6px;">Remove</button></div>`).join('')}</div>
+    </div>` : '';
 
   return `
     ${renderConsiderHim()}
     ${checkinHtml}
+    ${renderMemorizeReminder()}
     <div class="toolbar">
       <label for="dateSel" style="font-size:0.85rem; color:var(--ink-soft);">Logging for:</label>
       <input type="date" id="dateSel" value="${selectedDate}" max="${todayStr()}">
@@ -4356,9 +4559,50 @@ function renderToday(){
       <span style="font-size:0.8rem; color:var(--ink-soft);">${fmtDate(selectedDate)}</span>
     </div>
     <div class="grid">${cards}</div>
-    ${extraReadingHtml}
+    ${extraLoggedHtml}
     ${renderTodayNotifStrip()}
+    ${renderExtraReadingSheet()}
   `;
+}
+
+// One quiet line, not another card — Today stays minimalist. Only appears when there ARE verses
+// still being learned and none of them has been reviewed yet today; vanishes the moment you
+// review one (lastReviewed stamps today) so it never nags twice.
+function renderMemorizeReminder(){
+  const learning = (state.memorization||[]).filter(m=>m.status!=='mastered');
+  if(!learning.length) return '';
+  if(learning.some(m=>m.lastReviewed === todayStr())) return '';
+  const label = learning.length===1
+    ? `&ldquo;${escapeHtml(learning[0].reference)}&rdquo; is waiting for review`
+    : `${learning.length} verses are waiting for review`;
+  return `
+    <button type="button" class="memorize-reminder" id="memorizeReminderBtn">
+      ${icon('bookmark',14)} <span>${label}</span> <span class="mem-rem-go">Review &rarr;</span>
+    </button>`;
+}
+
+// The extra-reading form as a bottom sheet, opened by Today's floating + button.
+let extraReadingSheetOpen = false;
+function renderExtraReadingSheet(){
+  const bookOptions = BOOK_LIBRARY.map(b=>`<option value="${b.name}">${b.name}</option>`).join('');
+  return `
+    <div id="extraSheetBackdrop" class="sheet-backdrop ${extraReadingSheetOpen?'open':''}"></div>
+    <div class="sheet-panel ${extraReadingSheetOpen?'open':''}">
+      <div class="sheet-handle"></div>
+      ${extraReadingSheetOpen ? `
+        <div class="sheet-body">
+          <div class="sheet-header">
+            <h3>${icon('bookmark',16)} Reading outside your plan</h3>
+            <button type="button" class="sheet-close-btn" id="closeExtraSheetBtn" aria-label="Close">${icon('close',18)}</button>
+          </div>
+          <p style="font-size:0.82rem; color:var(--ink-soft); margin-top:-6px;">Read something that wasn't on today's cards? Log it here${selectedDate!==todayStr() ? ` for ${fmtDate(selectedDate)}` : ''}.</p>
+          <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;">
+            <select id="extraBook" style="flex:1; min-width:150px; padding:9px 10px; border:1px solid var(--line); border-radius:8px; font-size:0.9rem; font-family:inherit;">${bookOptions}</select>
+            <input type="number" id="extraChapter" placeholder="Chapter" min="1" style="width:100px; padding:9px 10px; border:1px solid var(--line); border-radius:8px; font-size:0.9rem; font-family:inherit;">
+          </div>
+          <button class="btn primary" id="addExtraBtn" style="width:100%;">Log it</button>
+        </div>` : ''}
+    </div>`;
 }
 
 // A compact preview of the same inbox the top-strip bell opens (see notifItems()/renderNotifPanel)
@@ -4847,6 +5091,7 @@ const GROUP_WIZARD_STEP_META = {
   pace:       { icon:'calendar', title:'How will you read together?', sub:'You can change this later.' },
   paceDetail: { icon:'calendar', title:'Set your pace', sub:'How many chapters should the group read each week?' },
   reading:    { icon:'bookmark', title:'What will you read?', sub:'Pick a preset, or choose specific books below.' },
+  sessions:   { icon:'notebook', title:'Build your study guide', sub:'Session by session — what to read, and what to sit with. Members check each one off as they go.' },
   review:     { icon:'check',    title:'Review & create', sub:"Here's what your group will look like." },
 };
 
@@ -4907,6 +5152,10 @@ function renderGroupWizardStepBody(stepId){
           <input type="radio" name="wizardPlanMode" value="paced" ${groupDraftPlanMode==='paced'?'checked':''}>
           <span><strong>Paced schedule</strong><br><span class="wizard-choice-sub">The group moves through the outline together, week by week — good for discussing the same passage on the same week.</span></span>
         </label>
+        <label class="wizard-choice ${groupDraftPlanMode==='sessions'?'selected':''}">
+          <input type="radio" name="wizardPlanMode" value="sessions" ${groupDraftPlanMode==='sessions'?'checked':''}>
+          <span><strong>Guided study</strong><br><span class="wizard-choice-sub">Build the study session by session — each with its reading, and an optional focus question. Works for Bible passages or any book (e.g. <em>Sit, Walk, Stand</em>). Everyone checks sessions off, and progress is visible to the group.</span></span>
+        </label>
       </div>`;
   }
   if(stepId === 'paceDetail'){
@@ -4920,7 +5169,25 @@ function renderGroupWizardStepBody(stepId){
   if(stepId === 'reading'){
     return errorHtml + renderGroupWizardReadingBody();
   }
+  if(stepId === 'sessions'){
+    return errorHtml + renderGroupWizardSessionsBody();
+  }
   // review
+  if(groupDraftPlanMode === 'sessions'){
+    const filled = groupDraftSessions.filter(s=>(s.reading||'').trim());
+    return `
+      ${groupCreateError ? `<div class="auth-error">${escapeHtml(groupCreateError)}</div>` : ''}
+      <div class="wizard-review-card">
+        <div class="wizard-review-row"><span>Name</span><strong>${escapeHtml(groupDraftName)}</strong></div>
+        ${groupDraftDescription ? `<div class="wizard-review-row"><span>Description</span><strong>${escapeHtml(groupDraftDescription)}</strong></div>` : ''}
+        ${groupDraftStudyBook ? `<div class="wizard-review-row"><span>Studying</span><strong>${escapeHtml(groupDraftStudyBook)}</strong></div>` : ''}
+        <div class="wizard-review-row"><span>Format</span><strong>Guided study &middot; ${filled.length} session${filled.length===1?'':'s'}</strong></div>
+      </div>
+      <div class="wizard-session-preview">
+        ${filled.slice(0,6).map((s,i)=>`<div class="wizard-session-preview-row"><span class="session-num">${i+1}</span> <strong>${escapeHtml((s.title||'').trim() || 'Session '+(i+1))}</strong> &mdash; ${escapeHtml(s.reading)}</div>`).join('')}
+        ${filled.length > 6 ? `<div class="wizard-session-preview-row" style="color:var(--ink-soft);">+ ${filled.length-6} more</div>` : ''}
+      </div>`;
+  }
   const total = outlineTotalChapters(groupDraftBooks.map(b=>({book:b,chapters:chaptersFor(b)})));
   return `
     ${groupCreateError ? `<div class="auth-error">${escapeHtml(groupCreateError)}</div>` : ''}
@@ -4930,6 +5197,35 @@ function renderGroupWizardStepBody(stepId){
       <div class="wizard-review-row"><span>Pace</span><strong>${groupDraftPlanMode==='paced' ? groupDraftChaptersPerWeek+' chapters/week' : 'Free pace'}</strong></div>
       <div class="wizard-review-row"><span>Reading</span><strong>${groupDraftBooks.length} book${groupDraftBooks.length===1?'':'s'} &middot; ${total} chapters</strong></div>
     </div>`;
+}
+
+// The session builder — the heart of the guided-study format. Deliberately three fields per
+// session and nothing more: what to read, an optional name, an optional focus/discussion
+// question. Enough structure that members see it was put together with intention, not so much
+// that building one feels like course authoring.
+function renderGroupWizardSessionsBody(){
+  if(!groupDraftSessions.length) groupDraftSessions = [blankDraftSession()];
+  const rows = groupDraftSessions.map((s,i)=>{
+    const passage = detectBiblePassage(s.reading);
+    return `
+    <div class="wizard-session-row">
+      <div class="wizard-session-head">
+        <span class="session-num">${i+1}</span>
+        <input type="text" data-session-field="title" data-session-index="${i}" placeholder="Session ${i+1} — title (optional)" value="${escapeHtml(s.title||'')}">
+        ${groupDraftSessions.length > 1 ? `<button type="button" class="msg-action-btn" data-remove-session="${i}" aria-label="Remove session">${icon('trash',14)}</button>` : ''}
+      </div>
+      <input type="text" data-session-field="reading" data-session-index="${i}" placeholder='Reading — e.g. "Philippians 1–2" or "Sit, Walk, Stand ch. 1"' value="${escapeHtml(s.reading||'')}">
+      ${passage ? `<div class="session-passage-hint">${icon('check',12)} Links to ${escapeHtml(passage.book)} ${passage.chapter} in your Bible app</div>` : ''}
+      <input type="text" data-session-field="note" data-session-index="${i}" placeholder="Focus or discussion question (optional)" value="${escapeHtml(s.note||'')}">
+    </div>`;
+  }).join('');
+  return `
+    <div class="auth-field">
+      <label for="wizardStudyBook">What are you studying? (optional)</label>
+      <input type="text" id="wizardStudyBook" placeholder="e.g. Sit, Walk, Stand — Watchman Nee. Leave blank for a Bible study." value="${escapeHtml(groupDraftStudyBook)}">
+    </div>
+    <div class="wizard-session-list">${rows}</div>
+    <button type="button" class="btn" id="addSessionBtn" style="width:100%; margin-top:10px;">${icon('plus',14)} Add session</button>`;
 }
 
 function renderGroupWizardReadingBody(){
@@ -5007,7 +5303,7 @@ function renderGroupsDirectory(){
         <div class="group-icon">${renderAvatarHtml({displayName:g.name, color:colorForName(g.name)}, 44)}</div>
         <div class="group-info">
           <div class="name">${escapeHtml(g.name)}</div>
-          <div class="meta">${g.memberCount||1} member${g.memberCount===1?'':'s'} &middot; ${g.planMode==='paced' ? 'Paced' : 'Free pace'}${g.description ? ' &middot; ' + escapeHtml(g.description) : ''}</div>
+          <div class="meta">${g.memberCount||1} member${g.memberCount===1?'':'s'} &middot; ${g.planMode==='sessions' ? 'Guided study' + (g.studyBook ? ': '+escapeHtml(g.studyBook) : '') : g.planMode==='paced' ? 'Paced' : 'Free pace'}${g.description ? ' &middot; ' + escapeHtml(g.description) : ''}</div>
         </div>
         <div class="group-action">${actionHtml}</div>
       </div>`;
@@ -5091,9 +5387,23 @@ function renderGroupDiscussion(){
   const messages = activeGroupMessages.map(m=>{
     const { html } = parseMentions(m.text, activeGroupMembers);
     const mine = currentUser && m.authorUid === currentUser.uid;
+    // Inline editing: your own message swaps its body for an input + Save/Cancel, right in place.
+    if(mine && editingMessageId === m.id){
+      return `
+      <div class="group-message">
+        <div class="who"><strong>${escapeHtml(m.authorName||'Someone')} (you)</strong> &middot; editing</div>
+        <div style="display:flex; gap:6px; margin-top:4px;">
+          <input type="text" id="msgEditInput" value="${escapeHtml(editingMessageText)}" style="flex:1; padding:7px 9px; border:1px solid var(--accent); border-radius:8px; font-size:0.88rem; font-family:inherit;">
+          <button class="btn primary small" id="msgEditSaveBtn">Save</button>
+          <button class="btn small" id="msgEditCancelBtn">Cancel</button>
+        </div>
+      </div>`;
+    }
     return `
       <div class="group-message">
-        <div class="who"><strong>${escapeHtml(m.authorName||'Someone')}</strong>${mine ? ' (you)' : ''} &middot; ${m.createdAt ? new Date(m.createdAt).toLocaleString(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}) : ''}</div>
+        <div class="who"><strong>${escapeHtml(m.authorName||'Someone')}</strong>${mine ? ' (you)' : ''} &middot; ${m.createdAt ? new Date(m.createdAt).toLocaleString(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}) : ''}${m.editedAt ? ' <span style="font-size:0.7rem; opacity:0.7;">(edited)</span>' : ''}${mine ? `
+          <button type="button" class="msg-action-btn" data-edit-msg="${m.id}" aria-label="Edit message">${icon('pencil',12)}</button>
+          <button type="button" class="msg-action-btn" data-delete-msg="${m.id}" aria-label="Delete message">${icon('trash',12)}</button>` : ''}</div>
         <div class="body">${html.replace(/\n/g,'<br>')}</div>
       </div>`;
   }).join('');
@@ -5122,6 +5432,7 @@ function renderGroupDiscussion(){
 
 function renderGroupPlan(){
   const g = activeGroupData;
+  if(g.planMode === 'sessions') return renderGroupSessionsPlan();
   const total = outlineTotalChapters(g.outline);
   let paceHtml = '';
   if(g.planMode === 'paced'){
@@ -5142,6 +5453,47 @@ function renderGroupPlan(){
       <div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:8px;">
         ${(g.outline||[]).map(o=>`<span class="role-badge member">${escapeHtml(o.book)} (${o.chapters})</span>`).join('')}
       </div>
+    </div>`;
+}
+
+// The guided-study plan tab: the ordered sessions, each with its reading, optional focus
+// question, a one-tap Bible-app link when the reading is a recognizable passage, YOUR done
+// checkbox, and how many of the group have finished it. The overview bar up top makes the
+// intentionality visible at a glance.
+function renderGroupSessionsPlan(){
+  const g = activeGroupData;
+  const sessions = g.sessions || [];
+  const myUid = currentUser ? currentUser.uid : null;
+  const myDone = (myUid && activeGroupProgress[myUid]) || {};
+  const memberCount = activeGroupMembers.length || g.memberCount || 1;
+  const myCount = sessions.filter(s=>myDone[s.id]).length;
+  const pct = sessions.length ? Math.round(myCount/sessions.length*100) : 0;
+  const rows = sessions.map((s,i)=>{
+    const doneByMe = !!myDone[s.id];
+    const doneCount = Object.keys(activeGroupProgress).filter(uid=> activeGroupProgress[uid][s.id]).length;
+    const passage = detectBiblePassage(s.reading);
+    return `
+      <div class="session-row ${doneByMe?'done':''}">
+        <button type="button" class="session-check ${doneByMe?'checked':''}" data-toggle-session="${s.id}" aria-label="${doneByMe?'Mark not done':'Mark done'}">${doneByMe?icon('check',16):''}</button>
+        <div class="session-info">
+          <div class="session-title"><span class="session-num">${i+1}</span> ${escapeHtml(s.title)}</div>
+          <div class="session-reading">${escapeHtml(s.reading)}</div>
+          ${s.note ? `<div class="session-note">${escapeHtml(s.note)}</div>` : ''}
+          <div class="session-meta">
+            ${passage ? `<button type="button" class="btn small" data-read-book="${escapeHtml(passage.book)}" data-read-chapter="${passage.chapter}">Read &rarr;</button>` : ''}
+            <span>${doneCount} of ${memberCount} done</span>
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+  return `
+    <div class="settings-box">
+      ${g.studyBook ? `<h3>${icon('notebook',16)} ${escapeHtml(g.studyBook)}</h3>` : `<h3>${icon('notebook',16)} Study guide</h3>`}
+      <div class="session-overview">
+        <div class="bar-track" style="flex:1;"><div class="bar-fill" data-bar-key="sessions:${g.id}" style="width:${pct}%; background:var(--accent);"></div></div>
+        <span style="font-size:0.8rem; color:var(--ink-soft); white-space:nowrap;">You: ${myCount}/${sessions.length}</span>
+      </div>
+      <div class="session-list">${rows || emptyState('notebook','No sessions in this study yet.')}</div>
     </div>`;
 }
 
@@ -5219,6 +5571,9 @@ function renderDashboard(){
   const monthlySummaries = renderMonthlySummaries();
   const totalCompleteCount = state.log.filter(e=>e.status==='complete').length;
   const coveragePct = Math.round(uniqueChapters.size/BIBLE_TOTAL_CHAPTERS*100);
+  // Guided-study sessions you've checked off across all your groups (mirrored into state by
+  // toggleSessionDone, so this needs no live group listeners to count).
+  const groupSessionsTotal = Object.values(state.groupSessionsDone||{}).reduce((s,n)=>s+(Number(n)||0),0);
   // data-count-key/data-count-to feed animateDashboardMetrics() (see JS above) — it compares the
   // target against whatever value it last saw for that key and, if it actually changed, plays a
   // quick count-up instead of the number just silently being different on the next render.
@@ -5228,8 +5583,13 @@ function renderDashboard(){
       <div class="stat"><div class="num"><span data-count-key="coveragePct" data-count-to="${coveragePct}">${coveragePct}</span>%</div><div class="label">Whole-Bible coverage</div></div>
       <div class="stat"><div class="num" data-count-key="totalCycles" data-count-to="${totalPassesAcrossAll}">${totalPassesAcrossAll}</div><div class="label">Total category cycles completed</div></div>
       <div class="stat"><div class="num" data-count-key="totalComplete" data-count-to="${totalCompleteCount}">${totalCompleteCount}</div><div class="label">Chapters logged complete (all-time)</div></div>
+      ${groupSessionsTotal ? `<div class="stat"><div class="num" data-count-key="groupSessions" data-count-to="${groupSessionsTotal}">${groupSessionsTotal}</div><div class="label">Group study sessions completed</div></div>` : ''}
     </div>`;
 
+  // Per-category book progress starts COLLAPSED (the summary tiles above stay visible) — these
+  // lists are what made the dashboard a scroll marathon. Native <details> handles the toggle;
+  // dashOpenSections remembers which ones you've opened so the constant full-DOM re-renders
+  // (count-up ticks, background syncs) don't snap them shut again mid-look.
   const blocks = ACTIVE_CATEGORIES.map(cat=>{
     const stats = bookStats(cat);
     const catCycle = state.cycles[cat.id]||0;
@@ -5242,15 +5602,21 @@ function renderDashboard(){
         <div style="text-align:right; color:var(--ink-soft);">${b.progress}%</div>
       </div>`).join('');
     return `
-      <div class="cat-block">
-        <h3><span class="swatch" style="background:${cat.color}"></span>${cat.name}</h3>
-        <div class="cat-sub">Cycle ${catCycle+1} in progress &middot; ${catPct}% through current pass (${cat.total} chapters/cycle)</div>
+      <details class="cat-block dash-collapse" data-dash-section="${cat.id}" ${dashOpenSections.has(cat.id)?'open':''}>
+        <summary>
+          <h3><span class="swatch" style="background:${cat.color}"></span>${cat.name}</h3>
+          <span class="cat-sub">Cycle ${catCycle+1} &middot; ${catPct}% through current pass</span>
+          <span class="dash-collapse-chevron">${icon('back',14)}</span>
+        </summary>
         ${rows}
-      </div>`;
+      </details>`;
   }).join('');
 
   return yearInReview + summary + renderCheckinHistoryCard() + monthlySummaries + blocks;
 }
+// Which dashboard category sections are expanded — session-scoped on purpose: every visit starts
+// clean and collapsed (that's the anti-scroll design), it only needs to survive re-renders.
+let dashOpenSections = new Set();
 
 // The check-in itself only ever showed a single line for whichever date you had open ("You logged
 // today's walk as…") — once a day passed, that answer had nowhere to actually surface again, which
@@ -5279,33 +5645,9 @@ function renderCheckinHistoryCard(){
     </div>`;
 }
 
-function renderAccountTab(){
-  // The app title + at-a-glance stats used to sit permanently in a header above every screen —
-  // now that the top strip is just the bell + theme toggle, this is where that "jumbo" lives instead.
-  const chaptersLoggedAllTime = state.log.filter(e=>e.status==='complete').length;
-  const appInfoBox = `
-    <div class="settings-box" style="text-align:center;">
-      <h3 style="margin-bottom:2px;">Cultivate</h3>
-      <p style="font-size:0.82rem; color:var(--ink-soft); margin:0;">
-        ${currentPlanName() ? `${currentPlanName()} plan &middot; ` : ''}${ACTIVE_CATEGORIES.length} categories &middot; ${chaptersLoggedAllTime} chapters logged all-time
-      </p>
-    </div>`;
-  const planBox = `
-    <div class="settings-box">
-      <h3>Reading plan</h3>
-      <p style="font-size:0.85rem; color:var(--ink-soft);">Currently: <strong>${state.plan && PRESET_PLANS[state.plan.presetId] ? PRESET_PLANS[state.plan.presetId].name : 'Custom plan'}</strong> (${ACTIVE_CATEGORIES.length} categories).</p>
-      <button class="btn primary" id="changePlanBtn">Change plan</button>
-    </div>`;
-  const notifBox = `
-    <div class="settings-box">
-      <h3>Check-in reminders</h3>
-      <p style="font-size:0.85rem; color:var(--ink-soft);">Get a gentle nudge if you haven't logged a reading in 3 days.</p>
-      ${notifStatus === 'granted'
-        ? `<p style="font-size:0.85rem; color:var(--good);">&#10003; Reminders enabled on this device.</p>`
-        : notifStatus === 'denied'
-          ? `<p style="font-size:0.85rem; color:var(--bad);">Notifications are blocked for this app in your browser/device settings.</p>`
-          : `<button class="btn primary" id="enableRemindersBtn">Enable check-in reminders</button>`}
-    </div>`;
+// Your own profile — reached from the header avatar, not from Settings. Same view/edit content
+// that used to live inside the Account tab, now a proper drill-in page of its own.
+function renderOwnProfilePage(){
   const p = state.profile;
   const esc = s => (s||'').replace(/"/g,'&quot;');
   const joinDate = formatJoinDate();
@@ -5392,7 +5734,45 @@ function renderAccountTab(){
         <button class="btn" id="cancelEditProfileBtn">Cancel</button>
       </div>
     </div>`;
-  const profileBox = profileEditMode ? profileEditHtml : profileViewHtml;
+  return `
+    <button class="btn back-btn" id="ownProfileBackBtn">${icon('back',16)} Back</button>
+    <div style="height:10px;"></div>
+    ${profileEditMode ? profileEditHtml : profileViewHtml}`;
+}
+
+function renderAccountTab(){
+  // Relabeled "Settings" in the nav — pure app configuration, grouped Apple-style. Profile
+  // viewing/editing moved out entirely (behind the header avatar → renderOwnProfilePage).
+  const chaptersLoggedAllTime = state.log.filter(e=>e.status==='complete').length;
+  const appInfoBox = `
+    <div class="settings-box" style="text-align:center;">
+      <h3 style="margin-bottom:2px;">Cultivate</h3>
+      <p style="font-size:0.82rem; color:var(--ink-soft); margin:0;">
+        ${currentPlanName() ? `${currentPlanName()} plan &middot; ` : ''}${ACTIVE_CATEGORIES.length} categories &middot; ${chaptersLoggedAllTime} chapters logged all-time
+      </p>
+    </div>`;
+  const appearanceBox = `
+    <div class="settings-box">
+      <h3>${icon('sun',16)} Appearance</h3>
+      <p style="font-size:0.85rem; color:var(--ink-soft);">Auto follows the day &mdash; a warm sunrise palette in the morning, bright at noon, deep and quiet at night (Psalm 55:17). Or pin the one you love.</p>
+      ${themeToggleHtml()}
+    </div>`;
+  const planBox = `
+    <div class="settings-box">
+      <h3>Reading plan</h3>
+      <p style="font-size:0.85rem; color:var(--ink-soft);">Currently: <strong>${state.plan && PRESET_PLANS[state.plan.presetId] ? PRESET_PLANS[state.plan.presetId].name : 'Custom plan'}</strong> (${ACTIVE_CATEGORIES.length} categories).</p>
+      <button class="btn primary" id="changePlanBtn">Change plan</button>
+    </div>`;
+  const notifBox = `
+    <div class="settings-box">
+      <h3>Check-in reminders</h3>
+      <p style="font-size:0.85rem; color:var(--ink-soft);">Get a gentle nudge if you haven't logged a reading in 3 days.</p>
+      ${notifStatus === 'granted'
+        ? `<p style="font-size:0.85rem; color:var(--good);">&#10003; Reminders enabled on this device.</p>`
+        : notifStatus === 'denied'
+          ? `<p style="font-size:0.85rem; color:var(--bad);">Notifications are blocked for this app in your browser/device settings.</p>`
+          : `<button class="btn primary" id="enableRemindersBtn">Enable check-in reminders</button>`}
+    </div>`;
   const inviteAppBox = `
     <div class="settings-box">
       <h3>Invite someone to Cultivate</h3>
@@ -5444,12 +5824,12 @@ function renderAccountTab(){
       <p>${syncPillHtml()}</p>
       <button class="btn danger" id="logoutBtn">Log out</button>
     </div>
+    ${appearanceBox}
     ${planBox}
-    ${profileBox}
-    ${inviteAppBox}
-    ${exportBox}
     ${readingAppBox}
     ${notifBox}
+    ${exportBox}
+    ${inviteAppBox}
     ${feedbackBox}`;
   }
   return `
@@ -5459,12 +5839,12 @@ function renderAccountTab(){
       <p style="font-size:0.85rem; color:var(--ink-soft);">You're using guest mode &mdash; your progress is only saved on this device. Create a free account to sync across your phone and laptop.</p>
       <button class="btn primary" id="upgradeAccountBtn">Create an account / log in</button>
     </div>
+    ${appearanceBox}
     ${planBox}
-    ${profileBox}
-    ${inviteAppBox}
-    ${exportBox}
     ${readingAppBox}
     ${notifBox}
+    ${exportBox}
+    ${inviteAppBox}
     ${feedbackBox}`;
 }
 
@@ -5495,6 +5875,7 @@ function scrollAppToTop(){
 function switchToTab(tabId){
   activeTab = tabId;
   sidebarOpen = false;
+  ownProfileOpen = false;
   if(viewedProfileUid) closeViewedProfile();
   // Warm both sub-tabs' caches the moment Community opens, so switching between Friends/Groups
   // (or typing in either one's search box) feels instant rather than waiting on a fetch.
@@ -5518,6 +5899,21 @@ function attachEvents(){
   if(sidebarCloseBtn) sidebarCloseBtn.addEventListener('click', ()=>{ sidebarOpen = false; render(); });
   const notifBellBtn = document.getElementById('notifBellBtn');
   if(notifBellBtn) notifBellBtn.addEventListener('click', (e)=>{ e.stopPropagation(); toggleNotifPanel(); });
+  const ownProfileBtn = document.getElementById('ownProfileBtn');
+  if(ownProfileBtn) ownProfileBtn.addEventListener('click', ()=>{
+    ownProfileOpen = true;
+    if(viewedProfileUid) closeViewedProfile();
+    notifPanelOpen = false;
+    scrollAppToTop();
+    render();
+  });
+  const ownProfileBackBtn = document.getElementById('ownProfileBackBtn');
+  if(ownProfileBackBtn) ownProfileBackBtn.addEventListener('click', ()=>{
+    ownProfileOpen = false;
+    profileEditMode = false;
+    scrollAppToTop();
+    render();
+  });
   const notifBackdrop = document.getElementById('notifBackdrop');
   if(notifBackdrop) notifBackdrop.addEventListener('click', ()=>{ notifPanelOpen = false; render(); });
   const notifCloseBtn = document.getElementById('notifCloseBtn');
@@ -5687,9 +6083,26 @@ function attachEvents(){
     addExtraBtn.addEventListener('click', ()=>{
       const bookEl = document.getElementById('extraBook');
       const chapterEl = document.getElementById('extraChapter');
+      if(chapterEl) chapterEl.blur();
+      extraReadingSheetOpen = false; // the sheet closes on log — the new row shows on the page behind it
       addExtraReading(selectedDate, bookEl.value, chapterEl.value ? Number(chapterEl.value) : null, '');
     });
   }
+  const openExtraSheetBtn = document.getElementById('openExtraSheetBtn');
+  if(openExtraSheetBtn) openExtraSheetBtn.addEventListener('click', ()=>{ extraReadingSheetOpen = true; render(); });
+  const closeExtraSheetBtn = document.getElementById('closeExtraSheetBtn');
+  if(closeExtraSheetBtn) closeExtraSheetBtn.addEventListener('click', ()=>{ extraReadingSheetOpen = false; render(); });
+  const extraSheetBackdrop = document.getElementById('extraSheetBackdrop');
+  if(extraSheetBackdrop) extraSheetBackdrop.addEventListener('click', ()=>{ extraReadingSheetOpen = false; render(); });
+  const memorizeReminderBtn = document.getElementById('memorizeReminderBtn');
+  if(memorizeReminderBtn) memorizeReminderBtn.addEventListener('click', ()=> switchToTab('memorize'));
+  // Remember which dashboard sections are open across the app's constant full re-renders.
+  document.querySelectorAll('details[data-dash-section]').forEach(d=>{
+    d.addEventListener('toggle', ()=>{
+      if(d.open) dashOpenSections.add(d.dataset.dashSection);
+      else dashOpenSections.delete(d.dataset.dashSection);
+    });
+  });
   document.querySelectorAll('[data-delete-extra]').forEach(btn=> btn.addEventListener('click', ()=>{
     const row = btn.closest('.extra-log-row');
     animateRemoval(row, ()=> deleteExtraReading(btn.dataset.deleteExtra));
@@ -5941,6 +6354,7 @@ function attachEvents(){
     if(!hadDraft){
       groupDraftBooks = []; groupDraftName = ''; groupDraftDescription = '';
       groupDraftPlanMode = 'free'; groupDraftChaptersPerWeek = 5; groupWizardStep = 0;
+      groupDraftSessions = []; groupDraftStudyBook = '';
     }
     render();
   }
@@ -6008,11 +6422,45 @@ function attachEvents(){
       if(stepId === 'reading' && !groupDraftBooks.length){
         groupWizardError = 'Pick at least one book for the group to read.'; render(); return;
       }
+      if(stepId === 'sessions' && !groupDraftSessions.some(s=>(s.reading||'').trim())){
+        groupWizardError = 'Add at least one session with a reading.'; render(); return;
+      }
       groupWizardError = '';
       groupWizardStep = Math.min(steps.length - 1, groupWizardStep + 1);
       saveGroupWizardDraft(); render();
     });
   }
+  // Session-builder inputs: update draft state on every keystroke WITHOUT re-rendering (the
+  // focusRestore mechanism makes re-render-per-keystroke survivable, but not re-rendering at all
+  // is smoother) — except the reading field, which re-renders so the "links to your Bible app"
+  // hint can appear live as the passage becomes recognizable.
+  document.querySelectorAll('[data-session-field]').forEach(input=>{
+    input.addEventListener('input', (e)=>{
+      const i = Number(input.dataset.sessionIndex);
+      if(!groupDraftSessions[i]) return;
+      groupDraftSessions[i][input.dataset.sessionField] = e.target.value;
+      saveGroupWizardDraft();
+      if(input.dataset.sessionField === 'reading') render();
+    });
+  });
+  const wizardStudyBook = document.getElementById('wizardStudyBook');
+  if(wizardStudyBook) wizardStudyBook.addEventListener('input', (e)=>{ groupDraftStudyBook = e.target.value; saveGroupWizardDraft(); });
+  const addSessionBtn = document.getElementById('addSessionBtn');
+  if(addSessionBtn) addSessionBtn.addEventListener('click', ()=>{
+    if(groupDraftSessions.length >= 52){ showToast('52 sessions is the cap — that’s a full year of weekly study.'); return; }
+    groupDraftSessions.push(blankDraftSession());
+    saveGroupWizardDraft(); render();
+  });
+  document.querySelectorAll('[data-remove-session]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      groupDraftSessions.splice(Number(btn.dataset.removeSession), 1);
+      saveGroupWizardDraft(); render();
+    });
+  });
+  // Guided-study plan tab: my per-session done checkboxes.
+  document.querySelectorAll('[data-toggle-session]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{ if(activeGroupData) toggleSessionDone(activeGroupData.id, btn.dataset.toggleSession); });
+  });
   const groupWizardCreateBtn = document.getElementById('groupWizardCreateBtn');
   if(groupWizardCreateBtn){
     groupWizardCreateBtn.addEventListener('click', ()=>{
@@ -6084,6 +6532,23 @@ function attachEvents(){
   });
   if(sendGroupMessageBtn && activeGroupData){
     sendGroupMessageBtn.addEventListener('click', ()=> sendGroupMessage(activeGroupData.id, groupMessageInput ? groupMessageInput.value : groupMessageText));
+  }
+  document.querySelectorAll('[data-edit-msg]').forEach(btn=>{
+    btn.addEventListener('click', ()=> startEditGroupMessage(btn.dataset.editMsg));
+  });
+  document.querySelectorAll('[data-delete-msg]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{ if(activeGroupData) deleteGroupMessage(activeGroupData.id, btn.dataset.deleteMsg); });
+  });
+  const msgEditSaveBtn = document.getElementById('msgEditSaveBtn');
+  if(msgEditSaveBtn && activeGroupData) msgEditSaveBtn.addEventListener('click', ()=> saveEditedGroupMessage(activeGroupData.id));
+  const msgEditCancelBtn = document.getElementById('msgEditCancelBtn');
+  if(msgEditCancelBtn) msgEditCancelBtn.addEventListener('click', ()=> cancelEditGroupMessage());
+  const msgEditInput = document.getElementById('msgEditInput');
+  if(msgEditInput && activeGroupData){
+    msgEditInput.addEventListener('keydown', (e)=>{
+      if(e.key === 'Enter'){ e.preventDefault(); saveEditedGroupMessage(activeGroupData.id); }
+      else if(e.key === 'Escape'){ e.stopPropagation(); cancelEditGroupMessage(); }
+    });
   }
   if(groupMessageInput && activeGroupData){
     groupMessageInput.addEventListener('keydown', (e)=>{
@@ -6161,6 +6626,8 @@ if(typeof document !== 'undefined' && document.addEventListener){
       if(groupCreateOpen){ groupCreateOpen = false; render(); return; }
       if(shouldShowGate() && authView === 'signup'){ forceShowGate = false; authView = 'login'; authError=''; authWizardError=''; render(); return; }
       if(notifPanelOpen){ notifPanelOpen = false; render(); return; }
+      if(extraReadingSheetOpen){ extraReadingSheetOpen = false; render(); return; }
+      if(ownProfileOpen){ ownProfileOpen = false; profileEditMode = false; render(); return; }
       if(sidebarOpen){ sidebarOpen = false; render(); return; }
     }
   });
