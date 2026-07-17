@@ -4,10 +4,24 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Cultivate</title>
+<script>
+  // Set the light/dark theme attribute as early as possible — before any CSS paints — so there's
+  // no flash of the wrong theme on load. Mirrors the same "auto unless overridden" logic the main
+  // app script uses later (see setThemeMode/applyTheme), duplicated here deliberately since this
+  // has to run synchronously before the big app script has even been parsed.
+  (function(){
+    try{
+      var mode = localStorage.getItem('cultivateThemeMode') || 'auto';
+      var dark = mode === 'dark' || (mode === 'auto' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+      document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+    }catch(e){}
+  })();
+</script>
 
 <!-- PWA: installable app metadata -->
 <link rel="manifest" href="./manifest.json">
-<meta name="theme-color" content="#7a4b2e">
+<meta name="theme-color" content="#7a4b2e" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#171310" media="(prefers-color-scheme: dark)">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -37,13 +51,43 @@
     --bad-soft:#f7e3e3;
     --shadow: 0 1px 3px rgba(40,30,10,0.08), 0 1px 2px rgba(40,30,10,0.06);
   }
+  :root[data-theme="dark"]{
+    --bg:#171310;
+    --card:#241f19;
+    --ink:#f1e9dd;
+    --ink-soft:#a99e8c;
+    --line:#3a3226;
+    --accent:#d99a66;
+    --accent-soft:#3a2c1e;
+    --good:#7bc98d;
+    --good-soft:#1e3324;
+    --skip:#e0b750;
+    --skip-soft:#3a2f14;
+    --bad:#e08080;
+    --bad-soft:#3a1f1f;
+    --shadow: 0 1px 3px rgba(0,0,0,0.45), 0 1px 2px rgba(0,0,0,0.35);
+  }
+  /* Book tiles (Groups create form) carry their own per-book color as an inline --tile-color/
+     --tile-soft custom property, computed against the light palette — the soft tint reads fine
+     on a white card but goes muddy on a dark one, so dark mode swaps the unselected fill for a
+     flat translucent overlay instead and leans on --tile-color for the text/selected fill, which
+     works against either background. */
+  :root[data-theme="dark"] .book-tile{ background:rgba(255,255,255,0.06); }
   *{box-sizing:border-box;}
+  html{overflow-x:hidden; width:100%;}
   body{
     margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
     background:var(--bg); color:var(--ink); line-height:1.4;
     padding-top:env(safe-area-inset-top); padding-bottom:env(safe-area-inset-bottom);
+    overflow-x:hidden; width:100%;
+    transition:background .15s ease, color .15s ease;
   }
-  #app{max-width:1180px; margin:0 auto; padding:24px 20px 80px;}
+  /* Anything that can legitimately overflow (long unbroken tokens, wide inline-blocks) should
+     scroll within itself rather than pushing the whole page wider than the viewport — this is
+     what caused sideways-scrolling on mobile before, since a single wide element anywhere on the
+     page stretches <body> along with it. */
+  img, svg, video{max-width:100%;}
+  #app{max-width:1180px; margin:0 auto; width:100%; padding:24px 20px 96px;}
   header.top{display:flex; align-items:flex-start; justify-content:space-between; flex-wrap:wrap; gap:10px; margin-bottom:18px;}
   header.top h1{font-size:1.5rem; margin:0; font-weight:700;}
   header.top .sub{color:var(--ink-soft); font-size:0.9rem;}
@@ -78,7 +122,7 @@
   .btn.primary:disabled{opacity:0.6; cursor:default;}
   .btn.danger{color:var(--bad); border-color:var(--bad-soft);}
   .btn.small{padding:4px 10px; font-size:0.78rem;}
-  .grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(300px,1fr)); gap:14px;}
+  .grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(min(300px,100%),1fr)); gap:14px;}
   .card{
     background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px;
     box-shadow:var(--shadow); border-left:5px solid var(--cat-color, var(--accent));
@@ -108,7 +152,7 @@
     cursor:pointer; font-weight:700; padding:12px 16px; list-style:none; display:flex; justify-content:space-between;
   }
   details.month-group summary::-webkit-details-marker{display:none;}
-  .dash-summary{display:grid; grid-template-columns:repeat(auto-fill, minmax(220px,1fr)); gap:12px; margin-bottom:26px;}
+  .dash-summary{display:grid; grid-template-columns:repeat(auto-fill, minmax(min(220px,100%),1fr)); gap:12px; margin-bottom:26px;}
   .dash-summary .stat{background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px; box-shadow:var(--shadow);}
   .dash-summary .stat .num{font-size:1.6rem; font-weight:800; color:var(--accent);}
   .dash-summary .stat .label{font-size:0.78rem; color:var(--ink-soft); font-weight:600;}
@@ -118,9 +162,13 @@
   }
   .cat-block h3 .swatch{width:12px; height:12px; border-radius:3px; display:inline-block;}
   .cat-block .cat-sub{color:var(--ink-soft); font-size:0.8rem; margin-bottom:10px;}
-  .book-row{display:grid; grid-template-columns:170px 1fr 90px 70px; align-items:center; gap:10px; padding:6px 0; border-bottom:1px solid var(--line); font-size:0.85rem;}
+  .book-row{
+    display:grid; grid-template-columns:minmax(0,120px) minmax(40px,1fr) auto minmax(30px,40px);
+    align-items:center; gap:8px; padding:6px 0; border-bottom:1px solid var(--line); font-size:0.85rem;
+  }
   .book-row:last-child{border-bottom:none;}
-  .bar-track{background:#efe8db; border-radius:6px; height:10px; overflow:hidden;}
+  .book-row > div:first-child{overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .bar-track{background:var(--line); border-radius:6px; height:10px; overflow:hidden;}
   .bar-fill{height:100%; border-radius:6px;}
   .passes-badge{
     background:var(--accent-soft); color:var(--accent); font-weight:700; font-size:0.72rem;
@@ -150,7 +198,7 @@
   .role-badge.admin{background:var(--skip-soft); color:var(--skip);}
   .role-badge.member{background:#efe8db; color:var(--ink-soft);}
   .book-picker{
-    display:grid; grid-template-columns:repeat(auto-fill, minmax(148px,1fr)); gap:7px;
+    display:grid; grid-template-columns:repeat(auto-fill, minmax(min(148px,100%),1fr)); gap:7px;
     max-height:200px; overflow-y:auto; border:1px solid var(--line); border-radius:10px;
     padding:10px; background:var(--bg);
   }
@@ -241,7 +289,7 @@
   .auth-links a{color:var(--accent); text-decoration:none;}
   .auth-links a.muted{color:var(--ink-soft);}
   .onboard-wrap{max-width:900px; margin:0 auto;}
-  .plan-grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(260px,1fr)); gap:16px; margin:20px 0;}
+  .plan-grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(min(260px,100%),1fr)); gap:16px; margin:20px 0;}
   .plan-card{background:var(--card); border:1px solid var(--line); border-radius:14px; padding:18px; box-shadow:var(--shadow); display:flex; flex-direction:column; gap:10px;}
   .plan-card h4{margin:0; font-size:1.05rem;}
   .plan-card p{margin:0; font-size:0.82rem; color:var(--ink-soft); flex-grow:1;}
@@ -260,7 +308,7 @@
   .journal-form{max-width:none;}
   .journal-tag-picker{display:flex; gap:6px; flex-wrap:wrap;}
   .journal-tag-btn{
-    padding:7px 12px; border-radius:999px; border:2px solid var(--tc); background:#fff; color:var(--tc);
+    padding:7px 12px; border-radius:999px; border:2px solid var(--tc); background:var(--card); color:var(--tc);
     font-size:0.8rem; font-weight:700; cursor:pointer;
   }
   .journal-tag-btn.selected{background:var(--tc); color:#fff;}
@@ -273,6 +321,85 @@
   .journal-date{font-size:0.8rem; color:var(--ink-soft); font-weight:600;}
   .journal-title{font-weight:700; margin-bottom:4px;}
   .journal-content{font-size:0.88rem; color:var(--ink); white-space:pre-wrap;}
+
+  /* ---- Theme toggle ---- */
+  .theme-toggle{
+    display:inline-flex; align-items:center; gap:6px; padding:6px 12px; border-radius:999px;
+    border:1px solid var(--line); background:var(--card); color:var(--ink-soft); font-size:0.78rem;
+    font-weight:700; cursor:pointer; margin-top:6px;
+  }
+  .theme-toggle:hover{border-color:var(--accent); color:var(--accent);}
+
+  /* ---- Check-in (moved to the top of Today, collapses once answered) ---- */
+  .checkin-done-line{
+    display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;
+    background:var(--good-soft); color:var(--good); border-radius:10px; padding:11px 16px;
+    font-size:0.85rem; margin-bottom:16px; font-weight:600;
+  }
+  .checkin-done-line button{background:none; border:none; color:inherit; font-weight:700; text-decoration:underline; cursor:pointer; font-size:0.82rem; padding:0;}
+
+  /* ---- Viewed profile page (was a modal overlay — now a real in-place page, back button and all) ---- */
+  .profile-page{max-width:640px; margin:0 auto;}
+
+  /* ---- Mobile bottom nav + slide-in "More" sidebar ----
+     Hidden by default (desktop keeps the existing top text-tab nav); the media query below flips
+     which one is visible once the viewport gets phone-sized. */
+  .bottom-nav{
+    display:none; position:fixed; left:0; right:0; bottom:0; z-index:40;
+    background:var(--card); border-top:1px solid var(--line);
+    padding:6px 2px calc(6px + env(safe-area-inset-bottom));
+    box-shadow:0 -2px 10px rgba(0,0,0,0.08);
+  }
+  .bottom-nav-row{display:flex; justify-content:space-around; align-items:stretch;}
+  .bottom-nav-item{
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px;
+    background:none; border:none; color:var(--ink-soft); font-size:0.62rem; font-weight:700;
+    padding:5px 2px; cursor:pointer; flex:1; min-width:0;
+  }
+  .bottom-nav-item .icon{font-size:1.35rem; line-height:1;}
+  .bottom-nav-item.active{color:var(--accent);}
+  .bottom-nav-item span.label{overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:100%;}
+
+  .sidebar-backdrop{
+    display:none; position:fixed; inset:0; background:rgba(20,15,8,0.45); z-index:59;
+    opacity:0; pointer-events:none; transition:opacity .2s ease;
+  }
+  .sidebar-backdrop.open{opacity:1; pointer-events:auto;}
+  .sidebar-panel{
+    position:fixed; top:0; left:0; bottom:0; width:78%; max-width:300px; background:var(--card);
+    z-index:60; transform:translateX(-100%); transition:transform .25s ease; padding:20px 16px;
+    padding-top:calc(20px + env(safe-area-inset-top)); box-shadow:2px 0 16px rgba(0,0,0,0.18);
+    overflow-y:auto;
+  }
+  .sidebar-panel.open{transform:translateX(0);}
+  .sidebar-panel h2{font-size:1.1rem; margin:0 0 16px;}
+  .sidebar-nav-item{
+    display:flex; align-items:center; gap:12px; padding:12px 8px; border-radius:10px; width:100%;
+    background:none; border:none; text-align:left; font-size:0.95rem; font-weight:600; color:var(--ink); cursor:pointer;
+  }
+  .sidebar-nav-item .icon{font-size:1.2rem; width:24px; text-align:center; flex-shrink:0;}
+  .sidebar-nav-item.active{background:var(--accent-soft); color:var(--accent);}
+  .sidebar-close{
+    position:absolute; top:14px; right:14px; background:none; border:none; font-size:1.5rem;
+    color:var(--ink-soft); cursor:pointer; line-height:1; padding:4px;
+  }
+
+  /* ---- Phone-width layout: bottom nav + sidebar replace the top tabs, everything tightens up ---- */
+  @media (max-width:760px){
+    #app{padding:14px 14px 88px;}
+    header.top{
+      position:sticky; top:0; z-index:30; background:var(--bg);
+      margin:-14px -14px 14px; padding:12px 14px 10px; border-bottom:1px solid var(--line);
+    }
+    header.top h1{font-size:1.2rem;}
+    header.top .sub{font-size:0.72rem;}
+    nav.tabs{display:none;}
+    .bottom-nav{display:block;}
+    .sidebar-backdrop{display:block;}
+    .sidebar-panel{display:block;}
+    .settings-box, .group-tabs{max-width:none;}
+    .plan-card{padding:14px;}
+  }
 </style>
 </head>
 <body>
@@ -553,6 +680,39 @@ let deferredInstallPrompt = null;
 let journalFilter = 'all'; // 'all' | 'prophetic' | 'prayer' | 'revelation'
 let journalDraftTag = JOURNAL_TAGS[0];
 let feedbackType = 'suggestion'; // 'suggestion' | 'bug'
+let sidebarOpen = false; // mobile "More" slide-in panel (Journal/Memorize/Friends)
+let checkinEditing = false; // lets you reopen the mood picker after already answering for the date
+
+/* ---------------- Light/Dark theme ---------------- */
+// 'auto' follows the OS/browser preference; 'light'/'dark' are explicit overrides. A tiny inline
+// script in <head> already applied the theme synchronously before this script even loaded (to
+// avoid a flash of the wrong theme) — this just keeps it in sync with that same logic afterward.
+let themeMode = (function(){ try{ return localStorage.getItem('cultivateThemeMode') || 'auto'; }catch(e){ return 'auto'; } })();
+function effectiveTheme(){
+  if(themeMode === 'light' || themeMode === 'dark') return themeMode;
+  return (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
+}
+function applyTheme(){
+  if(document.documentElement) document.documentElement.setAttribute('data-theme', effectiveTheme());
+}
+function cycleThemeMode(){
+  themeMode = themeMode === 'auto' ? 'light' : themeMode === 'light' ? 'dark' : 'auto';
+  try{ localStorage.setItem('cultivateThemeMode', themeMode); }catch(e){}
+  applyTheme();
+  render();
+}
+applyTheme();
+if(window.matchMedia){
+  const darkMq = window.matchMedia('(prefers-color-scheme: dark)');
+  const onSystemThemeChange = ()=>{ if(themeMode === 'auto') applyTheme(); };
+  if(darkMq.addEventListener) darkMq.addEventListener('change', onSystemThemeChange);
+  else if(darkMq.addListener) darkMq.addListener(onSystemThemeChange); // older Safari
+}
+function themeToggleHtml(){
+  const icons = { auto:'&#9680;', light:'&#9728;', dark:'&#127769;' };
+  const labels = { auto:'Auto', light:'Light', dark:'Dark' };
+  return `<button type="button" class="theme-toggle" data-set-theme title="Theme: ${labels[themeMode]} (tap to change)">${icons[themeMode]} ${labels[themeMode]}</button>`;
+}
 
 function todayStr(){
   const d = new Date();
@@ -1249,8 +1409,11 @@ function viewProfile(uid){
   });
 }
 function closeViewedProfile(){ viewedProfileUid = null; viewedProfile = null; viewedProfileError = ''; render(); }
-function renderViewedProfileOverlay(){
-  if(!viewedProfileUid) return '';
+// Viewing someone's profile used to pop up as a floating modal on top of whatever tab you were
+// on; now it replaces the tab content entirely (same in-place-navigation pattern the Groups tab
+// already uses for "open a group") so it actually feels like you've navigated to their page,
+// with a real back button to return to wherever you were.
+function renderProfilePage(){
   let body;
   if(viewedProfileLoading) body = `<div class="empty-note">Loading…</div>`;
   else if(viewedProfileError) body = `<div class="empty-note">${escapeHtml(viewedProfileError)}</div>`;
@@ -1277,14 +1440,11 @@ function renderViewedProfileOverlay(){
     `;
   } else body = '';
   return `
-  <div id="profileOverlayBackdrop" style="position:fixed; inset:0; background:rgba(20,15,8,0.45); display:flex; align-items:flex-start; justify-content:center; padding:40px 16px; z-index:50; overflow-y:auto;">
-    <div class="settings-box" style="max-width:440px; width:100%; position:relative;">
-      <button type="button" id="closeViewedProfileBtn" style="position:absolute; top:8px; right:10px; background:none; border:none; font-size:1.3rem; cursor:pointer; color:var(--ink-soft); line-height:1;">&times;</button>
-      ${body}
-    </div>
-  </div>`;
+    <div class="profile-page">
+      <button class="btn small" id="closeViewedProfileBtn" style="margin-bottom:14px;">&larr; Back</button>
+      <div class="settings-box">${body}</div>
+    </div>`;
 }
-
 /* ---------------- Friend search (search-as-you-type, by name or exact email) ---------------- */
 let friendSearchQuery = '';
 let friendSearchResults = [];
@@ -1770,22 +1930,26 @@ function render(){
     restoreFocus();
     return;
   }
+  const tabContent = viewedProfileUid ? renderProfilePage() : (
+    activeTab==='today' ? renderToday() :
+    activeTab==='log' ? renderLog() :
+    activeTab==='journal' ? renderJournal() :
+    activeTab==='memorize' ? renderMemorize() :
+    activeTab==='dashboard' ? renderDashboard() :
+    activeTab==='friends' ? renderFriends() :
+    activeTab==='groups' ? renderGroups() :
+    activeTab==='account' ? renderAccountTab() : ''
+  );
   app.innerHTML = `
     ${renderHeader()}
     ${renderGroupInviteBanner()}
     ${renderCheckinBanner()}
     ${renderInstallBanner()}
     ${renderTabs()}
-    ${activeTab==='today' ? renderToday() : ''}
-    ${activeTab==='log' ? renderLog() : ''}
-    ${activeTab==='journal' ? renderJournal() : ''}
-    ${activeTab==='memorize' ? renderMemorize() : ''}
-    ${activeTab==='dashboard' ? renderDashboard() : ''}
-    ${activeTab==='friends' ? renderFriends() : ''}
-    ${activeTab==='groups' ? renderGroups() : ''}
-    ${activeTab==='account' ? renderAccountTab() : ''}
+    ${tabContent}
     ${renderFooter()}
-    ${renderViewedProfileOverlay()}
+    ${renderBottomNav()}
+    ${renderSidebar()}
     <input type="file" id="importFile" accept="application/json">
   `;
   attachEvents();
@@ -2057,17 +2221,52 @@ function renderHeader(){
       <div>${syncPillHtml()}</div>
     </div>
     <div class="toolbar">
+      ${themeToggleHtml()}
       <button class="btn" id="exportBtn">Export backup</button>
       <button class="btn" id="importBtn">Import backup</button>
     </div>
   </header>`;
 }
 
+// All 8 tabs, in one place — the desktop top nav shows all of them; the mobile bottom nav shows
+// only the first 5 (plus a "More" button), and the mobile sidebar shows whatever's left over.
+const MAIN_TABS = [['today','Today','&#127968;'],['log','Log','&#128197;'],['dashboard','Dashboard','&#128202;'],['groups','Groups','&#128101;'],['account','Account','&#128100;']];
+const MORE_TABS = [['journal','Journal','&#128221;'],['memorize','Memorize','&#129504;'],['friends','Friends','&#129309;']];
+const ALL_TABS = [['today','Today'],['log','Log'],['journal','Journal'],['memorize','Memorize'],['dashboard','Dashboard'],['friends','Friends'],['groups','Groups'],['account','Account']];
+
 function renderTabs(){
-  const tabs = [['today','Today'],['log','Log'],['journal','Journal'],['memorize','Memorize'],['dashboard','Dashboard'],['friends','Friends'],['groups','Groups'],['account','Account']];
   return `<nav class="tabs">
-    ${tabs.map(([id,label])=>`<button data-tab="${id}" class="${activeTab===id?'active':''}">${label}</button>`).join('')}
+    ${ALL_TABS.map(([id,label])=>`<button data-tab="${id}" class="${activeTab===id?'active':''}">${label}</button>`).join('')}
   </nav>`;
+}
+
+function renderBottomNav(){
+  const moreActive = MORE_TABS.some(([id])=>id===activeTab);
+  return `
+  <nav class="bottom-nav">
+    <div class="bottom-nav-row">
+      ${MAIN_TABS.map(([id,label,icon])=>`
+        <button class="bottom-nav-item ${activeTab===id && !sidebarOpen ? 'active' : ''}" data-tab="${id}">
+          <span class="icon">${icon}</span><span class="label">${label}</span>
+        </button>`).join('')}
+      <button class="bottom-nav-item ${moreActive ? 'active' : ''}" id="openSidebarBtn">
+        <span class="icon">&#9776;</span><span class="label">More</span>
+      </button>
+    </div>
+  </nav>`;
+}
+
+function renderSidebar(){
+  return `
+  <div id="sidebarBackdrop" class="sidebar-backdrop ${sidebarOpen?'open':''}"></div>
+  <aside class="sidebar-panel ${sidebarOpen?'open':''}">
+    <button type="button" id="sidebarCloseBtn" class="sidebar-close" aria-label="Close menu">&times;</button>
+    <h2>Cultivate</h2>
+    ${MORE_TABS.map(([id,label,icon])=>`
+      <button class="sidebar-nav-item ${activeTab===id?'active':''}" data-tab="${id}">
+        <span class="icon">${icon}</span>${label}
+      </button>`).join('')}
+  </aside>`;
 }
 
 function renderToday(){
@@ -2104,8 +2303,15 @@ function renderToday(){
       </div>`;
   }).join('');
 
+  // Shows the full picker until you've answered for this date, then collapses to a single
+  // acknowledgement line instead of continuing to take up space at the top of the page — "Change"
+  // reopens the picker if you want to revise today's answer.
   const existingCheckin = checkinFor(selectedDate);
-  const checkinHtml = `
+  const checkinHtml = (existingCheckin && !checkinEditing) ? `
+    <div class="checkin-done-line">
+      <span>${isToday ? "You logged today's walk as" : "You logged that day's walk as"} <strong>${CHECKIN_LABELS[existingCheckin.value]}</strong>.</span>
+      <button type="button" data-action="edit-checkin">Change</button>
+    </div>` : `
     <div class="settings-box" style="max-width:none;">
       <h3>How's your walk today?</h3>
       <p style="font-size:0.82rem; color:var(--ink-soft); margin-top:-6px;">Purely optional, just for you — no reminders, no tracking pressure.</p>
@@ -2129,6 +2335,7 @@ function renderToday(){
     </div>`;
 
   return `
+    ${checkinHtml}
     <div class="toolbar">
       <label for="dateSel" style="font-size:0.85rem; color:var(--ink-soft);">Logging for:</label>
       <input type="date" id="dateSel" value="${selectedDate}" max="${todayStr()}">
@@ -2136,7 +2343,6 @@ function renderToday(){
       <span style="font-size:0.8rem; color:var(--ink-soft);">${fmtDate(selectedDate)}</span>
     </div>
     <div class="grid">${cards}</div>
-    ${checkinHtml}
     ${extraReadingHtml}
   `;
 }
@@ -2958,15 +3164,29 @@ function renderFooter(){
 }
 
 /* ---------------- Events ---------------- */
+// Shared by the desktop top-tab nav, the mobile bottom nav, and the mobile "More" sidebar — all
+// three ultimately just switch activeTab, so they share one handler instead of three copies.
+function switchToTab(tabId){
+  activeTab = tabId;
+  sidebarOpen = false;
+  if(viewedProfileUid) closeViewedProfile();
+  // Warm the search cache the moment the tab opens, so results feel instant once typing starts.
+  if(activeTab === 'friends') loadFriendDirectory();
+  if(activeTab === 'groups' && !activeGroupId) loadGroupsDirectory();
+  render();
+}
 function attachEvents(){
-  document.querySelectorAll('nav.tabs button').forEach(btn=>{
-    btn.addEventListener('click', ()=>{
-      activeTab = btn.dataset.tab;
-      // Warm the search cache the moment the tab opens, so results feel instant once typing starts.
-      if(activeTab === 'friends') loadFriendDirectory();
-      if(activeTab === 'groups' && !activeGroupId) loadGroupsDirectory();
-      render();
-    });
+  document.querySelectorAll('nav.tabs button, .bottom-nav-item[data-tab], .sidebar-nav-item[data-tab]').forEach(btn=>{
+    btn.addEventListener('click', ()=> switchToTab(btn.dataset.tab));
+  });
+  const hamburgerBtn = document.getElementById('openSidebarBtn');
+  if(hamburgerBtn) hamburgerBtn.addEventListener('click', ()=>{ sidebarOpen = true; render(); });
+  const sidebarBackdrop = document.getElementById('sidebarBackdrop');
+  if(sidebarBackdrop) sidebarBackdrop.addEventListener('click', ()=>{ sidebarOpen = false; render(); });
+  const sidebarCloseBtn = document.getElementById('sidebarCloseBtn');
+  if(sidebarCloseBtn) sidebarCloseBtn.addEventListener('click', ()=>{ sidebarOpen = false; render(); });
+  document.querySelectorAll('[data-set-theme]').forEach(btn=>{
+    btn.addEventListener('click', ()=> cycleThemeMode());
   });
   document.querySelectorAll('[data-read-book]').forEach(btn=>{
     btn.addEventListener('click', ()=>{
@@ -2990,10 +3210,10 @@ function attachEvents(){
   });
   const dateSel = document.getElementById('dateSel');
   if(dateSel){
-    dateSel.addEventListener('change', ()=>{ selectedDate = dateSel.value || todayStr(); render(); });
+    dateSel.addEventListener('change', ()=>{ selectedDate = dateSel.value || todayStr(); checkinEditing = false; render(); });
   }
   const backBtn = document.getElementById('backToToday');
-  if(backBtn){ backBtn.addEventListener('click', ()=>{ selectedDate = todayStr(); render(); }); }
+  if(backBtn){ backBtn.addEventListener('click', ()=>{ selectedDate = todayStr(); checkinEditing = false; render(); }); }
 
   document.querySelectorAll('.journal-tag-btn').forEach(btn=>{
     btn.addEventListener('click', ()=>{
@@ -3132,7 +3352,13 @@ function attachEvents(){
 
   // Spiritual temperature check-in
   document.querySelectorAll('[data-checkin-value]').forEach(btn=>{
-    btn.addEventListener('click', ()=> setCheckin(selectedDate, Number(btn.dataset.checkinValue), ''));
+    btn.addEventListener('click', ()=>{
+      checkinEditing = false; // collapse back down to the one-line acknowledgement after answering
+      setCheckin(selectedDate, Number(btn.dataset.checkinValue), '');
+    });
+  });
+  document.querySelectorAll('[data-action="edit-checkin"]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{ checkinEditing = true; render(); });
   });
 
   // Profile
@@ -3254,8 +3480,6 @@ function attachEvents(){
   document.querySelectorAll('[data-view-profile]').forEach(btn=> btn.addEventListener('click', ()=> viewProfile(btn.dataset.viewProfile)));
   const closeViewedProfileBtn = document.getElementById('closeViewedProfileBtn');
   if(closeViewedProfileBtn) closeViewedProfileBtn.addEventListener('click', closeViewedProfile);
-  const profileOverlayBackdrop = document.getElementById('profileOverlayBackdrop');
-  if(profileOverlayBackdrop) profileOverlayBackdrop.addEventListener('click', (e)=>{ if(e.target === profileOverlayBackdrop) closeViewedProfile(); });
   const installBtn = document.getElementById('installBtn');
   if(installBtn){
     installBtn.addEventListener('click', async ()=>{
