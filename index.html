@@ -150,10 +150,36 @@
   .role-badge.admin{background:var(--skip-soft); color:var(--skip);}
   .role-badge.member{background:#efe8db; color:var(--ink-soft);}
   .book-picker{
-    display:grid; grid-template-columns:repeat(auto-fill, minmax(160px,1fr)); gap:2px 12px;
-    max-height:220px; overflow-y:auto; border:1px solid var(--line); border-radius:8px; padding:10px 12px;
+    display:grid; grid-template-columns:repeat(auto-fill, minmax(150px,1fr)); gap:2px 12px;
+    max-height:160px; overflow-y:auto; border:1px solid var(--line); border-radius:8px; padding:8px 12px;
   }
   .book-picker label{display:flex; align-items:center; gap:6px; font-size:0.82rem; padding:3px 0;}
+  .reading-preset-row{display:flex; gap:8px; margin:6px 0 10px; flex-wrap:wrap;}
+  .reading-summary-line{font-size:0.82rem; color:var(--ink-soft); margin-top:2px;}
+  .book-chip-list{display:flex; flex-wrap:wrap; gap:6px; margin-top:2px;}
+  .book-chip{
+    display:inline-flex; align-items:center; gap:5px; background:var(--accent-soft); color:var(--accent);
+    border-radius:999px; padding:4px 6px 4px 12px; font-size:0.78rem; font-weight:600;
+  }
+  .book-chip .chip-remove{
+    background:none; border:none; color:inherit; font-size:0.95rem; line-height:1; cursor:pointer;
+    padding:2px 6px; border-radius:50%; opacity:0.7;
+  }
+  .book-chip .chip-remove:hover{opacity:1; background:rgba(0,0,0,0.06);}
+  .book-picker-details{margin-top:10px; border:1px solid var(--line); border-radius:10px; padding:2px 14px;}
+  .book-picker-details summary{
+    cursor:pointer; font-size:0.85rem; font-weight:600; padding:10px 0; color:var(--accent);
+    list-style:none;
+  }
+  .book-picker-details summary::-webkit-details-marker{display:none;}
+  .book-picker-details summary::before{content:'▸ '; font-size:0.75rem;}
+  .book-picker-details[open] summary::before{content:'▾ '; }
+  .book-picker-body{padding-bottom:14px;}
+  .book-picker-body input{width:100%; padding:8px 10px; border:1px solid var(--line); border-radius:8px; font-size:0.85rem; font-family:inherit; margin-bottom:10px;}
+  .book-picker-section{margin-bottom:12px;}
+  .book-picker-section:last-child{margin-bottom:0;}
+  .book-picker-section-label{font-size:0.75rem; font-weight:700; text-transform:uppercase; letter-spacing:0.03em; color:var(--ink-soft); margin-bottom:5px;}
+  .empty-note-inline{font-size:0.8rem; color:var(--ink-soft); padding:8px 0;}
   .group-row{display:flex; justify-content:space-between; align-items:center; gap:10px; padding:11px 0; border-bottom:1px solid var(--line);}
   .group-row:last-child{border-bottom:none;}
   .group-row .name{font-weight:700;}
@@ -1499,11 +1525,18 @@ let groupCreateOpen = false;
 let groupCreateError = '';
 let groupCreateBusy = false;
 let groupDraftBooks = [];
+let bookPickerOpen = false; // whether the full OT/NT checkbox picker is expanded
+let bookFilterQuery = ''; // filters the checkbox picker by book name
 function toggleGroupDraftBook(bookName){
   const i = groupDraftBooks.indexOf(bookName);
   if(i === -1) groupDraftBooks.push(bookName); else groupDraftBooks.splice(i,1);
 }
 function setGroupDraftBooks(names){ groupDraftBooks = names.slice(); }
+function sameBookSet(a, b){
+  if(a.length !== b.length) return false;
+  const setB = new Set(b);
+  return a.every(x=>setB.has(x));
+}
 function createGroup(fields){
   if(!fbDb || !currentUser) return Promise.reject({message:'You need an account to create a group.'});
   const name = (fields.name||'').trim();
@@ -2433,6 +2466,35 @@ function renderGroupsDirectory(){
 function renderGroupCreateForm(){
   const bookCheckbox = name => `
     <label><input type="checkbox" data-group-draft-book="${escapeHtml(name)}" ${groupDraftBooks.includes(name)?'checked':''}> ${name}</label>`;
+
+  const fq = bookFilterQuery.trim().toLowerCase();
+  const matches = name => !fq || name.toLowerCase().includes(fq);
+  const otSelected = OT_BOOK_NAMES.filter(n=>groupDraftBooks.includes(n)).length;
+  const ntSelected = NT_BOOK_NAMES.filter(n=>groupDraftBooks.includes(n)).length;
+
+  // A clean, human summary instead of a raw checkbox wall — recognizes the common presets by
+  // name, and only falls back to a chip list (or a plain count, once it'd be too many chips to
+  // stay tidy) for a genuinely custom selection.
+  const total = outlineTotalChapters(groupDraftBooks.map(b=>({book:b,chapters:chaptersFor(b)})));
+  let summaryHtml;
+  if(!groupDraftBooks.length){
+    summaryHtml = `<div class="empty-note">No books chosen yet — pick a preset above, or open the list below to choose specific books.</div>`;
+  } else if(sameBookSet(groupDraftBooks, BOOK_LIBRARY.map(b=>b.name))){
+    summaryHtml = `<div class="reading-summary-line"><strong>Whole Bible</strong> &middot; ${total} chapters total</div>`;
+  } else if(sameBookSet(groupDraftBooks, OT_BOOK_NAMES)){
+    summaryHtml = `<div class="reading-summary-line"><strong>Old Testament</strong> &middot; ${total} chapters total</div>`;
+  } else if(sameBookSet(groupDraftBooks, NT_BOOK_NAMES)){
+    summaryHtml = `<div class="reading-summary-line"><strong>New Testament</strong> &middot; ${total} chapters total</div>`;
+  } else if(groupDraftBooks.length <= 14){
+    summaryHtml = `
+      <div class="book-chip-list">
+        ${groupDraftBooks.map(name=>`<span class="book-chip">${escapeHtml(name)}<button type="button" class="chip-remove" data-remove-draft-book="${escapeHtml(name)}" aria-label="Remove ${escapeHtml(name)}">&times;</button></span>`).join('')}
+      </div>
+      <div class="reading-summary-line">${total} chapters total</div>`;
+  } else {
+    summaryHtml = `<div class="reading-summary-line"><strong>${groupDraftBooks.length} books selected</strong> &middot; ${total} chapters total</div>`;
+  }
+
   return `
     <div class="settings-box">
       <h3>Create a group</h3>
@@ -2464,16 +2526,27 @@ function renderGroupCreateForm(){
       </div>
       <div class="auth-field">
         <label>What will the group read?</label>
-        <div style="display:flex; gap:8px; margin:6px 0; flex-wrap:wrap;">
+        <div class="reading-preset-row">
           <button type="button" class="btn small" id="pickWholeBible">Whole Bible</button>
           <button type="button" class="btn small" id="pickOT">Old Testament</button>
           <button type="button" class="btn small" id="pickNT">New Testament</button>
-          <button type="button" class="btn small" id="pickNone">Clear</button>
+          ${groupDraftBooks.length ? `<button type="button" class="btn small" id="pickNone">Clear</button>` : ''}
         </div>
-        <div class="book-picker">
-          ${BOOK_LIBRARY.map(b=>bookCheckbox(b.name)).join('')}
-        </div>
-        <div style="font-size:0.78rem; color:var(--ink-soft); margin-top:6px;">${groupDraftBooks.length} book${groupDraftBooks.length===1?'':'s'} selected &middot; ${outlineTotalChapters(groupDraftBooks.map(b=>({book:b,chapters:chaptersFor(b)})))} chapters total</div>
+        ${summaryHtml}
+        <details class="book-picker-details" ${bookPickerOpen ? 'open' : ''}>
+          <summary>Choose specific books</summary>
+          <div class="book-picker-body">
+            <input type="text" id="bookFilterInput" placeholder="Filter books…" value="${escapeHtml(bookFilterQuery)}">
+            <div class="book-picker-section">
+              <div class="book-picker-section-label">Old Testament (${otSelected}/${OT_BOOK_NAMES.length})</div>
+              <div class="book-picker">${OT_BOOK_NAMES.filter(matches).map(bookCheckbox).join('') || `<div class="empty-note-inline">No matches.</div>`}</div>
+            </div>
+            <div class="book-picker-section">
+              <div class="book-picker-section-label">New Testament (${ntSelected}/${NT_BOOK_NAMES.length})</div>
+              <div class="book-picker">${NT_BOOK_NAMES.filter(matches).map(bookCheckbox).join('') || `<div class="empty-note-inline">No matches.</div>`}</div>
+            </div>
+          </div>
+        </details>
       </div>
       <div style="display:flex; gap:8px; margin-top:10px;">
         <button class="btn primary" id="submitGroupCreateBtn" ${groupCreateBusy?'disabled':''}>${groupCreateBusy?'Creating…':'Create group'}</button>
@@ -3192,7 +3265,7 @@ function attachEvents(){
   if(groupSearchInput) groupSearchInput.addEventListener('input', (e)=>{ groupSearchQuery = e.target.value; render(); });
 
   const openGroupCreateBtn = document.getElementById('openGroupCreateBtn');
-  if(openGroupCreateBtn) openGroupCreateBtn.addEventListener('click', ()=>{ groupCreateOpen = true; groupDraftBooks = []; groupCreateError=''; render(); });
+  if(openGroupCreateBtn) openGroupCreateBtn.addEventListener('click', ()=>{ groupCreateOpen = true; groupDraftBooks = []; groupCreateError=''; bookPickerOpen = false; bookFilterQuery = ''; render(); });
   const cancelGroupCreateBtn = document.getElementById('cancelGroupCreateBtn');
   if(cancelGroupCreateBtn) cancelGroupCreateBtn.addEventListener('click', ()=>{ groupCreateOpen = false; render(); });
   document.querySelectorAll('[data-group-dir-tab]').forEach(btn=> btn.addEventListener('click', ()=>{ groupDirTab = btn.dataset.groupDirTab; render(); }));
@@ -3215,6 +3288,13 @@ function attachEvents(){
   document.querySelectorAll('[data-group-draft-book]').forEach(cb=>{
     cb.addEventListener('change', ()=>{ toggleGroupDraftBook(cb.dataset.groupDraftBook); render(); });
   });
+  document.querySelectorAll('[data-remove-draft-book]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{ toggleGroupDraftBook(btn.dataset.removeDraftBook); render(); });
+  });
+  const bookFilterInput = document.getElementById('bookFilterInput');
+  if(bookFilterInput) bookFilterInput.addEventListener('input', (e)=>{ bookFilterQuery = e.target.value; render(); });
+  const bookPickerDetails = document.querySelector('.book-picker-details');
+  if(bookPickerDetails) bookPickerDetails.addEventListener('toggle', ()=>{ bookPickerOpen = bookPickerDetails.open; });
   const submitGroupCreateBtn = document.getElementById('submitGroupCreateBtn');
   if(submitGroupCreateBtn){
     submitGroupCreateBtn.addEventListener('click', ()=>{
