@@ -306,13 +306,14 @@
   .btn.small{padding:4px 10px; font-size:0.78rem;}
   .grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(min(300px,100%),1fr)); gap:14px;}
   .card{
-    /* Frosted-glass surface rather than a flat opaque card — same --card-glass material as the nav
-       bar/sidebar, extended onto regular content cards per the "more liquid glass, everywhere it
-       makes sense" pass. backdrop-filter needs something visible behind it to actually read as
-       glass, which every .card has (the page background and whatever scrolls underneath it). */
-    background:var(--card-glass); border:1px solid var(--line); border-radius:16px; padding:16px;
+    /* v31 perf decision: content cards are OPAQUE again. The v30 "glass everywhere" pass put
+       backdrop-filter:blur on every card, which made ANY style change on a card (hover tint,
+       shadow fade, re-render) re-sample the blur — the single biggest source of the reported
+       jitter, multiplied across a whole grid of cards. Glass now lives only where Apple actually
+       uses materials: chrome and overlays (nav bars, sheets, dialogs, notification panel,
+       command palette) — where it reads beautifully and there's only ever one of it on screen. */
+    background:var(--card); border:1px solid var(--line); border-radius:16px; padding:16px;
     box-shadow:var(--shadow); border-left:5px solid var(--cat-color, var(--accent));
-    backdrop-filter:blur(16px); -webkit-backdrop-filter:blur(16px);
   }
   /* ---- Unified, stationary hover bloom ----
      v29's lift still jittered at the card's edges: translating the card 3px moves it out from
@@ -324,10 +325,10 @@
      change, zero oscillation, fully compositor-side. */
   .card, .plan-card, .group-card, .settings-box, .dash-summary .stat, .journal-entry{
     position:relative;
-    /* transform stays in the transition list ONLY for the :active press-scale — no hover rule
-       touches transform anymore, so the moving-target oscillation can't come back. */
-    transition:border-color var(--dur-med) var(--ease-out), background-color .5s ease,
-               transform .3s var(--ease-spring);
+    /* No transform anywhere on cards anymore (hover OR press) — surfaces stay perfectly still;
+       only tint and the pre-rendered shadow layer respond. Press feedback lives on buttons,
+       where it belongs. */
+    transition:border-color var(--dur-med) var(--ease-out), background-color .5s ease;
   }
   .card::after, .plan-card::after, .group-card::after, .settings-box::after,
   .dash-summary .stat::after, .journal-entry::after{
@@ -387,7 +388,6 @@
      unlike :hover) is one of the simplest, cheapest things that makes tapping a button feel like
      pressing a physical control instead of clicking a link. */
   .btn:active{ transform:scale(0.96); }
-  .card:active, .group-card:active, .plan-card:active{ transform:scale(0.99); }
   table.logtable{width:100%; border-collapse:collapse; font-size:0.82rem;}
   table.logtable th, table.logtable td{
     border:1px solid var(--line); padding:6px 8px; text-align:left; white-space:nowrap;
@@ -437,9 +437,9 @@
   .empty-state-message{margin:0; font-size:0.88rem; max-width:340px; line-height:1.5;}
   input[type=file]{display:none;}
   .settings-box{
-    background:var(--card-glass); border:1px solid var(--line); border-radius:16px; padding:20px;
+    /* Opaque like .card since v31 — see the perf note on .card for why the blur came off. */
+    background:var(--card); border:1px solid var(--line); border-radius:16px; padding:20px;
     max-width:640px; box-shadow:var(--shadow); margin-bottom:20px;
-    backdrop-filter:blur(16px); -webkit-backdrop-filter:blur(16px);
   }
   .settings-box h3{margin-top:0;}
   .settings-box ol{padding-left:20px; font-size:0.88rem; color:var(--ink-soft);}
@@ -672,6 +672,27 @@
   .dialog-actions .btn{flex:1;}
   @media (prefers-reduced-motion: reduce){ .dialog-card, .dialog-backdrop{ animation:none; } }
 
+  /* ---- First-run welcome / ethos intro ---- */
+  .intro-overlay{
+    position:fixed; inset:0; z-index:90; background:var(--bg);
+    display:flex; align-items:center; justify-content:center; padding:24px;
+  }
+  .intro-card{
+    max-width:440px; width:100%; text-align:center; display:flex; flex-direction:column;
+    align-items:center; animation:viewFadeIn .4s var(--ease-out);
+  }
+  .intro-art{
+    width:84px; height:84px; border-radius:50%; background:var(--accent-soft); color:var(--accent);
+    display:flex; align-items:center; justify-content:center; margin-bottom:18px;
+  }
+  .intro-card h2{ margin:0 0 12px; font-size:1.4rem; }
+  .intro-body{ font-size:0.95rem; line-height:1.7; color:var(--ink-soft); margin:0 0 22px; text-align:center; }
+  .intro-dots{ display:flex; gap:7px; margin-bottom:22px; }
+  .intro-dot{ width:7px; height:7px; border-radius:50%; background:var(--line); transition:background-color .25s ease, transform .25s var(--ease-spring); }
+  .intro-dot.active{ background:var(--accent); transform:scale(1.25); }
+  .intro-nav{ display:flex; justify-content:space-between; width:100%; max-width:300px; gap:10px; }
+  .intro-nav .btn{ min-width:100px; }
+
   /* ---- Full-screen, one-question-per-step wizard (Create Group; also reused, in spirit, by the
      signup wizard below) — modeled on modern dating-app onboarding: one full-screen "card" per
      step, a slim progress bar, Back/Next, and a review page before anything is actually created. */
@@ -695,9 +716,14 @@
   .wizard-progress-fill{ height:100%; background:var(--accent); border-radius:999px; transition:width .25s cubic-bezier(.25,.8,.4,1); }
   .wizard-step-count{ font-size:0.78rem; color:var(--ink-soft); font-weight:700; flex-shrink:0; }
   .wizard-body{ flex:1; overflow-y:auto; -webkit-overflow-scrolling:touch; }
-  .wizard-step{ max-width:480px; margin:0 auto; animation:wizardStepIn .28s cubic-bezier(.25,.8,.4,1); }
+  /* The slide-in only runs when the step ACTUALLY changes (.wizard-step-animate, applied by the
+     renderers when their step key differs from the last render). It used to sit on .wizard-step
+     unconditionally — and since render() rebuilds the DOM on every keystroke/timer tick, the
+     animation replayed constantly, which was the reported "weird refresh glitch" in the wizard. */
+  .wizard-step{ max-width:480px; margin:0 auto; }
+  .wizard-step-animate{ animation:wizardStepIn .28s cubic-bezier(.25,.8,.4,1); }
   @keyframes wizardStepIn{ from{opacity:0; transform:translateX(24px);} to{opacity:1; transform:translateX(0);} }
-  @media (prefers-reduced-motion: reduce){ .wizard-step{ animation:none; } }
+  @media (prefers-reduced-motion: reduce){ .wizard-step-animate{ animation:none; } }
   .wizard-step-icon{
     width:56px; height:56px; border-radius:50%; background:var(--accent-soft); color:var(--accent);
     display:flex; align-items:center; justify-content:center; margin-bottom:16px;
@@ -789,6 +815,17 @@
   .session-reading{ font-size:0.88rem; margin-top:2px; }
   .session-note{ font-size:0.82rem; color:var(--ink-soft); font-style:italic; margin-top:4px; }
   .session-meta{ display:flex; align-items:center; gap:10px; margin-top:8px; font-size:0.78rem; color:var(--ink-soft); }
+  /* Consistency heatmap: 12 weeks x 7 days, column-per-week, GitHub-contributions style. */
+  .hm-grid{
+    display:grid; grid-template-rows:repeat(7, 12px); grid-auto-flow:column; grid-auto-columns:12px;
+    gap:3px; margin:10px 0 8px; justify-content:start;
+  }
+  .hm-cell{ width:12px; height:12px; border-radius:3px; display:inline-block; }
+  .hm-0{ background:var(--line); opacity:0.5; }
+  .hm-1{ background:var(--accent); opacity:0.35; }
+  .hm-2{ background:var(--accent); opacity:0.65; }
+  .hm-3{ background:var(--accent); }
+  .hm-legend{ display:flex; align-items:center; gap:5px; font-size:0.72rem; color:var(--ink-soft); }
   /* Collapsible dashboard sections — <summary> is the whole header row, chevron rotates open. */
   details.dash-collapse summary{ list-style:none; cursor:pointer; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
   details.dash-collapse summary::-webkit-details-marker{ display:none; }
@@ -2333,6 +2370,7 @@ function authWizardSteps(){
 function resetAuthWizard(){
   authWizardStep = 0; authWizardError = ''; authWizardEmail = ''; authWizardPassword = '';
   authWizardUsingCustomBuilder = false; signupDisplayName = ''; signupBio = '';
+  lastRenderedAuthWizardStep = null; // so the first step animates in again next time
 }
 const AUTH_WIZARD_STEP_META = {
   credentials: { icon:'person',   title:'Create your account', sub:'Just an email and password to get started.' },
@@ -2341,10 +2379,16 @@ const AUTH_WIZARD_STEP_META = {
   bio:         { icon:'person',   title:'Tell us a little about you', sub:'Optional — shows up on your profile. You can change this anytime.' },
   review:      { icon:'check',    title:'Review & create account', sub:"Here's everything before we set up your account." },
 };
+// Both wizards track the last step they rendered so the slide-in animation only plays on real
+// step changes, not on every incidental re-render (see the .wizard-step-animate CSS note).
+let lastRenderedAuthWizardStep = null;
+let lastRenderedGroupWizardStep = null;
 function renderSignupWizard(){
   const steps = authWizardSteps();
   const stepIndex = Math.min(authWizardStep, steps.length-1);
   const stepId = steps[stepIndex];
+  const stepChanged = stepId !== lastRenderedAuthWizardStep;
+  lastRenderedAuthWizardStep = stepId;
   const meta = AUTH_WIZARD_STEP_META[stepId];
   // The reused plan-preset/plan-builder markup (renderPlanChoose/renderCustomBuilder) carries its
   // own heading (.auth-brand) — showing the wizard's own generic icon/title/sub on top of that
@@ -2360,7 +2404,7 @@ function renderSignupWizard(){
           <span class="wizard-step-count">${stepIndex+1}/${steps.length}</span>
         </div>
         <div class="wizard-body" id="authWizardBody">
-          <div class="wizard-step">
+          <div class="wizard-step ${stepChanged?'wizard-step-animate':''}">
             ${skipGenericHeader ? '' : `<div class="wizard-step-icon">${icon(meta.icon,26)}</div><h2>${meta.title}</h2><p class="wizard-step-sub">${meta.sub}</p>`}
             ${renderAuthWizardStepBody(stepId)}
           </div>
@@ -2558,6 +2602,7 @@ function doLogOut(){
     if(fbUnsub){ fbUnsub(); fbUnsub = null; }
     if(friendsUnsub){ friendsUnsub(); friendsUnsub = null; }
     if(myGroupsUnsub){ myGroupsUnsub(); myGroupsUnsub = null; }
+    if(mentionsUnsub){ mentionsUnsub(); mentionsUnsub = null; myMentions = []; }
     closeGroup();
     teardownAdminJoinRequestSubs();
     friendLinksData = []; friendActivityCache = {};
@@ -2632,6 +2677,7 @@ function initFirebase(){
         ensureUserDirectory();
         subscribeFriends();
         subscribeMyGroups();
+        subscribeMentions();
         if(pendingGroupInvite){
           const inv = pendingGroupInvite; pendingGroupInvite = null;
           activeTab = 'community'; communitySubTab = 'groups';
@@ -2892,7 +2938,9 @@ function sendFriendRequestToUid(targetUid){
   });
 }
 function acceptFriendRequest(linkId){
-  fbDb.collection('friendLinks').doc(linkId).set({ status:'accepted' }, { merge:true }).catch(()=>{});
+  // acceptedAt (new in v31) is what lets the REQUESTER's bell show "accepted your request" —
+  // and only for recently-accepted links, not every old friendship forever.
+  fbDb.collection('friendLinks').doc(linkId).set({ status:'accepted', acceptedAt: Date.now() }, { merge:true }).catch(()=>{});
 }
 function declineFriendRequest(linkId){
   fbDb.collection('friendLinks').doc(linkId).delete().catch(()=>{});
@@ -3251,6 +3299,31 @@ function subscribeMyGroups(){
     }
   });
 }
+// ---- Notification bell: @mentions across all your groups ----
+// One collection-group listener over every messages subcollection, filtered to messages whose
+// mentionedUids contains me — this is what makes "@you" reach the bell even when that group
+// isn't open. Requires the v20 recursive-wildcard rule on /{path=**}/messages (same class of
+// rule the My Groups fix needed) and possibly a one-click collection-group index the first time
+// it runs. No orderBy on purpose: keeps the index requirement minimal; sorted client-side.
+let myMentions = [];
+let mentionsUnsub = null;
+const MENTION_WINDOW_MS = 7 * 24 * 60 * 60 * 1000; // only surface mentions from the last week
+function subscribeMentions(){
+  if(!fbDb || !currentUser) return;
+  if(mentionsUnsub){ mentionsUnsub(); mentionsUnsub = null; }
+  mentionsUnsub = fbDb.collectionGroup('messages')
+    .where('mentionedUids','array-contains', currentUser.uid)
+    .onSnapshot(snap=>{
+      const cutoff = Date.now() - MENTION_WINDOW_MS;
+      myMentions = snap.docs
+        .map(d=>({ id:d.id, groupId:d.ref.parent.parent.id, ...d.data() }))
+        .filter(m=> m.authorUid !== (currentUser && currentUser.uid) && (m.createdAt||0) > cutoff)
+        .sort((a,b)=> (b.createdAt||0)-(a.createdAt||0))
+        .slice(0, 20);
+      render();
+    }, ()=>{ /* rules not deployed yet or index missing — bell simply shows no mentions */ });
+}
+
 // ---- Notification bell: aggregated group join requests ----
 // Only groups where I'm owner/admin ever have join requests worth surfacing here. Rather than
 // tracking "which groups am I admin of" separately, this just reacts to myGroupRoles (populated
@@ -3295,7 +3368,10 @@ try{ dismissedNotifIds = new Set(JSON.parse(localStorage.getItem('cultivateDismi
 function persistDismissedNotifIds(){
   try{ localStorage.setItem('cultivateDismissedNotifIds', JSON.stringify(Array.from(dismissedNotifIds))); }catch(e){}
 }
-function isInformationalNotifId(id){ return id.indexOf('checkin:')===0 || id.indexOf('onthisday:')===0; }
+function isInformationalNotifId(id){
+  return id.indexOf('checkin:')===0 || id.indexOf('onthisday:')===0 ||
+         id.indexOf('mention:')===0 || id.indexOf('friendAccepted:')===0 || id.indexOf('memorize:')===0;
+}
 function dismissInformationalNotifs(items){
   let changed = false;
   items.forEach(i=>{ if(isInformationalNotifId(i.id) && !dismissedNotifIds.has(i.id)){ dismissedNotifIds.add(i.id); changed = true; } });
@@ -3319,6 +3395,34 @@ function notifItems(){
       action:()=>{ notifPanelOpen=false; communitySubTab='friends'; switchToTab('community'); }
     });
   });
+  // Requests YOU sent that got accepted recently (acceptedAt stamped since v31) — informational,
+  // dismissible, quietly ages out after a week.
+  friendLinksData.filter(l=> l.status==='accepted' && l.requestedBy===myUid && l.acceptedAt && (Date.now()-l.acceptedAt) < MENTION_WINDOW_MS).forEach(l=>{
+    items.push({
+      id:'friendAccepted:'+l.id, iconName:'users', text:'Friend request accepted',
+      sub:'You’re now connected — tap to see your friends', time:l.acceptedAt,
+      action:()=>{ notifPanelOpen=false; communitySubTab='friends'; switchToTab('community'); }
+    });
+  });
+  // @mentions in group discussions (from the collection-group listener above).
+  myMentions.forEach(m=>{
+    const g = groupsDirectory.find(x=>x.id===m.groupId);
+    items.push({
+      id:'mention:'+m.id, iconName:'users', text:(m.authorName||'Someone')+' mentioned you',
+      sub:(g ? g.name : 'A group discussion') + ' — tap to open', time:m.createdAt||0,
+      action:()=>{ notifPanelOpen=false; communitySubTab='groups'; switchToTab('community'); openGroup(m.groupId); }
+    });
+  });
+  // Memorization: verses still being learned, none reviewed yet today — one quiet nudge per day.
+  const learningVerses = (state.memorization||[]).filter(v=>v.status!=='mastered');
+  if(learningVerses.length && !learningVerses.some(v=>v.lastReviewed === todayStr())){
+    items.push({
+      id:'memorize:'+todayStr(), iconName:'bookmark',
+      text: learningVerses.length===1 ? 'A verse is waiting for review' : learningVerses.length+' verses are waiting for review',
+      sub:'Tap to review in Memorize', time: Date.now(),
+      action:()=>{ notifPanelOpen=false; switchToTab('memorize'); }
+    });
+  }
   Object.keys(adminJoinRequests).forEach(gid=>{
     (adminJoinRequests[gid]||[]).forEach(r=>{
       const g = groupsDirectory.find(x=>x.id===gid);
@@ -3960,12 +4064,13 @@ function render(){
     // review -> account creation); log in and password reset stay the plain single-screen form —
     // there's nothing to break into steps for either of those.
     if(authView === 'signup'){
-      app.innerHTML = `<div class="app-main">${renderSignupWizard()}</div>`;
+      app.innerHTML = `<div class="app-main">${renderSignupWizard()}</div>` + renderIntroOverlay();
       attachSignupWizardEvents();
     } else {
-      app.innerHTML = `<div class="app-main">${renderAuthGate()}</div>`;
+      app.innerHTML = `<div class="app-main">${renderAuthGate()}</div>` + renderIntroOverlay();
       attachAuthGateEvents();
     }
+    wireIntroEvents();
     restoreFocus();
     return;
   }
@@ -4018,8 +4123,10 @@ function render(){
       <button type="button" class="fab-add-post" id="openPostComposerBtn" aria-label="New update">${icon('plus',24)}</button>` : ''}
     ${(!ownProfileOpen && activeTab==='today') ? `
       <button type="button" class="fab-add-post" id="openExtraSheetBtn" aria-label="Log extra reading" title="Log reading outside your plan">${icon('plus',24)}</button>` : ''}
+    ${renderIntroOverlay()}
   `;
   attachEvents();
+  wireIntroEvents();
   restoreFocus();
   animateDashboardMetrics();
 }
@@ -4307,6 +4414,82 @@ function syncPillHtml(){
   return `<span class="sync-pill ${cls}">&#9679; ${label}</span>`;
 }
 
+/* ---------------- Welcome / ethos + app introduction (first run only) ----------------
+   A short Next/Skip carousel shown exactly once per device: the ethos statement first (why the
+   app exists), then three quick feature slides. Rendered as an overlay ABOVE whatever screen is
+   underneath (auth gate or the app itself), so it works for brand-new visitors and for existing
+   users seeing it after this update. Dismissing it (Skip, or finishing) writes the flag and it
+   never appears again. */
+const INTRO_SEEN_KEY = 'cultivateIntroSeen';
+let introOpen = false;
+try{ introOpen = !localStorage.getItem(INTRO_SEEN_KEY); }catch(e){}
+let introStep = 0;
+const INTRO_SLIDES = [
+  {
+    icon: 'sunrise',
+    title: 'Welcome to Cultivate',
+    body: `Cultivate is a quiet place to grow.<br><br>
+      Not a streak to keep or a score to chase &mdash; a garden to tend. Like a tree planted by
+      streams of water <em>(Psalm 1)</em>, growth here is slow, rooted, and in season &mdash;
+      morning, noon, and night <em>(Psalm 55:17)</em>.<br><br>
+      <strong>Read. Reflect. Return.</strong> That's the whole practice.`
+  },
+  {
+    icon: 'home',
+    title: 'Read, your way',
+    body: `Choose a reading plan (or build your own), and Today hands you exactly what's next &mdash;
+      one tap opens the passage in your own Bible app. Fall behind? Nothing scolds you. The next
+      chapter simply waits.`
+  },
+  {
+    icon: 'notebook',
+    title: 'Reflect as you go',
+    body: `A journal for what stands out, a daily verse with voices from church history, a gentle
+      spiritual check-in, and verses to commit to memory &mdash; all private by default.`
+  },
+  {
+    icon: 'users',
+    title: 'Grow together',
+    body: `Add friends, share updates, and study in groups &mdash; whole books of the Bible, or a
+      guided study through any book, session by session, with everyone's progress in one place.`
+  }
+];
+function closeIntro(){
+  introOpen = false;
+  try{ localStorage.setItem(INTRO_SEEN_KEY, '1'); }catch(e){}
+  render();
+}
+function renderIntroOverlay(){
+  if(!introOpen) return '';
+  const s = INTRO_SLIDES[Math.min(introStep, INTRO_SLIDES.length-1)];
+  const last = introStep >= INTRO_SLIDES.length-1;
+  return `
+    <div class="intro-overlay">
+      <div class="intro-card">
+        <div class="intro-art">${icon(s.icon, 40)}</div>
+        <h2>${s.title}</h2>
+        <p class="intro-body">${s.body}</p>
+        <div class="intro-dots">
+          ${INTRO_SLIDES.map((_,i)=>`<span class="intro-dot ${i===introStep?'active':''}"></span>`).join('')}
+        </div>
+        <div class="intro-nav">
+          ${last ? '<span></span>' : `<button type="button" class="btn" id="introSkipBtn">Skip</button>`}
+          <button type="button" class="btn primary" id="introNextBtn">${last ? 'Begin' : 'Next'}</button>
+        </div>
+      </div>
+    </div>`;
+}
+function wireIntroEvents(){
+  const introNextBtn = document.getElementById('introNextBtn');
+  if(introNextBtn) introNextBtn.addEventListener('click', ()=>{
+    if(introStep >= INTRO_SLIDES.length-1){ closeIntro(); return; }
+    introStep++;
+    render();
+  });
+  const introSkipBtn = document.getElementById('introSkipBtn');
+  if(introSkipBtn) introSkipBtn.addEventListener('click', closeIntro);
+}
+
 // The slim always-there chrome row: the notification bell and your profile avatar, top-right —
 // the standard app pattern (Gmail, App Store, etc.). The theme toggle used to float here too, but
 // with Auto mode doing the daily work, manually pinning a period is a rare, considered action —
@@ -4475,7 +4658,7 @@ function renderConsiderHim(){
       <h3>${icon('bookmark',16)} Consider Him</h3>
       <div class="consider-him-ref">${e.ref}</div>
       <p class="consider-him-verse">&ldquo;${e.text}&rdquo;</p>
-      <details class="consider-him-commentary">
+      <details class="consider-him-commentary" ${keepOpenAttrs('considerHimCommentary')}>
         <summary>Commentary &mdash; ${escapeHtml(e.author)}</summary>
         <p class="consider-him-quote">&ldquo;${e.commentary}&rdquo;</p>
         <p class="consider-him-source">&mdash; ${escapeHtml(e.author)}, <em>${escapeHtml(e.work)}</em></p>
@@ -4581,27 +4764,25 @@ function renderMemorizeReminder(){
     </button>`;
 }
 
-// The extra-reading form as a bottom sheet, opened by Today's floating + button.
+// The extra-reading form, opened by Today's floating + button — a centered modal (same placement
+// language as the app's dialogs), per feedback that the bottom-sheet version felt buried.
 let extraReadingSheetOpen = false;
 function renderExtraReadingSheet(){
+  if(!extraReadingSheetOpen) return '';
   const bookOptions = BOOK_LIBRARY.map(b=>`<option value="${b.name}">${b.name}</option>`).join('');
   return `
-    <div id="extraSheetBackdrop" class="sheet-backdrop ${extraReadingSheetOpen?'open':''}"></div>
-    <div class="sheet-panel ${extraReadingSheetOpen?'open':''}">
-      <div class="sheet-handle"></div>
-      ${extraReadingSheetOpen ? `
-        <div class="sheet-body">
-          <div class="sheet-header">
-            <h3>${icon('bookmark',16)} Reading outside your plan</h3>
-            <button type="button" class="sheet-close-btn" id="closeExtraSheetBtn" aria-label="Close">${icon('close',18)}</button>
-          </div>
-          <p style="font-size:0.82rem; color:var(--ink-soft); margin-top:-6px;">Read something that wasn't on today's cards? Log it here${selectedDate!==todayStr() ? ` for ${fmtDate(selectedDate)}` : ''}.</p>
-          <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;">
-            <select id="extraBook" style="flex:1; min-width:150px; padding:9px 10px; border:1px solid var(--line); border-radius:8px; font-size:0.9rem; font-family:inherit;">${bookOptions}</select>
-            <input type="number" id="extraChapter" placeholder="Chapter" min="1" style="width:100px; padding:9px 10px; border:1px solid var(--line); border-radius:8px; font-size:0.9rem; font-family:inherit;">
-          </div>
-          <button class="btn primary" id="addExtraBtn" style="width:100%;">Log it</button>
-        </div>` : ''}
+    <div id="extraSheetBackdrop" class="dialog-backdrop"></div>
+    <div class="dialog-card" role="dialog" aria-modal="true" style="width:min(400px, calc(100vw - 48px)); text-align:left;">
+      <div class="sheet-header" style="margin-bottom:10px;">
+        <h3 style="margin:0;">${icon('bookmark',16)} Reading outside your plan</h3>
+        <button type="button" class="sheet-close-btn" id="closeExtraSheetBtn" aria-label="Close">${icon('close',18)}</button>
+      </div>
+      <p style="font-size:0.82rem; color:var(--ink-soft); margin:0 0 12px;">Read something that wasn't on today's cards? Log it here${selectedDate!==todayStr() ? ` for ${fmtDate(selectedDate)}` : ''}.</p>
+      <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
+        <select id="extraBook" style="flex:1; min-width:150px; padding:9px 10px; border:1px solid var(--line); border-radius:8px; font-size:0.9rem; font-family:inherit;">${bookOptions}</select>
+        <input type="number" id="extraChapter" placeholder="Chapter" min="1" style="width:100px; padding:9px 10px; border:1px solid var(--line); border-radius:8px; font-size:0.9rem; font-family:inherit;">
+      </div>
+      <button class="btn primary" id="addExtraBtn" style="width:100%;">Log it</button>
     </div>`;
 }
 
@@ -4657,7 +4838,7 @@ function renderLog(){
       return `<tr><td>${fmtDate(date)}</td>${cells}</tr>`;
     }).join('');
     return `
-      <details class="month-group" ${i===0?'open':''}>
+      <details class="month-group" ${keepOpenAttrs('logMonth:'+ym, i===0)}>
         <summary>${monthName(ym)} <span style="color:var(--ink-soft); font-weight:500;">${groups[ym].length} day(s) logged</span></summary>
         <div class="log-scroll">
           <table class="logtable">
@@ -4756,7 +4937,7 @@ function renderJournal(){
         ${e.content ? `<div class="journal-content">${e.content.replace(/\n/g,'<br>')}</div>` : ''}
       </div>`).join('');
     return `
-      <details class="month-group" ${i===0?'open':''}>
+      <details class="month-group" ${keepOpenAttrs('journalMonth:'+ym, i===0)}>
         <summary>${monthName(ym)} <span style="color:var(--ink-soft); font-weight:500;">${groups[ym].length} entr${groups[ym].length===1?'y':'ies'}</span></summary>
         <div style="padding:0 16px 12px;">${items}</div>
       </details>`;
@@ -5052,7 +5233,7 @@ function renderFriends(){
   // happening can be checked right here instead of needing to open browser dev tools. Shows exactly
   // what this account's live connection to Firestore currently sees.
   const troubleshootingHtml = `
-    <details class="settings-box" style="font-size:0.82rem;">
+    <details class="settings-box" style="font-size:0.82rem;" ${keepOpenAttrs('friendsTroubleshooting')}>
       <summary style="cursor:pointer; font-weight:600;">Troubleshooting</summary>
       <div style="margin-top:10px; color:var(--ink-soft); line-height:1.6;">
         <div>Signed in as: <strong>${currentUser.email}</strong></div>
@@ -5096,10 +5277,12 @@ const GROUP_WIZARD_STEP_META = {
 };
 
 function renderGroupWizard(){
-  if(!groupCreateOpen) return '';
+  if(!groupCreateOpen){ lastRenderedGroupWizardStep = null; return ''; }
   const steps = groupWizardSteps();
   const stepIndex = Math.min(groupWizardStep, steps.length-1);
   const stepId = steps[stepIndex];
+  const stepChanged = stepId !== lastRenderedGroupWizardStep;
+  lastRenderedGroupWizardStep = stepId;
   const meta = GROUP_WIZARD_STEP_META[stepId];
   return `
     <div class="wizard-overlay open" id="groupWizardOverlay">
@@ -5110,7 +5293,7 @@ function renderGroupWizard(){
           <span class="wizard-step-count">${stepIndex+1}/${steps.length}</span>
         </div>
         <div class="wizard-body" id="groupWizardBody">
-          <div class="wizard-step">
+          <div class="wizard-step ${stepChanged?'wizard-step-animate':''}">
             <div class="wizard-step-icon">${icon(meta.icon,26)}</div>
             <h2>${meta.title}</h2>
             <p class="wizard-step-sub">${meta.sub}</p>
@@ -5215,7 +5398,7 @@ function renderGroupWizardSessionsBody(){
         ${groupDraftSessions.length > 1 ? `<button type="button" class="msg-action-btn" data-remove-session="${i}" aria-label="Remove session">${icon('trash',14)}</button>` : ''}
       </div>
       <input type="text" data-session-field="reading" data-session-index="${i}" placeholder='Reading — e.g. "Philippians 1–2" or "Sit, Walk, Stand ch. 1"' value="${escapeHtml(s.reading||'')}">
-      ${passage ? `<div class="session-passage-hint">${icon('check',12)} Links to ${escapeHtml(passage.book)} ${passage.chapter} in your Bible app</div>` : ''}
+      ${passage ? `<div class="session-passage-hint">&#10003; Links to ${escapeHtml(passage.book)} ${passage.chapter} in your Bible app</div>` : ''}
       <input type="text" data-session-field="note" data-session-index="${i}" placeholder="Focus or discussion question (optional)" value="${escapeHtml(s.note||'')}">
     </div>`;
   }).join('');
@@ -5367,7 +5550,7 @@ function renderGroupDetail(){
           <div style="font-size:0.8rem; color:var(--ink-soft);">${g.memberCount||1} member${g.memberCount===1?'':'s'} &middot; ${g.planMode==='paced' ? 'Paced schedule' : 'Free pace'}</div>
         </div>
       </div>
-      <details>
+      <details ${keepOpenAttrs('groupInviteLink')}>
         <summary style="cursor:pointer; font-size:0.85rem; font-weight:600;">Invite link</summary>
         <div class="invite-link-row">
           <input type="text" readonly value="${inviteUrl}" onclick="this.select()">
@@ -5564,6 +5747,56 @@ function renderMonthlySummaries(){
   return `<h3 style="margin-top:6px;">Month by month</h3><div class="dash-summary">${cards}</div>`;
 }
 
+// ---- Reading streaks + consistency heatmap (v31 "beyond basic" dashboard) ----
+// A "reading day" = any completed plan chapter OR any outside-plan chapter logged for that date.
+// The current streak forgives an unread TODAY (you haven't fallen behind until the day is over),
+// but breaks on any fully-missed day before that.
+function readingDaySet(){
+  const days = new Set(state.log.filter(e=>e.status==='complete').map(e=>e.date));
+  state.extraLog.forEach(e=> days.add(e.date));
+  return days;
+}
+function isoShift(base, deltaDays){
+  const d = new Date(base.getFullYear(), base.getMonth(), base.getDate() + deltaDays);
+  return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+}
+function readingStreaks(){
+  const days = readingDaySet();
+  const today = new Date();
+  let current = 0;
+  let offset = days.has(isoShift(today,0)) ? 0 : -1; // today not read yet ≠ broken streak
+  while(days.has(isoShift(today, offset - current))) current++;
+  // Longest run anywhere in history: walk the sorted unique days, counting consecutive dates.
+  const sorted = Array.from(days).sort();
+  let longest = 0, run = 0, prevKey = null;
+  sorted.forEach(day=>{
+    const [y,m,dd] = day.split('-').map(Number);
+    const key = Date.UTC(y, m-1, dd) / 86400000;
+    run = (prevKey !== null && key - prevKey === 1) ? run + 1 : 1;
+    longest = Math.max(longest, run);
+    prevKey = key;
+  });
+  return { current, longest };
+}
+function renderActivityHeatmap(){
+  const counts = {};
+  state.log.filter(e=>e.status==='complete').forEach(e=>{ counts[e.date]=(counts[e.date]||0)+1; });
+  state.extraLog.forEach(e=>{ counts[e.date]=(counts[e.date]||0)+1; });
+  const today = new Date();
+  const cells = [];
+  for(let i=83; i>=0; i--){
+    const iso = isoShift(today, -i);
+    const n = counts[iso]||0;
+    const lvl = n===0 ? 0 : n<=1 ? 1 : n<=3 ? 2 : 3;
+    cells.push(`<span class="hm-cell hm-${lvl}" title="${fmtDate(iso)}: ${n} chapter${n===1?'':'s'}"></span>`);
+  }
+  return `
+    <div class="settings-box" style="max-width:none;">
+      <h3>${icon('chart',16)} Consistency &mdash; last 12 weeks</h3>
+      <div class="hm-grid">${cells.join('')}</div>
+      <div class="hm-legend"><span>Less</span><span class="hm-cell hm-0"></span><span class="hm-cell hm-1"></span><span class="hm-cell hm-2"></span><span class="hm-cell hm-3"></span><span>More</span></div>
+    </div>`;
+}
 function renderDashboard(){
   const uniqueChapters = new Set(state.log.filter(e=>e.status==='complete').map(e=>e.book+'|'+e.chapter));
   const totalPassesAcrossAll = ACTIVE_CATEGORIES.reduce((s,c)=>s+(state.cycles[c.id]||0),0);
@@ -5574,11 +5807,14 @@ function renderDashboard(){
   // Guided-study sessions you've checked off across all your groups (mirrored into state by
   // toggleSessionDone, so this needs no live group listeners to count).
   const groupSessionsTotal = Object.values(state.groupSessionsDone||{}).reduce((s,n)=>s+(Number(n)||0),0);
+  const streaks = readingStreaks();
   // data-count-key/data-count-to feed animateDashboardMetrics() (see JS above) — it compares the
   // target against whatever value it last saw for that key and, if it actually changed, plays a
   // quick count-up instead of the number just silently being different on the next render.
   const summary = `
     <div class="dash-summary">
+      <div class="stat"><div class="num"><span data-count-key="currentStreak" data-count-to="${streaks.current}">${streaks.current}</span> day${streaks.current===1?'':'s'}</div><div class="label">Current reading streak</div></div>
+      <div class="stat"><div class="num"><span data-count-key="longestStreak" data-count-to="${streaks.longest}">${streaks.longest}</span> day${streaks.longest===1?'':'s'}</div><div class="label">Longest streak ever</div></div>
       <div class="stat"><div class="num"><span data-count-key="uniqueChapters" data-count-to="${uniqueChapters.size}">${uniqueChapters.size}</span> / ${BIBLE_TOTAL_CHAPTERS}</div><div class="label">Unique chapters read at least once</div></div>
       <div class="stat"><div class="num"><span data-count-key="coveragePct" data-count-to="${coveragePct}">${coveragePct}</span>%</div><div class="label">Whole-Bible coverage</div></div>
       <div class="stat"><div class="num" data-count-key="totalCycles" data-count-to="${totalPassesAcrossAll}">${totalPassesAcrossAll}</div><div class="label">Total category cycles completed</div></div>
@@ -5612,11 +5848,23 @@ function renderDashboard(){
       </details>`;
   }).join('');
 
-  return yearInReview + summary + renderCheckinHistoryCard() + monthlySummaries + blocks;
+  return yearInReview + summary + renderActivityHeatmap() + renderCheckinHistoryCard() + monthlySummaries + blocks;
 }
 // Which dashboard category sections are expanded — session-scoped on purpose: every visit starts
 // clean and collapsed (that's the anti-scroll design), it only needs to survive re-renders.
 let dashOpenSections = new Set();
+
+// ---- Generic "stay open across re-renders" for <details> ----
+// render() rebuilds the whole DOM constantly (keystrokes, timers, background syncs), which
+// silently reset every native <details> back to its default state — this is exactly the reported
+// "Consider Him commentary collapses on its own" and "invite link auto-collapses" bugs. Any
+// details carrying data-keep-open="key" now records toggles here and re-renders with the state
+// the user last chose (falling back to its declared default the first time).
+let detailsOpenState = new Map();
+function keepOpenAttrs(key, defaultOpen){
+  const open = detailsOpenState.has(key) ? detailsOpenState.get(key) : !!defaultOpen;
+  return `data-keep-open="${key}" ${open?'open':''}`;
+}
 
 // The check-in itself only ever showed a single line for whichever date you had open ("You logged
 // today's walk as…") — once a day passed, that answer had nowhere to actually surface again, which
@@ -6103,6 +6351,10 @@ function attachEvents(){
       else dashOpenSections.delete(d.dataset.dashSection);
     });
   });
+  // Same idea, generalized — any details carrying data-keep-open survives re-renders.
+  document.querySelectorAll('details[data-keep-open]').forEach(d=>{
+    d.addEventListener('toggle', ()=> detailsOpenState.set(d.dataset.keepOpen, d.open));
+  });
   document.querySelectorAll('[data-delete-extra]').forEach(btn=> btn.addEventListener('click', ()=>{
     const row = btn.closest('.extra-log-row');
     animateRemoval(row, ()=> deleteExtraReading(btn.dataset.deleteExtra));
@@ -6430,17 +6682,30 @@ function attachEvents(){
       saveGroupWizardDraft(); render();
     });
   }
-  // Session-builder inputs: update draft state on every keystroke WITHOUT re-rendering (the
-  // focusRestore mechanism makes re-render-per-keystroke survivable, but not re-rendering at all
-  // is smoother) — except the reading field, which re-renders so the "links to your Bible app"
-  // hint can appear live as the passage becomes recognizable.
+  // Session-builder inputs: update draft state on every keystroke WITHOUT any re-render — the
+  // v30 version re-rendered the whole app per keystroke in the reading field (to refresh the
+  // "links to your Bible app" hint), which replayed animations and read as the reported wizard
+  // "refresh glitch." The hint is now patched into the DOM directly, in place.
   document.querySelectorAll('[data-session-field]').forEach(input=>{
     input.addEventListener('input', (e)=>{
       const i = Number(input.dataset.sessionIndex);
       if(!groupDraftSessions[i]) return;
       groupDraftSessions[i][input.dataset.sessionField] = e.target.value;
       saveGroupWizardDraft();
-      if(input.dataset.sessionField === 'reading') render();
+      if(input.dataset.sessionField === 'reading'){
+        const p = detectBiblePassage(e.target.value);
+        let hint = input.parentElement ? input.parentElement.querySelector('.session-passage-hint') : null;
+        if(p){
+          if(!hint){
+            hint = document.createElement('div');
+            hint.className = 'session-passage-hint';
+            input.insertAdjacentElement('afterend', hint);
+          }
+          hint.innerHTML = '&#10003; Links to ' + escapeHtml(p.book) + ' ' + p.chapter + ' in your Bible app';
+        } else if(hint){
+          hint.remove();
+        }
+      }
     });
   });
   const wizardStudyBook = document.getElementById('wizardStudyBook');
