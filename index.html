@@ -5090,8 +5090,9 @@ function renderToday(){
         <div class="due">${due.book} ${due.chapter}</div>
         <div class="meta">Next up &middot; cycle ${(state.cycles[cat.id]||0)+1} &middot; ${state.cursors[cat.id]||0}/${cat.total} chapters into this pass</div>
         <div class="actions">
-          <button class="btn" data-read-book="${due.book}" data-read-chapter="${due.chapter}">Read in ${READING_APPS[state.readingApp].label} &rarr;</button>
+          <button class="btn" data-read-book="${due.book}" data-read-chapter="${due.chapter}">${state.readingApp==='cultivate' ? 'Read here' : 'Read in ' + READING_APPS[state.readingApp].label} &rarr;</button>
           <button class="btn primary" data-action="complete" data-cat="${cat.id}">Mark complete</button>
+          <button class="btn small" data-add-note-book="${due.book}" data-add-note-chapter="${due.chapter}">${icon('pencil',13)} Add note</button>
           <button class="btn" data-action="skip" data-cat="${cat.id}">Skip &rarr; next time</button>
           ${lastLogEntry(cat.id) ? `<button class="btn small" data-action="undo" data-cat="${cat.id}">Undo last</button>` : ''}
         </div>
@@ -5140,11 +5141,13 @@ function renderToday(){
       <input type="date" id="dateSel" value="${selectedDate}" max="${todayStr()}">
       ${!isToday ? `<button class="btn small" id="backToToday">Back to today</button>` : ''}
       <span style="font-size:0.8rem; color:var(--ink-soft);">${fmtDate(selectedDate)}</span>
+      <button class="btn small" id="quickNoteBtn" style="margin-left:auto;">${icon('pencil',13)} Quick note</button>
     </div>
     <div class="grid">${cards}</div>
     ${extraLoggedHtml}
     ${renderTodayNotifStrip()}
     ${renderExtraReadingSheet()}
+    ${renderQuickNoteModal()}
   `;
 }
 
@@ -5163,6 +5166,55 @@ function renderMemorizeReminder(){
     <button type="button" class="memorize-reminder" id="memorizeReminderBtn">
       ${icon('bookmark',14)} <span>${label}</span> <span class="mem-rem-go">Review &rarr;</span>
     </button>`;
+}
+
+/* ---------------- Quick notes (v33) ----------------
+   Journaling shouldn't require leaving the reading flow. Every plan card gets "Add note" —
+   opening a small centered composer already tied to that card's book, chapter, and the date
+   being logged — and the Today toolbar gets a general "Quick note" that saves without a passage.
+   Both write real journal entries (same addJournalEntry as the Journal tab), so everything
+   lands in the timeline, search, and export exactly like a long-form entry. */
+let quickNoteOpen = false;
+let quickNoteBook = null;
+let quickNoteChapter = null;
+let quickNoteText = '';
+let lastRenderedQuickNoteOpen = false;
+function openQuickNote(book, chapter){
+  quickNoteOpen = true;
+  quickNoteBook = book || null;
+  quickNoteChapter = chapter ? Number(chapter) : null;
+  quickNoteText = '';
+  render();
+  const el = document.getElementById('quickNoteText');
+  if(el) el.focus();
+}
+function closeQuickNote(){ quickNoteOpen = false; quickNoteText = ''; render(); }
+function saveQuickNote(){
+  const el = document.getElementById('quickNoteText');
+  const content = ((el && el.value) || quickNoteText || '').trim();
+  if(!content){ customAlert('Write a little something first.'); return; }
+  const reference = quickNoteBook ? { book: quickNoteBook, chapter: quickNoteChapter, verse: null } : null;
+  if(el) el.blur();
+  addJournalEntry(selectedDate, JOURNAL_TAGS[0], content, '', reference);
+  quickNoteOpen = false; quickNoteText = '';
+  showToast('Saved to your Journal.', { tone:'good' });
+}
+function renderQuickNoteModal(){
+  if(!quickNoteOpen){ lastRenderedQuickNoteOpen = false; return ''; }
+  const modalIsNew = !lastRenderedQuickNoteOpen;
+  lastRenderedQuickNoteOpen = true;
+  const refLabel = quickNoteBook ? `${quickNoteBook}${quickNoteChapter ? ' ' + quickNoteChapter : ''}` : null;
+  return `
+    <div id="quickNoteBackdrop" class="dialog-backdrop ${modalIsNew?'overlay-animate':''}"></div>
+    <div class="dialog-card ${modalIsNew?'overlay-animate':''}" role="dialog" aria-modal="true" style="width:min(420px, calc(100vw - 48px)); text-align:left;">
+      <div class="sheet-header" style="margin-bottom:6px;">
+        <h3 style="margin:0;">${icon('pencil',16)} ${refLabel ? 'Note on ' + escapeHtml(refLabel) : 'Quick note'}</h3>
+        <button type="button" class="sheet-close-btn" id="quickNoteCloseBtn" aria-label="Close">${icon('close',18)}</button>
+      </div>
+      <p style="font-size:0.78rem; color:var(--ink-soft); margin:0 0 10px;">${refLabel ? `Saved to your Journal, linked to ${escapeHtml(refLabel)} &middot; ${fmtDate(selectedDate)}.` : `Saved to your Journal for ${fmtDate(selectedDate)}.`}</p>
+      <textarea id="quickNoteText" rows="4" placeholder="What stood out? What did you sense, pray, or receive?" style="width:100%; padding:9px 10px; border:1px solid var(--line); border-radius:8px; margin-bottom:10px; font-size:0.9rem; font-family:inherit; resize:vertical;">${escapeHtml(quickNoteText)}</textarea>
+      <button class="btn primary" id="quickNoteSaveBtn" style="width:100%;">Save note</button>
+    </div>`;
 }
 
 // The extra-reading form, opened by Today's floating + button — a centered modal (same placement
@@ -7082,6 +7134,20 @@ function attachEvents(){
   if(extraSheetBackdrop) extraSheetBackdrop.addEventListener('click', ()=>{ extraReadingSheetOpen = false; render(); });
   const memorizeReminderBtn = document.getElementById('memorizeReminderBtn');
   if(memorizeReminderBtn) memorizeReminderBtn.addEventListener('click', ()=> switchToTab('memorize'));
+  // Quick notes — from a plan card (pre-linked to its book/chapter) or the toolbar (general).
+  document.querySelectorAll('[data-add-note-book]').forEach(btn=>{
+    btn.addEventListener('click', ()=> openQuickNote(btn.dataset.addNoteBook, btn.dataset.addNoteChapter));
+  });
+  const quickNoteBtn = document.getElementById('quickNoteBtn');
+  if(quickNoteBtn) quickNoteBtn.addEventListener('click', ()=> openQuickNote(null, null));
+  const quickNoteSaveBtn = document.getElementById('quickNoteSaveBtn');
+  if(quickNoteSaveBtn) quickNoteSaveBtn.addEventListener('click', saveQuickNote);
+  const quickNoteCloseBtn = document.getElementById('quickNoteCloseBtn');
+  if(quickNoteCloseBtn) quickNoteCloseBtn.addEventListener('click', closeQuickNote);
+  const quickNoteBackdrop = document.getElementById('quickNoteBackdrop');
+  if(quickNoteBackdrop) quickNoteBackdrop.addEventListener('click', closeQuickNote);
+  const quickNoteTextEl = document.getElementById('quickNoteText');
+  if(quickNoteTextEl) quickNoteTextEl.addEventListener('input', (e)=>{ quickNoteText = e.target.value; });
   // Remember which dashboard sections are open across the app's constant full re-renders.
   document.querySelectorAll('details[data-dash-section]').forEach(d=>{
     d.addEventListener('toggle', ()=>{
@@ -7672,6 +7738,7 @@ if(typeof document !== 'undefined' && document.addEventListener){
       if(groupCreateOpen){ groupCreateOpen = false; render(); return; }
       if(shouldShowGate() && authView === 'signup'){ forceShowGate = false; authView = 'login'; authError=''; authWizardError=''; render(); return; }
       if(notifPanelOpen){ notifPanelOpen = false; render(); return; }
+      if(quickNoteOpen){ closeQuickNote(); return; }
       if(extraReadingSheetOpen){ extraReadingSheetOpen = false; render(); return; }
       if(readerOpen){ readerOpen = false; render(); return; }
       if(activeDmUid){ closeDm(); render(); return; }
