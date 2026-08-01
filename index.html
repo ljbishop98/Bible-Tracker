@@ -781,22 +781,17 @@
   /* ---- Top strip (bell + theme toggle) — all that's left of the old full header, see
      renderTopStrip(). The title/stats/sync content that used to live here now lives in the
      Account tab instead. ---- */
-  /* ---- In-app Bible reader ---- */
-  .reader-panel{
-    position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); z-index:81;
-    width:min(620px, calc(100vw - 32px)); max-height:86vh; display:flex; flex-direction:column;
-    background:var(--card); border-radius:18px; box-shadow:0 16px 50px rgba(0,0,0,0.3); overflow:hidden;
-  }
-  .reader-panel.overlay-animate{ animation:dialogPop .18s cubic-bezier(.25,.8,.4,1); }
-  .reader-topbar{
-    display:flex; align-items:center; justify-content:space-between; padding:14px 18px 10px;
-    border-bottom:1px solid var(--line); font-size:1.05rem;
-  }
-  .reader-body{ flex:1; overflow-y:auto; -webkit-overflow-scrolling:touch; padding:16px 20px; }
+  /* ---- Reading page (v34: a full drill-in page — Scripture, notes, completion, research) ---- */
+  .reading-page{ max-width:720px; margin:0 auto; }
   .reader-text{ font-size:1.02rem; line-height:1.85; }
   .reader-verse sup{ font-size:0.62em; color:var(--accent); margin-right:3px; font-weight:700; }
   .reader-attrib{ font-size:0.72rem; color:var(--ink-soft); margin:16px 0 0; }
-  .reader-nav{ display:flex; align-items:center; justify-content:space-between; gap:8px; padding:10px 14px; border-top:1px solid var(--line); }
+  .research-facts{ display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:10px; }
+  .research-facts > div{ display:flex; flex-direction:column; gap:1px; border-left:3px solid var(--accent-soft); padding:2px 10px; }
+  .research-facts span{ font-size:0.68rem; text-transform:uppercase; letter-spacing:0.04em; color:var(--ink-soft); font-weight:700; }
+  .research-facts strong{ font-size:0.85rem; line-height:1.4; }
+  .research-links{ display:flex; gap:8px; flex-wrap:wrap; }
+  .research-links .btn{ text-decoration:none; }
   /* ---- Direct messages ---- */
   .dm-thread-list{ display:flex; flex-direction:column; }
   .dm-thread-row{
@@ -1411,6 +1406,84 @@ const READING_APPS = {
   blb:          { id:'blb',          label:'Blue Letter Bible', note:'Opens in your browser (King James Version).' },
   olivetree:    { id:'olivetree',    label:'Olive Tree',     note:'Requires the Olive Tree app installed — no web fallback if it isn\'t.' }
 };
+/* ---------------- Book context library (research section of reading pages) ----------------
+   Concise, scholarly-consensus orientation for every book: who wrote it (as traditionally
+   attributed, with honest hedging where scholarship is genuinely divided), when, to whom, its
+   big themes, and the historical setting a modern reader needs. Static and offline — this is
+   the app's own voice, with the external commentary links alongside for going deeper. */
+const BOOK_CONTEXT = {
+  'Genesis': { author:'Traditionally Moses', date:'~1400s–1200s BC (events far earlier)', audience:'Israel after the exodus', themes:'Creation, fall, covenant, promise', context:'Written to a newly-formed nation to answer where they came from and who their God is — from the creation of all things to one family (Abraham’s) chosen to bless every nation.' },
+  'Exodus': { author:'Traditionally Moses', date:'~1400s–1200s BC', audience:'Israel in the wilderness', themes:'Redemption, deliverance, covenant law, God’s presence', context:'Israel’s rescue from slavery in Egypt becomes the defining picture of salvation in the whole Bible; Sinai’s covenant and the tabernacle establish how a holy God dwells with His people.' },
+  'Leviticus': { author:'Traditionally Moses', date:'~1400s–1200s BC', audience:'Israel, especially its priests', themes:'Holiness, sacrifice, atonement, clean and unclean', context:'A handbook for living near a holy God: the sacrificial system it details is the vocabulary the New Testament later uses to explain the cross.' },
+  'Numbers': { author:'Traditionally Moses', date:'~1400s–1200s BC', audience:'The wilderness generation and their children', themes:'Wandering, unbelief, God’s faithfulness despite failure', context:'Forty years between Egypt and Canaan: a censused, organized people repeatedly fail in trust, yet God keeps leading, feeding, and forgiving on the way to the promise.' },
+  'Deuteronomy': { author:'Traditionally Moses (his farewell speeches)', date:'~1400s–1200s BC', audience:'The generation about to enter Canaan', themes:'Covenant renewal, wholehearted love for God, blessing and curse', context:'Moses’ last words on the plains of Moab: remember, love, obey. Jesus quotes this book against temptation more than any other.' },
+  'Joshua': { author:'Attributed to Joshua and successors', date:'Events ~1400s–1200s BC', audience:'Israel settled in the land', themes:'Promise kept, courage, conquest, inheritance', context:'God keeps every promise about the land. The conquest narratives sit inside ancient war rhetoric, and the book’s heartbeat is Joshua 21:45 — not one good word failed.' },
+  'Judges': { author:'Unknown (traditionally Samuel)', date:'Events ~1300s–1000s BC', audience:'Israel under the monarchy, looking back', themes:'Cycles of sin, deliverance, everyone doing what was right in their own eyes', context:'Between Joshua and the kings: a dark spiral of compromise where flawed deliverers bring temporary rescue, making the case that Israel needs a true King.' },
+  'Ruth': { author:'Unknown (traditionally Samuel)', date:'Set in the judges era', audience:'Israel under David’s line', themes:'Loyal love, redemption, God’s providence in ordinary lives', context:'A Moabite widow’s loyalty and a kinsman-redeemer’s kindness quietly produce King David’s family line — grace working through ordinary faithfulness.' },
+  '1 Samuel': { author:'Unknown (Samuel-era sources)', date:'Events ~1100–1010 BC', audience:'Israel reflecting on its monarchy', themes:'God’s king vs. man’s king, the heart God sees', context:'Israel demands a king like the nations and gets Saul; God chooses David, a man after His own heart. Power, jealousy, and anointing collide.' },
+  '2 Samuel': { author:'Unknown (court records era)', date:'Events ~1010–970 BC', audience:'Israel under the Davidic dynasty', themes:'Covenant with David, sin’s consequences, grace to the broken', context:'David’s reign at its height and its collapse after Bathsheba — and the covenant promise (ch. 7) of an eternal throne that the New Testament hears fulfilled in Jesus.' },
+  '1 Kings': { author:'Unknown (prophetic historian, traditionally Jeremiah)', date:'Finalized during the exile', audience:'Exiles asking how it all went wrong', themes:'Wisdom and folly of kings, temple, prophetic confrontation', context:'Solomon’s golden age and the kingdom’s split; Elijah confronts Baal worship as king after king leads the people away from covenant faithfulness.' },
+  '2 Kings': { author:'Unknown (same prophetic history)', date:'Finalized during the exile', audience:'Exiles in Babylon', themes:'Prophetic word proving true, slow-motion judgment, small mercies', context:'Elisha’s ministry, then the fall of both kingdoms — Israel to Assyria (722 BC), Judah to Babylon (586 BC) — exactly as the prophets warned.' },
+  '1 Chronicles': { author:'Traditionally Ezra ("the Chronicler")', date:'~450–400 BC', audience:'The post-exile community rebuilding identity', themes:'Davidic hope, temple worship, all Israel', context:'A retelling of Israel’s story for returned exiles: the genealogies and David’s temple preparations answer "are we still God’s people?" with a resounding yes.' },
+  '2 Chronicles': { author:'Traditionally Ezra ("the Chronicler")', date:'~450–400 BC', audience:'The post-exile community', themes:'Temple, revival, humbling and seeking God', context:'From Solomon’s temple to its burning — told with an eye for every revival along the way, ending not in ruin but in Cyrus’ decree to return and rebuild.' },
+  'Ezra': { author:'Traditionally Ezra', date:'~450–400 BC', audience:'The restored community in Judah', themes:'Return, rebuilding, Scripture-driven reform', context:'Two waves of return from Babylon: rebuilding the temple against opposition, then Ezra’s reform re-centering the community on the Book of the Law.' },
+  'Nehemiah': { author:'Nehemiah’s memoirs (compiled with Ezra)', date:'~430–400 BC', audience:'The restored community', themes:'Leadership, prayer and work, covenant renewal', context:'A royal cupbearer rebuilds Jerusalem’s walls in fifty-two days amid ridicule and threat, then leads a public re-commitment to God’s law.' },
+  'Esther': { author:'Unknown', date:'Persian period, ~460s–400s BC', audience:'Jews of the diaspora', themes:'Hidden providence, courage, reversal', context:'God is never named, yet every coincidence conspires to save the Jewish people from annihilation — providence working through a queen’s courage "for such a time as this."' },
+  'Job': { author:'Unknown', date:'Unknown (patriarchal setting, ancient)', audience:'All who suffer', themes:'Innocent suffering, God’s wisdom, faith without answers', context:'The Bible’s deepest wrestling with why the righteous suffer. Job’s friends defend a tidy formula; God answers from the whirlwind with His own unsearchable wisdom.' },
+  'Psalms': { author:'David (~half), Asaph, Korah’s sons, Moses, others', date:'~1400–400 BC, collected over centuries', audience:'Israel at worship — and every praying person since', themes:'Praise, lament, trust, the King to come', context:'Israel’s prayer book and hymnal: 150 poems spanning every human emotion, teaching God’s people to bring all of it — joy, rage, despair, hope — into His presence.' },
+  'Proverbs': { author:'Mainly Solomon; also Agur, Lemuel, "the wise"', date:'~950–700 BC compiled', audience:'The young, and anyone choosing a path', themes:'Wisdom, the fear of the LORD, character in the small things', context:'Distilled covenant wisdom for ordinary life — money, speech, work, friendship, desire — built on one foundation: the fear of the LORD is the beginning of wisdom.' },
+  'Ecclesiastes': { author:'"Qoheleth, son of David" (traditionally Solomon)', date:'Debated', audience:'The disillusioned and the searching', themes:'Vapor of life "under the sun," joy as gift, fearing God', context:'An honest audit of life’s fleetingness: wealth, pleasure, work, and wisdom all slip through your fingers — so receive each day as God’s gift and fear Him.' },
+  'Song of Solomon': { author:'Attributed to Solomon', date:'~900s BC (debated)', audience:'Lovers — and Israel, reading covenant love in it', themes:'Desire, covenant love, delight', context:'Unashamed love poetry celebrating desire and faithfulness between bride and beloved; long read also as a picture of God’s delight in His people.' },
+  'Isaiah': { author:'Isaiah of Jerusalem (unity debated in scholarship)', date:'~740–680 BC (chs. 40–66 address the exile)', audience:'Judah under Assyrian threat, then exiles', themes:'Holiness, judgment and comfort, the Servant, new creation', context:'The Bible’s most sweeping prophetic vision: judgment on proud nations, comfort for exiles, and a suffering Servant (ch. 53) whose wounds heal the world.' },
+  'Jeremiah': { author:'Jeremiah, via scribe Baruch', date:'~627–580 BC', audience:'Judah in its final decades', themes:'Weeping judgment, false hope exposed, new covenant', context:'Forty years of warning a nation that would not listen, through Jerusalem’s fall — yet planted in the rubble, the promise of a new covenant written on hearts (ch. 31).' },
+  'Lamentations': { author:'Traditionally Jeremiah', date:'Just after 586 BC', audience:'Survivors of Jerusalem’s destruction', themes:'Grief, honest lament, mercies new every morning', context:'Five acrostic funeral poems over a burned city — the Bible teaching God’s people how to grieve, with its one blazing hope at the center: great is Your faithfulness.' },
+  'Ezekiel': { author:'Ezekiel, priest among the exiles', date:'~593–570 BC', audience:'Exiles in Babylon', themes:'God’s glory, personal responsibility, dry bones raised, new temple', context:'Wild visions by the Kebar canal: God’s glory leaves the temple and comes to the exiles themselves, promising a new heart, new Spirit, and resurrection life for a dead nation.' },
+  'Daniel': { author:'Daniel (dating debated)', date:'Exile setting, 600s–500s BC', audience:'Faithful Jews under pagan empires', themes:'Faithfulness in exile, God’s rule over kingdoms, the Son of Man', context:'Stories of uncompromised faith in Babylon’s court, then apocalyptic visions of empires rising and falling under the everlasting kingdom of one "like a son of man."' },
+  'Hosea': { author:'Hosea', date:'~750–715 BC', audience:'The northern kingdom before its fall', themes:'God as betrayed husband, relentless covenant love', context:'God commands the prophet to marry an unfaithful wife so Israel can watch its own story: adultery against a Love that will not let go.' },
+  'Joel': { author:'Joel', date:'Uncertain (locust plague era)', audience:'Judah after devastation', themes:'The Day of the LORD, repentance, the Spirit poured out', context:'A locust apocalypse becomes a call to return with all your heart — with the promise Pentecost claims: God’s Spirit poured out on all flesh.' },
+  'Amos': { author:'Amos, shepherd of Tekoa', date:'~760–750 BC', audience:'Prosperous, complacent northern Israel', themes:'Justice, worship without ethics condemned', context:'A blue-collar prophet confronts a booming economy built on crushed poor people: let justice roll down like waters, or your worship is noise.' },
+  'Obadiah': { author:'Obadiah', date:'Likely just after 586 BC', audience:'Edom — and battered Judah', themes:'Pride brought down, the LORD’s day for the nations', context:'The shortest Old Testament book: Edom gloated when Jerusalem fell, and God answers arrogance-at-a-brother’s-ruin with certain judgment.' },
+  'Jonah': { author:'Unknown (about the prophet Jonah, ~780 BC)', date:'Written later (debated)', audience:'Israel, tempted to hoard grace', themes:'Reluctant mission, scandalous mercy', context:'The prophet runs from mercy — not danger. Nineveh, capital of Israel’s worst enemy, repents at five words; the book ends asking whether we can stomach God’s compassion.' },
+  'Micah': { author:'Micah of Moresheth', date:'~735–700 BC', audience:'Judah and Israel’s corrupt leadership', themes:'Justice, humble walking with God, Bethlehem’s ruler', context:'Courtroom oracles against land-grabbers and corrupt courts, holding out both the famous summary of true religion (6:8) and a ruler from little Bethlehem (5:2).' },
+  'Nahum': { author:'Nahum', date:'~650–612 BC', audience:'Judah under Assyrian terror', themes:'God’s wrath against cruelty, comfort for the oppressed', context:'A century after Jonah, Nineveh’s repentance is long dead; Nahum announces the fall of history’s most brutal empire as good news for its victims.' },
+  'Habakkuk': { author:'Habakkuk', date:'~609–598 BC', audience:'Judah awaiting Babylon’s invasion', themes:'Honest complaint, living by faith, joy without answers', context:'A prophet argues with God — "why do You tolerate evil?" — and receives the line that fueled Paul and the Reformation: the righteous shall live by faith.' },
+  'Zephaniah': { author:'Zephaniah', date:'~640–620 BC', audience:'Judah before Josiah’s reform', themes:'Sweeping judgment, a humble remnant, God singing', context:'The Day of the LORD scours everything — and lands on this: God rejoicing over His restored people with singing (3:17).' },
+  'Haggai': { author:'Haggai', date:'520 BC (four dated sermons)', audience:'Returned exiles who stalled rebuilding', themes:'Priorities, God’s presence, future glory', context:'Sixteen years of "not yet the time" ends with a blunt word: consider your ways, build the house — and the latter glory will exceed the former.' },
+  'Zechariah': { author:'Zechariah', date:'520–518 BC (chs. 9–14 later)', audience:'The rebuilding community', themes:'Night visions, cleansing, the coming humble King', context:'Visions urging the rebuilders on, then oracles the Gospels quote constantly: the king on a donkey, thirty pieces of silver, the pierced one mourned.' },
+  'Malachi': { author:'Malachi ("my messenger")', date:'~450–430 BC', audience:'A spiritually bored post-exile community', themes:'Half-hearted worship, covenant faithfulness, the coming messenger', context:'The Old Testament’s last word: a disputation with a people going through the motions, closing with the promise of Elijah before the great day — then four centuries of silence.' },
+  'Matthew': { author:'Traditionally Matthew (Levi) the apostle', date:'~60s–80s AD', audience:'Jewish Christians', themes:'Jesus the Messiah-King, fulfillment, kingdom of heaven', context:'Written to show that Jesus fulfills Israel’s whole story — new Moses on a mountain, Son of David, Emmanuel — with five great teaching blocks anchored by the Sermon on the Mount.' },
+  'Mark': { author:'John Mark, preserving Peter’s preaching', date:'~55–70 AD', audience:'Roman Christians under pressure', themes:'The suffering Son of God, urgent discipleship', context:'The shortest, fastest Gospel ("immediately…"): a Messiah revealed most clearly at the cross, for a church learning that following Him means carrying one too.' },
+  'Luke': { author:'Luke, physician and Paul’s companion', date:'~60–80 AD', audience:'Theophilus and Gentile readers', themes:'Salvation for outsiders, the poor, the lost found', context:'A carefully investigated account where the wrong people — shepherds, women, Samaritans, tax collectors, prodigals — keep ending up at the center of God’s joy.' },
+  'John': { author:'Traditionally John the apostle, "the disciple Jesus loved"', date:'~85–95 AD', audience:'The wider church, "that you may believe"', themes:'Jesus as God the Son, signs, believing into life', context:'Seven signs, seven "I am" sayings, and long intimate discourses — written that you may believe Jesus is the Christ, the Son of God, and have life in His name.' },
+  'Acts': { author:'Luke (volume two of Luke–Acts)', date:'~62–80 AD', audience:'Theophilus and the young church', themes:'The Spirit’s power, gospel to the nations, unstoppable word', context:'From Jerusalem to Rome in one generation: Pentecost ignites a community whose message survives prisons, riots, and shipwrecks — "and the word of God kept spreading."' },
+  'Romans': { author:'Paul', date:'~57 AD, from Corinth', audience:'House churches in Rome, Jew and Gentile', themes:'Righteousness by faith, grace, life in the Spirit, one people', context:'Paul’s fullest gospel statement, written before visiting: all have sinned, all may be justified freely, nothing separates from God’s love — so Jew and Gentile welcome one another.' },
+  '1 Corinthians': { author:'Paul', date:'~54–55 AD, from Ephesus', audience:'A gifted, fractured church in a port city', themes:'Unity, holiness, love above gifts, resurrection', context:'A congregation splitting over leaders, lawsuits, sex, food, and spiritual gifts hears the cross’s upside-down wisdom — and the greatest chapter on love ever written.' },
+  '2 Corinthians': { author:'Paul', date:'~55–56 AD', audience:'Corinth, after painful conflict', themes:'Strength in weakness, treasure in clay jars, reconciliation', context:'Paul’s most personal letter: defending a ministry that looks weak by worldly standards, because God’s power is made perfect in weakness.' },
+  'Galatians': { author:'Paul', date:'~48–55 AD', audience:'Churches of Galatia, tempted to add law to grace', themes:'Justification by faith alone, freedom, Spirit vs. flesh', context:'Paul’s most urgent letter — no thanksgiving, straight to "I am astonished": adding requirements to grace is another gospel, and for freedom Christ has set us free.' },
+  'Ephesians': { author:'Paul', date:'~60–62 AD, from prison', audience:'Churches around Ephesus', themes:'United in Christ, grace, church as body and bride, spiritual armor', context:'A soaring circular letter: God’s eternal plan to unite all things in Christ, worked out in one new humanity, ordinary households, and a real spiritual battle.' },
+  'Philippians': { author:'Paul', date:'~61–62 AD, from prison', audience:'His beloved partner church at Philippi', themes:'Joy in chains, the mind of Christ, pressing on', context:'A thank-you letter radiating joy from a prison cell, centered on the great hymn of Christ’s self-emptying: he humbled himself — therefore God exalted him.' },
+  'Colossians': { author:'Paul', date:'~60–62 AD, from prison', audience:'A church he’d never met, tempted by add-ons', themes:'Christ supreme and sufficient, fullness in Him', context:'Against a fog of philosophy, angel-veneration, and rule-keeping: Christ is the image of the invisible God, creator and reconciler of all things — you are complete in Him.' },
+  '1 Thessalonians': { author:'Paul', date:'~50–51 AD (among the earliest NT writings)', audience:'A weeks-old church under persecution', themes:'Perseverance, holiness, the Lord’s return', context:'Paul was torn away from these brand-new believers; his relieved letter comforts the grieving with the hope of resurrection and Christ’s coming.' },
+  '2 Thessalonians': { author:'Paul', date:'~51–52 AD', audience:'The same young church, now confused', themes:'The day of the Lord, steady work, not growing weary', context:'Rumors that the Day had already come bred panic and idleness; Paul steadies them: stand firm, keep working, don’t grow weary of doing good.' },
+  '1 Timothy': { author:'Paul', date:'~62–64 AD', audience:'Timothy, his delegate in Ephesus', themes:'Sound teaching, godly leadership, order in God’s household', context:'A veteran’s manual for a young pastor facing false teachers: guard the deposit, appoint tested leaders, train yourself for godliness.' },
+  '2 Timothy': { author:'Paul', date:'~64–67 AD, awaiting execution', audience:'Timothy, his son in the faith', themes:'Unashamed endurance, Scripture’s power, finishing well', context:'Paul’s last surviving letter, from a Roman death cell: fan the gift into flame, preach the word, all Scripture is God-breathed — I have finished the race.' },
+  'Titus': { author:'Paul', date:'~62–64 AD', audience:'Titus, organizing churches on Crete', themes:'Sound doctrine producing good works, grace that trains', context:'On an island famous for liars, the gospel must grow visible goodness: grace has appeared, training us to live self-controlled, upright, godly lives.' },
+  'Philemon': { author:'Paul', date:'~60–62 AD, from prison', audience:'Philemon, a slave-owning house-church host', themes:'Reconciliation, brotherhood over hierarchy', context:'One page that quietly detonates slavery’s logic: receive runaway Onesimus back "no longer as a slave, but a beloved brother" — charge his debt to me.' },
+  'Hebrews': { author:'Unknown ("God only knows" — Origen)', date:'Before 70 AD', audience:'Jewish Christians tempted to drift back', themes:'Jesus greater than all, once-for-all sacrifice, persevering faith', context:'A sermon in writing: greater than angels, Moses, and every priest, Jesus’ single sacrifice ends the whole system — so don’t drift, draw near, hold fast, run.' },
+  'James': { author:'James, brother of Jesus, leader in Jerusalem', date:'~45–62 AD', audience:'Scattered Jewish believers', themes:'Faith that works, the tongue, wisdom, favoritism condemned', context:'The New Testament’s proverbs: real faith is visible — in trials met with joy, bridled speech, care for the poor, and prayer. Faith without works is dead.' },
+  '1 Peter': { author:'Peter, with Silvanus', date:'~62–64 AD', audience:'"Elect exiles" across Asia Minor', themes:'Hope in suffering, holy identity, honorable conduct', context:'To scattered believers facing slander and worse: you are chosen exiles with a living hope — suffer well, love deeply, and entrust yourselves to a faithful Creator.' },
+  '2 Peter': { author:'Peter (authorship debated since antiquity)', date:'~64–68 AD', audience:'The same churches, facing scoffers', themes:'Growing in grace, false teachers, the certain Day', context:'A farewell reminder: the promises are not myths, judgment is not asleep, and the Lord’s "delay" is patience — so grow in grace while you wait for new heavens and a new earth.' },
+  '1 John': { author:'Traditionally John the apostle', date:'~85–95 AD', audience:'Churches shaken by departed false teachers', themes:'Light, love, assurance, the incarnate Son', context:'Written "that you may know you have eternal life": true faith walks in the light, loves the brothers, and confesses Jesus come in the flesh. God is love.' },
+  '2 John': { author:'"The elder" (traditionally John)', date:'~85–95 AD', audience:'"The elect lady and her children" — a local church', themes:'Truth and love together, guarding the door', context:'A postcard-length letter: keep loving one another, and don’t give deceivers who deny Christ’s coming in flesh a platform in the house.' },
+  '3 John': { author:'"The elder" (traditionally John)', date:'~85–95 AD', audience:'Gaius, a hospitable believer', themes:'Hospitality to gospel workers, imitating good', context:'The New Testament’s shortest book: praise for Gaius’ open door, a warning about power-loving Diotrephes — imitate good, not evil.' },
+  'Jude': { author:'Jude, brother of James (and of Jesus)', date:'~65–80 AD', audience:'Churches infiltrated by grace-twisters', themes:'Contending for the faith, kept by God', context:'An urgent flare: certain people have crept in turning grace into license. Contend for the faith — and rest in the One able to keep you from stumbling.' },
+  'Revelation': { author:'John, exiled on Patmos', date:'~95 AD (some argue ~68)', audience:'Seven churches of Asia under imperial pressure', themes:'The Lamb reigns, faithful witness, judgment, all things new', context:'Apocalyptic worship literature for persecuted churches: behind Rome’s throne stands a slain Lamb who has already won. Endure — the end is a wedding, a city, and God dwelling with His people.' }
+};
+function bibleHubSlug(book){
+  if(book === 'Song of Solomon') return 'songs';
+  return book.toLowerCase().replace(/ /g,'_');
+}
+
 /* ---------------- In-app Bible reader (World English Bible, public domain) ----------------
    Chapter text comes from bible-api.com (?translation=web), cached two ways: an in-memory map
    for this session, and localStorage (best-effort, quota-guarded) so previously-read chapters
@@ -1431,7 +1504,8 @@ function openInAppReader(book, chapter){
   const maxCh = chaptersFor(book) || 999;
   if(chapter > maxCh) return;
   readerOpen = true; readerBook = book; readerChapter = chapter;
-  readerError = ''; readerVerses = null;
+  readerError = ''; readerVerses = null; readerNoteText = '';
+  scrollAppToTop();
   const key = readerCacheKey(book, chapter);
   if(readerMemCache[key]){ readerVerses = readerMemCache[key]; readerLoading = false; render(); return; }
   let cached = null;
@@ -1457,34 +1531,89 @@ function openInAppReader(book, chapter){
       }
     });
 }
-function renderReaderOverlay(){
-  if(!readerOpen){ lastRenderedReaderKey = null; return ''; }
-  const key = readerBook + ':' + readerChapter + ':' + (readerLoading ? 'l' : readerVerses ? 'v' : 'e');
-  const isNew = key !== lastRenderedReaderKey;
-  lastRenderedReaderKey = key;
+// v34: the reader is a full PAGE (drill-in view, like a group or profile), not a popup —
+// Scripture at the top, then your completion status, a notes section writing real journal
+// entries (and showing every past note on this passage), and a research section: the book
+// context library above plus per-chapter commentary/interlinear links for going deeper.
+let readerNoteText = '';
+function renderReadingPage(){
   const maxCh = chaptersFor(readerBook) || 1;
-  // Is this chapter exactly what one of Today's cards is due for? Then completing belongs here.
   const dueCat = ACTIVE_CATEGORIES.find(cat=>{
     const due = getDue(cat.id);
     return due && due.book === readerBook && due.chapter === readerChapter;
   });
-  let body;
-  if(readerLoading) body = `<div style="padding:30px 0;">${skeletonCardListHtml(2)}</div>`;
-  else if(readerError) body = `<div class="auth-error">${escapeHtml(readerError)}</div><button class="btn" id="readerRetryBtn">Try again</button>`;
-  else body = `<div class="reader-text">${(readerVerses||[]).map(v=>`<span class="reader-verse"><sup>${v.v}</sup>${escapeHtml(v.t)} </span>`).join('')}</div>
+  const loggedComplete = state.log.some(e=> e.status==='complete' && e.book===readerBook && Number(e.chapter)===readerChapter);
+  const loggedExtra = state.extraLog.some(e=> e.book===readerBook && Number(e.chapter)===readerChapter);
+  const passageNotes = state.journal
+    .filter(e=> e.reference && e.reference.book===readerBook && Number(e.reference.chapter)===readerChapter)
+    .sort((a,b)=> b.date.localeCompare(a.date));
+  const ctx = BOOK_CONTEXT[readerBook];
+  const slug = bibleHubSlug(readerBook);
+
+  let scriptureHtml;
+  if(readerLoading) scriptureHtml = `<div style="padding:20px 0;">${skeletonCardListHtml(2)}</div>`;
+  else if(readerError) scriptureHtml = `<div class="auth-error">${escapeHtml(readerError)}</div><button class="btn" id="readerRetryBtn">Try again</button>`;
+  else scriptureHtml = `<div class="reader-text">${(readerVerses||[]).map(v=>`<span class="reader-verse"><sup>${v.v}</sup>${escapeHtml(v.t)} </span>`).join('')}</div>
     <p class="reader-attrib">World English Bible &mdash; public domain.</p>`;
+
+  const completionHtml = loggedComplete
+    ? `<span class="status-pill complete">&#10003; Logged complete</span>`
+    : dueCat
+      ? `<button class="btn primary" data-action="complete" data-cat="${dueCat.id}">${icon('check',15)} Mark complete</button>
+         <span style="font-size:0.8rem; color:var(--ink-soft);">This is today's ${escapeHtml(dueCat.name)} reading.</span>`
+      : loggedExtra
+        ? `<span class="status-pill complete">&#10003; Logged as extra reading</span>`
+        : `<button class="btn" id="readerLogExtraBtn">${icon('plus',14)} Log as extra reading</button>
+           <span style="font-size:0.8rem; color:var(--ink-soft);">Outside your plan &mdash; still counts.</span>`;
+
   return `
-    <div id="readerBackdrop" class="dialog-backdrop ${isNew?'overlay-animate':''}"></div>
-    <div class="reader-panel ${isNew?'overlay-animate':''}" role="dialog" aria-modal="true">
-      <div class="reader-topbar">
-        <strong>${escapeHtml(readerBook)} ${readerChapter}</strong>
-        <button type="button" class="sheet-close-btn" id="readerCloseBtn" aria-label="Close">${icon('close',18)}</button>
+    <div class="reading-page">
+      <div class="settings-box" style="max-width:none;">
+        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:12px;">
+          <button class="btn small back-btn" id="readerBackBtn">${icon('back',16)} Back</button>
+          <h3 style="margin:0; font-size:1.25rem;">${escapeHtml(readerBook)} ${readerChapter}</h3>
+          <div style="margin-left:auto; display:flex; gap:6px;">
+            <button class="btn small" id="readerPrevBtn" ${readerChapter<=1?'disabled':''}>${icon('back',14)}</button>
+            <button class="btn small" id="readerNextBtn" ${readerChapter>=maxCh?'disabled':''}><span style="display:inline-block; transform:rotate(180deg); line-height:0;">${icon('back',14)}</span></button>
+          </div>
+        </div>
+        ${scriptureHtml}
+        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-top:14px; padding-top:12px; border-top:1px solid var(--line);">
+          ${completionHtml}
+        </div>
       </div>
-      <div class="reader-body">${body}</div>
-      <div class="reader-nav">
-        <button class="btn small" id="readerPrevBtn" ${readerChapter<=1?'disabled':''}>${icon('back',14)} Prev</button>
-        ${dueCat ? `<button class="btn primary small" id="readerCompleteBtn" data-cat="${dueCat.id}">${icon('check',14)} Mark complete</button>` : ''}
-        <button class="btn small" id="readerNextBtn" ${readerChapter>=maxCh?'disabled':''}>Next <span style="display:inline-block; transform:rotate(180deg); line-height:0;">${icon('back',14)}</span></button>
+
+      <div class="settings-box" style="max-width:none;">
+        <h3>${icon('pencil',16)} Notes on this chapter</h3>
+        <textarea id="readerNoteText" rows="3" placeholder="What stands out? What is God saying here?" style="width:100%; padding:9px 10px; border:1px solid var(--line); border-radius:8px; margin-bottom:8px; font-size:0.9rem; font-family:inherit; resize:vertical;">${escapeHtml(readerNoteText)}</textarea>
+        <button class="btn primary small" id="readerSaveNoteBtn">Save to Journal</button>
+        ${passageNotes.length ? `
+          <div style="margin-top:14px; display:flex; flex-direction:column; gap:10px;">
+            ${passageNotes.map(e=>`
+              <div style="border-left:3px solid var(--accent2, var(--accent)); padding:4px 12px;">
+                <div style="font-size:0.75rem; color:var(--ink-soft); margin-bottom:2px;">${fmtDate(e.date)}</div>
+                ${e.title ? `<div style="font-weight:700; font-size:0.88rem;">${e.title}</div>` : ''}
+                <div style="font-size:0.88rem; line-height:1.55;">${(e.content||'').replace(/\n/g,'<br>')}</div>
+              </div>`).join('')}
+          </div>` : ''}
+      </div>
+
+      <div class="settings-box" style="max-width:none;">
+        <h3>${icon('scroll',16)} Research &mdash; ${escapeHtml(readerBook)}</h3>
+        ${ctx ? `
+          <div class="research-facts">
+            <div><span>Author</span><strong>${ctx.author}</strong></div>
+            <div><span>Date</span><strong>${ctx.date}</strong></div>
+            <div><span>Audience</span><strong>${ctx.audience}</strong></div>
+            <div><span>Themes</span><strong>${ctx.themes}</strong></div>
+          </div>
+          <p style="font-size:0.9rem; line-height:1.65; margin:12px 0 14px;">${ctx.context}</p>` : ''}
+        <div class="research-links">
+          <a class="btn small" href="https://biblehub.com/commentaries/${slug}/${readerChapter}.htm" target="_blank" rel="noopener">Commentaries on ch. ${readerChapter} &rarr;</a>
+          <a class="btn small" href="https://biblehub.com/interlinear/${slug}/${readerChapter}.htm" target="_blank" rel="noopener">Original language &rarr;</a>
+          <a class="btn small" href="https://www.blueletterbible.org/search/search.cfm?Criteria=${encodeURIComponent(readerBook + ' ' + readerChapter)}&t=KJV" target="_blank" rel="noopener">Cross-references &rarr;</a>
+        </div>
+        <p style="font-size:0.72rem; color:var(--ink-soft); margin:10px 0 0;">Links open trusted public study sites in a new tab &mdash; classic commentaries, word studies, and cross-references for this exact chapter.</p>
       </div>
     </div>`;
 }
@@ -2110,6 +2239,22 @@ function undoLast(catId){
 }
 
 /* ---------------- Journal ---------------- */
+// v34: entries are editable after the fact (title, content, tag — date and passage reference
+// stay fixed, since they anchor the entry to when/what it was written about).
+let editingJournalId = null;
+let editingJournalTag = null;
+function updateJournalEntry(id, fields){
+  const e = state.journal.find(x=>x.id===id);
+  if(!e) return;
+  if(typeof fields.title === 'string') e.title = fields.title.trim();
+  if(typeof fields.content === 'string') e.content = fields.content.trim();
+  if(fields.tag && JOURNAL_TAGS.includes(fields.tag)) e.tag = fields.tag;
+  e.editedTs = Date.now();
+  saveState();
+  editingJournalId = null;
+  render();
+  showToast('Entry updated.', { tone:'good' });
+}
 function addJournalEntry(date, tag, content, title, reference){
   if(!JOURNAL_TAGS.includes(tag)) tag = 'prayer';
   const entry = {
@@ -4454,7 +4599,7 @@ function render(){
     restoreFocus();
     return;
   }
-  const tabContent = ownProfileOpen ? renderOwnProfilePage() : viewedProfileUid ? renderProfilePage() : (
+  const tabContent = readerOpen ? renderReadingPage() : ownProfileOpen ? renderOwnProfilePage() : viewedProfileUid ? renderProfilePage() : (
     activeTab==='today' ? renderToday() :
     activeTab==='log' ? renderLog() :
     activeTab==='journal' ? renderJournal() :
@@ -4470,8 +4615,8 @@ function render(){
   // group) slides in from the right like a native navigation push; switching between top-level
   // tabs just cross-fades. Anything that re-renders the same view (typing, a background sync
   // completing) gets no animation class at all, so it stays instant as before.
-  const isDrillIn = ownProfileOpen || !!viewedProfileUid || (activeTab==='community' && (!!activeGroupId || !!activeDmUid));
-  const viewKey = activeTab + (ownProfileOpen ? ':ownprofile' : '') + (viewedProfileUid ? ':profile:'+viewedProfileUid : '') + (activeTab==='community' && activeGroupId ? ':group:'+activeGroupId : '') + (activeTab==='community' && activeDmUid ? ':dm:'+activeDmUid : '');
+  const isDrillIn = readerOpen || ownProfileOpen || !!viewedProfileUid || (activeTab==='community' && (!!activeGroupId || !!activeDmUid));
+  const viewKey = activeTab + (readerOpen ? ':reader:'+readerBook+':'+readerChapter : '') + (ownProfileOpen ? ':ownprofile' : '') + (viewedProfileUid ? ':profile:'+viewedProfileUid : '') + (activeTab==='community' && activeGroupId ? ':group:'+activeGroupId : '') + (activeTab==='community' && activeDmUid ? ':dm:'+activeDmUid : '');
   const viewChanged = viewKey !== lastRenderedViewKey;
   lastRenderedViewKey = viewKey;
   const viewAnimClass = viewChanged ? (isDrillIn ? 'view-enter-slide' : 'view-enter-fade') : '';
@@ -4496,7 +4641,6 @@ function render(){
       <button type="button" class="fab-add-post" id="openPostComposerBtn" aria-label="New update">${icon('plus',24)}</button>` : ''}
     ${(!ownProfileOpen && activeTab==='today') ? `
       <button type="button" class="fab-add-post" id="openExtraSheetBtn" aria-label="Log extra reading" title="Log reading outside your plan">${icon('plus',24)}</button>` : ''}
-    ${renderReaderOverlay()}
     ${renderIntroOverlay()}
   `;
   attachEvents();
@@ -5402,17 +5546,41 @@ function renderJournal(){
     return new Date(y, m-1, 1).toLocaleDateString(undefined,{month:'long', year:'numeric'});
   };
   const timelineHtml = ymKeys.map((ym,i)=>{
-    const items = groups[ym].map(e=>`
-      <div class="journal-entry">
+    const items = groups[ym].map(e=>{
+      // Inline editor (v34): title, content, and tag are editable; date and passage reference
+      // stay fixed — they anchor the entry to its moment.
+      if(editingJournalId === e.id){
+        return `
+      <div class="journal-entry" style="border-color:var(--accent);">
         <div class="journal-entry-head">
           <span class="journal-date">${fmtDate(e.date)}</span>
+          ${e.reference ? `<span style="font-size:0.8rem; color:var(--ink-soft);">&mdash; ${formatReference(e.reference)}</span>` : ''}
+          <span style="font-size:0.75rem; color:var(--accent); margin-left:auto; font-weight:700;">Editing</span>
+        </div>
+        <input type="text" id="editJournalTitle" value="${escapeHtml(e.title||'')}" placeholder="Title (optional)" style="width:100%; padding:8px 10px; border:1px solid var(--line); border-radius:8px; margin:6px 0; font-size:0.9rem; font-family:inherit;">
+        <textarea id="editJournalContent" rows="4" style="width:100%; padding:8px 10px; border:1px solid var(--line); border-radius:8px; margin-bottom:8px; font-size:0.9rem; font-family:inherit; resize:vertical;">${escapeHtml(e.content||'')}</textarea>
+        <div class="journal-tag-picker" style="margin-bottom:10px;">
+          ${JOURNAL_TAGS.map(t=>`<button type="button" class="journal-tag-btn ${t===editingJournalTag?'selected':''}" data-edit-journal-tag="${t}" style="--tc:${JOURNAL_TAG_COLORS[t]}">${JOURNAL_TAG_LABELS[t]}</button>`).join('')}
+        </div>
+        <div style="display:flex; gap:8px;">
+          <button class="btn primary small" data-save-journal-edit="${e.id}">Save</button>
+          <button class="btn small" id="cancelJournalEditBtn">Cancel</button>
+        </div>
+      </div>`;
+      }
+      return `
+      <div class="journal-entry">
+        <div class="journal-entry-head">
+          <span class="journal-date">${fmtDate(e.date)}${e.editedTs ? ' <span style="font-size:0.7rem; opacity:0.7;">(edited)</span>' : ''}</span>
           ${journalTagPill(e.tag)}
           ${e.reference ? `<span style="font-size:0.8rem; color:var(--ink-soft);">&mdash; ${formatReference(e.reference)}</span>` : ''}
-          <button class="btn small danger" data-delete-journal="${e.id}" style="margin-left:auto;">Delete</button>
+          <button class="btn small" data-edit-journal="${e.id}" style="margin-left:auto;">Edit</button>
+          <button class="btn small danger" data-delete-journal="${e.id}">Delete</button>
         </div>
         ${e.title ? `<div class="journal-title">${e.title}</div>` : ''}
         ${e.content ? `<div class="journal-content">${e.content.replace(/\n/g,'<br>')}</div>` : ''}
-      </div>`).join('');
+      </div>`;
+    }).join('');
     return `
       <details class="month-group" ${keepOpenAttrs('journalMonth:'+ym, i===0)}>
         <summary>${monthName(ym)} <span style="color:var(--ink-soft); font-weight:500;">${groups[ym].length} entr${groups[ym].length===1?'y':'ies'}</span></summary>
@@ -6852,6 +7020,7 @@ function switchToTab(tabId){
   activeTab = tabId;
   sidebarOpen = false;
   ownProfileOpen = false;
+  readerOpen = false;
   closeDm();
   if(viewedProfileUid) closeViewedProfile();
   // Warm both sub-tabs' caches the moment Community opens, so switching between Friends/Groups
@@ -6939,23 +7108,29 @@ function attachEvents(){
       if(url) window.open(url, '_blank');
     });
   });
-  const readerCloseBtn = document.getElementById('readerCloseBtn');
-  if(readerCloseBtn) readerCloseBtn.addEventListener('click', ()=>{ readerOpen = false; render(); });
-  const readerBackdropEl = document.getElementById('readerBackdrop');
-  if(readerBackdropEl) readerBackdropEl.addEventListener('click', ()=>{ readerOpen = false; render(); });
+  const readerBackBtn = document.getElementById('readerBackBtn');
+  if(readerBackBtn) readerBackBtn.addEventListener('click', ()=>{ readerOpen = false; scrollAppToTop(); render(); });
   const readerPrevBtn = document.getElementById('readerPrevBtn');
   if(readerPrevBtn) readerPrevBtn.addEventListener('click', ()=> openInAppReader(readerBook, readerChapter - 1));
   const readerNextBtn = document.getElementById('readerNextBtn');
   if(readerNextBtn) readerNextBtn.addEventListener('click', ()=> openInAppReader(readerBook, readerChapter + 1));
   const readerRetryBtn = document.getElementById('readerRetryBtn');
   if(readerRetryBtn) readerRetryBtn.addEventListener('click', ()=> openInAppReader(readerBook, readerChapter));
-  const readerCompleteBtn = document.getElementById('readerCompleteBtn');
-  if(readerCompleteBtn) readerCompleteBtn.addEventListener('click', ()=>{
-    const catId = readerCompleteBtn.dataset.cat;
-    readerOpen = false;
-    justCompletedCat = catId;
-    completeReading(catId, selectedDate);
-    setTimeout(()=>{ justCompletedCat = null; render(); }, 700);
+  const readerNoteEl = document.getElementById('readerNoteText');
+  if(readerNoteEl) readerNoteEl.addEventListener('input', (e)=>{ readerNoteText = e.target.value; });
+  const readerSaveNoteBtn = document.getElementById('readerSaveNoteBtn');
+  if(readerSaveNoteBtn) readerSaveNoteBtn.addEventListener('click', ()=>{
+    const el = document.getElementById('readerNoteText');
+    const content = ((el && el.value) || '').trim();
+    if(!content){ customAlert('Write a little something first.'); return; }
+    if(el) el.blur();
+    addJournalEntry(selectedDate, JOURNAL_TAGS[0], content, '', { book: readerBook, chapter: readerChapter, verse: null });
+    readerNoteText = '';
+    showToast('Saved to your Journal.', { tone:'good' });
+  });
+  const readerLogExtraBtn = document.getElementById('readerLogExtraBtn');
+  if(readerLogExtraBtn) readerLogExtraBtn.addEventListener('click', ()=>{
+    addExtraReading(selectedDate, readerBook, readerChapter, '');
   });
   document.querySelectorAll('[data-action="complete"],[data-action="skip"],[data-action="undo"]').forEach(btn=>{
     btn.addEventListener('click', ()=>{
@@ -7015,6 +7190,32 @@ function attachEvents(){
   document.querySelectorAll('[data-journal-filter]').forEach(btn=>{
     btn.addEventListener('click', ()=>{ journalFilter = btn.dataset.journalFilter; render(); });
   });
+  // Journal entry inline editing (v34)
+  document.querySelectorAll('[data-edit-journal]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const e = state.journal.find(x=>x.id===btn.dataset.editJournal);
+      editingJournalId = btn.dataset.editJournal;
+      editingJournalTag = e ? e.tag : JOURNAL_TAGS[0];
+      render();
+    });
+  });
+  document.querySelectorAll('[data-edit-journal-tag]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{ editingJournalTag = btn.dataset.editJournalTag; render(); });
+  });
+  document.querySelectorAll('[data-save-journal-edit]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const titleEl = document.getElementById('editJournalTitle');
+      const contentEl = document.getElementById('editJournalContent');
+      if(contentEl) contentEl.blur();
+      updateJournalEntry(btn.dataset.saveJournalEdit, {
+        title: titleEl ? titleEl.value : undefined,
+        content: contentEl ? contentEl.value : undefined,
+        tag: editingJournalTag
+      });
+    });
+  });
+  const cancelJournalEditBtn = document.getElementById('cancelJournalEditBtn');
+  if(cancelJournalEditBtn) cancelJournalEditBtn.addEventListener('click', ()=>{ editingJournalId = null; render(); });
   document.querySelectorAll('[data-delete-journal]').forEach(btn=>{
     btn.addEventListener('click', ()=>{
       customConfirm('Delete this journal entry?', { confirmLabel:'Delete', danger:true }).then(ok=>{
